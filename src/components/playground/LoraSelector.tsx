@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { X, Plus } from "lucide-react";
+import { toast } from "@/hooks/useToast";
 
 export interface LoraItem {
   path: string;
@@ -26,9 +27,14 @@ export function LoraSelector({
   const [customPath, setCustomPath] = useState("");
 
   const addLora = (lora: LoraItem) => {
-    if (value.length >= maxItems) return;
-    // Check if already added
-    if (value.some((v) => v.path === lora.path)) return;
+    if (value.length >= maxItems) {
+      toast.info(`Maximum ${maxItems} LoRAs allowed`);
+      return;
+    }
+    if (value.some((v) => v.path === lora.path)) {
+      toast.info("LoRA already added");
+      return;
+    }
     onChange([...value, lora]);
   };
 

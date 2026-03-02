@@ -463,6 +463,7 @@ export function PlaygroundPage() {
           createTab(model);
         }
         navigate(`/playground/${modelId}`);
+        setRightPanelTab("result");
       }
     },
     [models, activeTab, setSelectedModel, createTab, navigate],
@@ -475,6 +476,7 @@ export function PlaygroundPage() {
       if (model) {
         createTab(model);
         navigate(`/playground/${primaryVariant}`);
+        setRightPanelTab("result");
       }
     },
     [models, createTab, navigate],

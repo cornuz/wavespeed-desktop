@@ -542,7 +542,7 @@ export function ModelsPage() {
                 onClick={() =>
                   setSelectedType(selectedType === type ? null : type)
                 }
-                className="shrink-0 h-8 px-3 text-sm capitalize"
+                className="shrink-0 h-8 px-3 text-sm capitalize transition-all duration-200"
               >
                 {type}
               </Button>
@@ -591,6 +591,7 @@ export function ModelsPage() {
               return (
                 <div
                   key={virtualRow.key}
+                  className="animate-in fade-in duration-300"
                   style={{
                     position: "absolute",
                     top: 0,
