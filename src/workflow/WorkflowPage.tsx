@@ -40,7 +40,7 @@ import {
   TooltipTrigger,
   TooltipContent,
 } from "@/components/ui/tooltip";
-import { History, X, Plus } from "lucide-react";
+import { History, X, Plus, GitBranch } from "lucide-react";
 import { TemplatePickerDialog } from "@/components/templates/TemplatePickerDialog";
 import { TemplateDialog } from "@/components/templates/TemplateDialog";
 import { WorkflowGuide, useWorkflowGuide } from "./components/WorkflowGuide";
@@ -497,6 +497,26 @@ export function WorkflowPage() {
   // ── Tab overflow detection (Chrome-like + button behavior) ──
   const wfTabScrollRef = useRef<HTMLDivElement>(null);
   const [wfTabsOverflow, setWfTabsOverflow] = useState(false);
+
+  // Dynamic title width measurement — use ResizeObserver for reliable sizing across languages
+  const wfTitleRef = useRef<HTMLHeadingElement>(null);
+  const [wfTitleWidth, setWfTitleWidth] = useState(200);
+  useEffect(() => {
+    const el = wfTitleRef.current;
+    if (!el) return;
+    const measure = () => {
+      const padding = 23 + 12; // left + right padding
+      const diagonal = 16; // diagonal slant width
+      const w = Math.ceil(el.scrollWidth) + padding + diagonal;
+      setWfTitleWidth(Math.max(w, 120)); // minimum 120px
+    };
+    // Measure immediately and after fonts load
+    measure();
+    requestAnimationFrame(measure);
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   useEffect(() => {
     const el = wfTabScrollRef.current;
@@ -1391,8 +1411,34 @@ export function WorkflowPage() {
       )}
 
       {/* ── Toolbar — unified header ──────────────────────────── */}
-      <div className="relative">
-        <div className="flex items-center border-b border-border px-2 gap-1.5 h-12">
+      <div className="relative" style={{ zIndex: 2 }}>
+        {/* Page title block — matches other pages' title style, extends below tab bar with diagonal */}
+        <div
+          className="absolute left-0 top-0 z-[2] flex items-center bg-background"
+          style={{
+            height: 60,
+            width: wfTitleWidth,
+            paddingLeft: 23,
+            paddingRight: 12,
+            paddingTop: 2,
+            clipPath: `polygon(0 0, 100% 0, 100% 40px, calc(100% - 16px) 100%, 0 100%)`,
+          }}
+        >
+          <h1 ref={wfTitleRef} className="text-xl md:text-2xl font-bold tracking-tight flex items-center gap-2 whitespace-nowrap">
+            <GitBranch className="h-5 w-5 text-primary" />
+            {t("nav.workflow")}
+          </h1>
+        </div>
+        {/* Border line following the diagonal shape */}
+        <svg
+          className="absolute left-0 top-0 z-[2] pointer-events-none"
+          style={{ width: wfTitleWidth, height: 60 }}
+          fill="none"
+        >
+          <line x1="0" y1="60" x2={wfTitleWidth - 16} y2="60" className="stroke-border" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+          <line x1={wfTitleWidth - 16} y1="60" x2={wfTitleWidth} y2="40" className="stroke-border" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+        </svg>
+        <div className="flex items-center border-b border-border px-2 gap-1.5 h-10 bg-background" style={{ paddingLeft: wfTitleWidth }}>
           {/* Tabs — unified style with Playground */}
           <div
             ref={wfTabScrollRef}
@@ -1404,15 +1450,12 @@ export function WorkflowPage() {
               }
             }}
           >
-            <div className="flex items-center w-max">
-              {tabs.map((tab, tabIdx) => {
+            <div className="flex items-center w-max gap-1.5">
+              {tabs.map((tab) => {
                 const isActive = tab.tabId === activeTabId;
                 const isEditing = editingTabId === tab.tabId;
                 return (
                   <Fragment key={tab.tabId}>
-                    {tabIdx > 0 && (
-                      <div className="w-px h-4 bg-border/70 shrink-0 mx-0.5" />
-                    )}
                     <div
                       draggable={!isEditing}
                       onDragStart={(e) => handleTabDragStart(e, tab.tabId)}
@@ -1535,7 +1578,7 @@ export function WorkflowPage() {
           )}
 
           {/* Spacer — limited so tabs don't push into run controls */}
-          <div className="w-4 shrink-0" />
+          <div className="w-1 shrink-0" />
 
           {/* Right: Run controls */}
           <div className="flex items-center gap-1.5" data-guide="run-controls">

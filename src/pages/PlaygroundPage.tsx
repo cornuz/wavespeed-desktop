@@ -32,6 +32,7 @@ import {
   X,
   Save,
   Sparkles,
+  PlayCircle,
   LayoutGrid,
   FolderOpen,
   Star,
@@ -612,7 +613,7 @@ export function PlaygroundPage() {
             {/* Page Title */}
             <div className="px-4 py-3 border-b border-border shrink-0">
               <h1 className="text-xl md:text-2xl font-bold tracking-tight flex items-center gap-2">
-                <Sparkles className="h-5 w-5 text-primary" />
+                <PlayCircle className="h-5 w-5 text-primary" />
                 {t("playground.title")}
               </h1>
             </div>
