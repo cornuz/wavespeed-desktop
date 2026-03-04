@@ -35,14 +35,16 @@ function extFromUrl(input: string): string {
 function tempFilePath(
   workflowId: string,
   nodeId: string,
-  suffix: string,
+  suffix: string
 ): string {
   const storage = getFileStorageInstance();
   const dir = path.join(storage.getNodeOutputDir(workflowId, nodeId), "_tmp");
   ensureDir(dir);
   return path.join(
     dir,
-    `${Date.now()}_${Math.random().toString(36).slice(2, 8)}${suffix}`,
+    `${Date.now()}_${Math.random()
+      .toString(36)
+      .slice(2, 8)}${suffix}`
   );
 }
 
@@ -50,7 +52,7 @@ function downloadToFile(url: string, filePath: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const proto = url.startsWith("https://") ? https : http;
     const file = fs.createWriteStream(filePath);
-    const req = proto.get(url, (res) => {
+    const req = proto.get(url, res => {
       if (
         res.statusCode &&
         res.statusCode >= 300 &&
@@ -78,7 +80,7 @@ function downloadToFile(url: string, filePath: string): Promise<void> {
         file.close();
         resolve();
       });
-      file.on("error", (err) => {
+      file.on("error", err => {
         file.close();
         reject(err);
       });
@@ -91,7 +93,7 @@ function downloadToFile(url: string, filePath: string): Promise<void> {
 export async function resolveInputToLocalFile(
   input: string,
   workflowId: string,
-  nodeId: string,
+  nodeId: string
 ): Promise<DownloadedInput> {
   if (!input) throw new Error("Input is empty.");
 
@@ -114,7 +116,7 @@ export async function resolveInputToLocalFile(
         } catch {
           // ignore cleanup errors
         }
-      },
+      }
     };
   }
 
@@ -129,7 +131,7 @@ export function createOutputPath(
   workflowId: string,
   nodeId: string,
   prefix: string,
-  ext: string,
+  ext: string
 ): string {
   const storage = getFileStorageInstance();
   const outDir = storage.getNodeOutputDir(workflowId, nodeId);
@@ -150,10 +152,10 @@ export async function ensureFfmpegAvailable(): Promise<void> {
   }
 
   ffmpegChecked = true;
-  hasFfmpegBinary = await new Promise<boolean>((resolve) => {
+  hasFfmpegBinary = await new Promise<boolean>(resolve => {
     const proc = spawn("ffmpeg", ["-version"]);
     proc.on("error", () => resolve(false));
-    proc.on("exit", (code) => resolve(code === 0));
+    proc.on("exit", code => resolve(code === 0));
   });
 
   if (!hasFfmpegBinary) {
@@ -170,7 +172,7 @@ export async function runFfmpeg(args: string[]): Promise<void> {
       stderr += chunk.toString("utf-8");
     });
     proc.on("error", reject);
-    proc.on("exit", (code) => {
+    proc.on("exit", code => {
       if (code === 0) {
         resolve();
       } else {

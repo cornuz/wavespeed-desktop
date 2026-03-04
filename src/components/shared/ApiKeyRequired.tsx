@@ -6,7 +6,7 @@ import {
   CardContent,
   CardDescription,
   CardHeader,
-  CardTitle,
+  CardTitle
 } from "@/components/ui/card";
 import { KeyRound } from "lucide-react";
 

@@ -215,7 +215,7 @@ export const IMAGE_SIZE_PRESETS = {
   "768x768": { width: 768, height: 768, label: "768×768 (Square)" },
   "512x768": { width: 512, height: 768, label: "512×768 (Portrait)" },
   "768x512": { width: 768, height: 512, label: "768×512 (Landscape)" },
-  "1024x1024": { width: 1024, height: 1024, label: "1024×1024 (Square)" },
+  "1024x1024": { width: 1024, height: 1024, label: "1024×1024 (Square)" }
 } as const;
 
 /**
@@ -225,7 +225,7 @@ export const STEPS_PRESETS = {
   fast: { value: 15, label: "Fast (15 steps)" },
   balanced: { value: 20, label: "Balanced (20 steps)" },
   quality: { value: 30, label: "Quality (30 steps)" },
-  high: { value: 40, label: "High Quality (40 steps)" },
+  high: { value: 40, label: "High Quality (40 steps)" }
 } as const;
 
 /**
@@ -235,7 +235,7 @@ export const CFG_SCALE_PRESETS = {
   low: { value: 5, label: "Low (5)" },
   balanced: { value: 7.5, label: "Balanced (7.5)" },
   high: { value: 10, label: "High (10)" },
-  veryHigh: { value: 15, label: "Very High (15)" },
+  veryHigh: { value: 15, label: "Very High (15)" }
 } as const;
 
 /**
@@ -248,7 +248,7 @@ export const AUXILIARY_MODELS = {
     description: "Text encoder model for Z-Image (required)",
     size: 2400000000, // ~2.4GB
     downloadUrl:
-      "https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF/resolve/main/Qwen3-4B-Instruct-2507-UD-Q4_K_XL.gguf",
+      "https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF/resolve/main/Qwen3-4B-Instruct-2507-UD-Q4_K_XL.gguf"
   },
   vae: {
     name: "ae.safetensors",
@@ -256,8 +256,8 @@ export const AUXILIARY_MODELS = {
     description: "VAE model for Z-Image (required)",
     size: 335000000, // ~335MB
     downloadUrl:
-      "https://huggingface.co/Comfy-Org/z_image_turbo/resolve/main/split_files/vae/ae.safetensors",
-  },
+      "https://huggingface.co/Comfy-Org/z_image_turbo/resolve/main/split_files/vae/ae.safetensors"
+  }
 } as const;
 
 /**
@@ -275,7 +275,7 @@ export const PREDEFINED_MODELS: Omit<
     size: 2500000000, // ~2.5GB (estimated)
     quantization: "Q4_K",
     downloadUrl:
-      "https://huggingface.co/leejet/Z-Image-Turbo-GGUF/resolve/main/z_image_turbo-Q4_K.gguf",
+      "https://huggingface.co/leejet/Z-Image-Turbo-GGUF/resolve/main/z_image_turbo-Q4_K.gguf"
   },
   {
     id: "z-image-turbo-q6-k",
@@ -285,7 +285,7 @@ export const PREDEFINED_MODELS: Omit<
     size: 3500000000, // ~3.5GB (estimated)
     quantization: "Q6_K",
     downloadUrl:
-      "https://huggingface.co/leejet/Z-Image-Turbo-GGUF/resolve/main/z_image_turbo-Q6_K.gguf",
+      "https://huggingface.co/leejet/Z-Image-Turbo-GGUF/resolve/main/z_image_turbo-Q6_K.gguf"
   },
   {
     id: "z-image-turbo-q8-0",
@@ -295,7 +295,7 @@ export const PREDEFINED_MODELS: Omit<
     size: 4000000000, // ~4GB (estimated)
     quantization: "Q8_0",
     downloadUrl:
-      "https://huggingface.co/leejet/Z-Image-Turbo-GGUF/resolve/main/z_image_turbo-Q8_0.gguf",
+      "https://huggingface.co/leejet/Z-Image-Turbo-GGUF/resolve/main/z_image_turbo-Q8_0.gguf"
   },
   {
     id: "z-image-turbo-q2-k",
@@ -305,6 +305,6 @@ export const PREDEFINED_MODELS: Omit<
     size: 1500000000, // ~1.5GB (estimated)
     quantization: "Q2_K",
     downloadUrl:
-      "https://huggingface.co/leejet/Z-Image-Turbo-GGUF/resolve/main/z_image_turbo-Q2_K.gguf",
-  },
+      "https://huggingface.co/leejet/Z-Image-Turbo-GGUF/resolve/main/z_image_turbo-Q2_K.gguf"
+  }
 ];

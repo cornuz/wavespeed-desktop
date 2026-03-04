@@ -9,7 +9,7 @@ import {
   Check,
   Loader2,
   Play,
-  Pause,
+  Pause
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -22,7 +22,7 @@ interface AudioRecorderProps {
 export function AudioRecorder({
   onRecord,
   onClose,
-  disabled,
+  disabled
 }: AudioRecorderProps) {
   const { t } = useTranslation();
   const streamRef = useRef<MediaStream | null>(null);
@@ -120,11 +120,11 @@ export function AudioRecorder({
 
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: true,
-        video: false,
+        video: false
       });
 
       if (!mountedRef.current) {
-        stream.getTracks().forEach((track) => track.stop());
+        stream.getTracks().forEach(track => track.stop());
         return false;
       }
 
@@ -198,7 +198,7 @@ export function AudioRecorder({
     return () => {
       mountedRef.current = false;
       if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop());
+        streamRef.current.getTracks().forEach(track => track.stop());
       }
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
@@ -235,7 +235,7 @@ export function AudioRecorder({
       "audio/webm;codecs=opus",
       "audio/webm",
       "audio/ogg;codecs=opus",
-      "audio/mp4",
+      "audio/mp4"
     ];
 
     let mimeType = "";
@@ -247,10 +247,10 @@ export function AudioRecorder({
     }
 
     const mediaRecorder = new MediaRecorder(streamRef.current, {
-      mimeType: mimeType || undefined,
+      mimeType: mimeType || undefined
     });
 
-    mediaRecorder.ondataavailable = (event) => {
+    mediaRecorder.ondataavailable = event => {
       if (event.data.size > 0) {
         chunksRef.current.push(event.data);
       }
@@ -258,7 +258,7 @@ export function AudioRecorder({
 
     mediaRecorder.onstop = () => {
       const blob = new Blob(chunksRef.current, {
-        type: mimeType || "audio/webm",
+        type: mimeType || "audio/webm"
       });
       const url = URL.createObjectURL(blob);
       setRecordedBlob(blob);
@@ -277,7 +277,7 @@ export function AudioRecorder({
     setIsRecording(true);
 
     timerRef.current = setInterval(() => {
-      setDuration((prev) => prev + 1);
+      setDuration(prev => prev + 1);
     }, 1000);
   };
 
@@ -415,7 +415,7 @@ export function AudioRecorder({
 
   const handleClose = () => {
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current.getTracks().forEach(track => track.stop());
     }
     if (timerRef.current) {
       clearInterval(timerRef.current);
@@ -504,7 +504,7 @@ export function AudioRecorder({
                           key={i}
                           className="flex-1 bg-muted-foreground/20 rounded-sm"
                           style={{
-                            height: `${Math.min(90, Math.max(15, h))}%`,
+                            height: `${Math.min(90, Math.max(15, h))}%`
                           }}
                         />
                       );
@@ -517,7 +517,7 @@ export function AudioRecorder({
                     style={{
                       width: audioDuration
                         ? `${(currentTime / audioDuration) * 100}%`
-                        : "0%",
+                        : "0%"
                     }}
                   >
                     <div className="absolute inset-0 flex items-center gap-[2px] px-2">
@@ -532,7 +532,7 @@ export function AudioRecorder({
                             key={i}
                             className="flex-1 bg-primary rounded-sm"
                             style={{
-                              height: `${Math.min(90, Math.max(15, h))}%`,
+                              height: `${Math.min(90, Math.max(15, h))}%`
                             }}
                           />
                         );
@@ -544,7 +544,9 @@ export function AudioRecorder({
                   <div
                     className="absolute top-1 bottom-1 w-1 bg-primary rounded-full shadow-lg"
                     style={{
-                      left: `calc(${audioDuration ? (currentTime / audioDuration) * 100 : 0}% - 2px)`,
+                      left: `calc(${
+                        audioDuration ? (currentTime / audioDuration) * 100 : 0
+                      }% - 2px)`
                     }}
                   />
                 </div>
@@ -610,7 +612,7 @@ export function AudioRecorder({
               "h-12 w-12 rounded-full transition-colors text-white",
               isRecording
                 ? "bg-red-500 hover:bg-red-600"
-                : "bg-primary hover:bg-primary/90",
+                : "bg-primary hover:bg-primary/90"
             )}
             title={
               isRecording

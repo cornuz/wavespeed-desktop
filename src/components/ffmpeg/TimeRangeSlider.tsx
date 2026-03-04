@@ -17,11 +17,11 @@ export function TimeRangeSlider({
   endTime,
   onStartChange,
   onEndChange,
-  className,
+  className
 }: TimeRangeSliderProps) {
   const trackRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState<"start" | "end" | "range" | null>(
-    null,
+    null
   );
   const dragStartRef = useRef({ x: 0, startTime: 0, endTime: 0 });
 
@@ -33,7 +33,7 @@ export function TimeRangeSlider({
       const percentage = Math.max(0, Math.min(1, x / rect.width));
       return percentage * duration;
     },
-    [duration],
+    [duration]
   );
 
   const handleMouseDown = useCallback(
@@ -43,10 +43,10 @@ export function TimeRangeSlider({
       dragStartRef.current = {
         x: e.clientX,
         startTime,
-        endTime,
+        endTime
       };
     },
-    [startTime, endTime],
+    [startTime, endTime]
   );
 
   const handleMouseMove = useCallback(
@@ -92,8 +92,8 @@ export function TimeRangeSlider({
       endTime,
       duration,
       onStartChange,
-      onEndChange,
-    ],
+      onEndChange
+    ]
   );
 
   const handleMouseUp = useCallback(() => {
@@ -141,13 +141,13 @@ export function TimeRangeSlider({
         <div
           className={cn(
             "absolute inset-y-0 bg-primary/30 cursor-grab",
-            dragging === "range" && "cursor-grabbing",
+            dragging === "range" && "cursor-grabbing"
           )}
           style={{
             left: `${startPercent}%`,
-            width: `${endPercent - startPercent}%`,
+            width: `${endPercent - startPercent}%`
           }}
-          onMouseDown={(e) => handleMouseDown(e, "range")}
+          onMouseDown={e => handleMouseDown(e, "range")}
         />
 
         {/* Unselected region (after) */}
@@ -160,10 +160,10 @@ export function TimeRangeSlider({
         <div
           className={cn(
             "absolute top-0 bottom-0 w-1 bg-primary cursor-ew-resize hover:w-1.5 transition-all",
-            dragging === "start" && "w-1.5",
+            dragging === "start" && "w-1.5"
           )}
           style={{ left: `${startPercent}%`, transform: "translateX(-50%)" }}
-          onMouseDown={(e) => handleMouseDown(e, "start")}
+          onMouseDown={e => handleMouseDown(e, "start")}
         >
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-6 rounded bg-primary flex items-center justify-center shadow-md">
             <div className="w-0.5 h-3 bg-primary-foreground/50 rounded-full" />
@@ -174,10 +174,10 @@ export function TimeRangeSlider({
         <div
           className={cn(
             "absolute top-0 bottom-0 w-1 bg-primary cursor-ew-resize hover:w-1.5 transition-all",
-            dragging === "end" && "w-1.5",
+            dragging === "end" && "w-1.5"
           )}
           style={{ left: `${endPercent}%`, transform: "translateX(-50%)" }}
-          onMouseDown={(e) => handleMouseDown(e, "end")}
+          onMouseDown={e => handleMouseDown(e, "end")}
         >
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-6 rounded bg-primary flex items-center justify-center shadow-md">
             <div className="w-0.5 h-3 bg-primary-foreground/50 rounded-full" />

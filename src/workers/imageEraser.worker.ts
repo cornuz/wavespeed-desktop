@@ -26,7 +26,7 @@ let session: ort.InferenceSession | null = null;
  * The dispose method exists at runtime but isn't in TypeScript types
  */
 function disposeTensor(tensor: ort.Tensor): void {
-  (tensor as unknown as { dispose?: () => void }).dispose?.();
+  ((tensor as unknown) as { dispose?: () => void }).dispose?.();
 }
 
 interface WorkerMessage {
@@ -50,7 +50,7 @@ const DEFAULT_TIMEOUT = 3600000;
 async function downloadModel(
   url: string,
   onProgress: (current: number, total: number) => void,
-  timeout: number = DEFAULT_TIMEOUT,
+  timeout: number = DEFAULT_TIMEOUT
 ): Promise<ArrayBuffer> {
   // Try to get from cache first
   const cache = await caches.open(CACHE_NAME);
@@ -70,9 +70,9 @@ async function downloadModel(
   try {
     const response = await fetch(url, {
       headers: {
-        Origin: self.location.origin,
+        Origin: self.location.origin
       },
-      signal: controller.signal,
+      signal: controller.signal
     });
 
     if (!response.ok) {
@@ -95,7 +95,7 @@ async function downloadModel(
       if (controller.signal.aborted) {
         reader.cancel();
         throw new Error(
-          `Model download timed out after ${timeoutSeconds} seconds`,
+          `Model download timed out after ${timeoutSeconds} seconds`
         );
       }
 
@@ -122,8 +122,8 @@ async function downloadModel(
       const cacheResponse = new Response(buffer.buffer, {
         headers: {
           "Content-Type": "application/octet-stream",
-          "Content-Length": buffer.byteLength.toString(),
-        },
+          "Content-Length": buffer.byteLength.toString()
+        }
       });
       await cache.put(url, cacheResponse);
     } catch (e) {
@@ -135,7 +135,7 @@ async function downloadModel(
     clearTimeout(timeoutId);
     if ((error as Error).name === "AbortError") {
       throw new Error(
-        `Model download timed out after ${timeoutSeconds} seconds`,
+        `Model download timed out after ${timeoutSeconds} seconds`
       );
     }
     throw error;
@@ -151,14 +151,14 @@ async function initSession(modelBuffer: ArrayBuffer): Promise<void> {
     try {
       session = await ort.InferenceSession.create(modelBuffer, {
         executionProviders: ["webgpu"],
-        graphOptimizationLevel: "all",
+        graphOptimizationLevel: "all"
       });
       console.log("Using WebGPU backend");
       return;
     } catch (e) {
       const errorMsg = e instanceof Error ? e.message : String(e);
       console.warn(
-        `WebGPU session creation failed, falling back to WASM. Reason: ${errorMsg}`,
+        `WebGPU session creation failed, falling back to WASM. Reason: ${errorMsg}`
       );
       useWebGPU = false;
     }
@@ -169,7 +169,7 @@ async function initSession(modelBuffer: ArrayBuffer): Promise<void> {
     executionProviders: ["wasm"],
     graphOptimizationLevel: "all",
     enableCpuMemArena: true,
-    executionMode: "parallel",
+    executionMode: "parallel"
   });
   console.log("Using WASM backend");
 }
@@ -183,7 +183,7 @@ function resizeCHW(
   srcH: number,
   dstW: number,
   dstH: number,
-  channels: number,
+  channels: number
 ): Float32Array {
   const result = new Float32Array(channels * dstH * dstW);
 
@@ -229,7 +229,7 @@ function resizeMaskCHW(
   srcW: number,
   srcH: number,
   dstW: number,
-  dstH: number,
+  dstH: number
 ): Float32Array {
   const result = new Float32Array(dstH * dstW);
 
@@ -250,7 +250,7 @@ function resizeMaskCHW(
 function getMaskBoundingBox(
   maskData: Float32Array,
   width: number,
-  height: number,
+  height: number
 ): { minX: number; minY: number; maxX: number; maxY: number } | null {
   let minX = width;
   let minY = height;
@@ -279,7 +279,7 @@ function getMaskBoundingBox(
 function calculateCropRegion(
   maskBbox: { minX: number; minY: number; maxX: number; maxY: number },
   imgWidth: number,
-  imgHeight: number,
+  imgHeight: number
 ): { x: number; y: number; w: number; h: number } {
   const maskW = maskBbox.maxX - maskBbox.minX + 1;
   const maskH = maskBbox.maxY - maskBbox.minY + 1;
@@ -315,7 +315,7 @@ function extractCropCHW(
   cropY: number,
   cropW: number,
   cropH: number,
-  channels: number,
+  channels: number
 ): Float32Array {
   const result = new Float32Array(channels * cropH * cropW);
 
@@ -341,7 +341,7 @@ function extractCropMask(
   cropX: number,
   cropY: number,
   cropW: number,
-  cropH: number,
+  cropH: number
 ): Float32Array {
   const result = new Float32Array(cropH * cropW);
 
@@ -368,7 +368,7 @@ function pasteCropWithBlend(
   cropW: number,
   cropH: number,
   channels: number,
-  featherSize: number = 8,
+  featherSize: number = 8
 ): Float32Array {
   const result = new Float32Array(original);
 
@@ -390,7 +390,7 @@ function pasteCropWithBlend(
           distToLeft,
           distToRight,
           distToTop,
-          distToBottom,
+          distToBottom
         );
         const edgeFactor = Math.min(1.0, minDist / featherSize);
 
@@ -417,7 +417,7 @@ async function removeArea(
   imageData: Float32Array,
   maskData: Float32Array,
   width: number,
-  height: number,
+  height: number
 ): Promise<Float32Array> {
   if (!session) {
     throw new Error("Session not initialized");
@@ -442,7 +442,7 @@ async function removeArea(
     crop.y,
     crop.w,
     crop.h,
-    3,
+    3
   );
   const croppedMask = extractCropMask(
     maskData,
@@ -450,7 +450,7 @@ async function removeArea(
     crop.x,
     crop.y,
     crop.w,
-    crop.h,
+    crop.h
   );
 
   // Resize to model input size
@@ -467,14 +467,14 @@ async function removeArea(
       crop.h,
       MODEL_SIZE,
       MODEL_SIZE,
-      3,
+      3
     );
     resizedMask = resizeMaskCHW(
       croppedMask,
       crop.w,
       crop.h,
       MODEL_SIZE,
-      MODEL_SIZE,
+      MODEL_SIZE
     );
   }
 
@@ -489,20 +489,20 @@ async function removeArea(
     1,
     3,
     MODEL_SIZE,
-    MODEL_SIZE,
+    MODEL_SIZE
   ]);
   const maskTensor = new ort.Tensor("float32", maskBinary, [
     1,
     1,
     MODEL_SIZE,
-    MODEL_SIZE,
+    MODEL_SIZE
   ]);
 
   // Run inference - use actual input/output names from model
   const inputNames = session.inputNames;
   const feeds: Record<string, ort.Tensor> = {
     [inputNames[0]]: imageTensor,
-    [inputNames[1]]: maskTensor,
+    [inputNames[1]]: maskTensor
   };
 
   const results = await session.run(feeds);
@@ -537,7 +537,7 @@ async function removeArea(
       MODEL_SIZE,
       crop.w,
       crop.h,
-      3,
+      3
     );
   }
 
@@ -552,7 +552,7 @@ async function removeArea(
     crop.y,
     crop.w,
     crop.h,
-    3,
+    3
   );
 
   return result;
@@ -591,14 +591,14 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           // Model is cached - skip download phase, go straight to loading
           self.postMessage({
             type: "phase",
-            payload: { phase: "loading", id: payload?.id },
+            payload: { phase: "loading", id: payload?.id }
           });
           modelBuffer = await cachedResponse.arrayBuffer();
         } else {
           // Model not cached - show download phase
           self.postMessage({
             type: "phase",
-            payload: { phase: "download", id: payload?.id },
+            payload: { phase: "download", id: payload?.id }
           });
 
           modelBuffer = await downloadModel(
@@ -610,17 +610,17 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
                   phase: "download",
                   progress: total > 0 ? (current / total) * 100 : 0,
                   detail: { current, total, unit: "bytes" },
-                  id: payload?.id,
-                },
+                  id: payload?.id
+                }
               });
             },
-            timeout,
+            timeout
           );
 
           // Phase: loading (after download)
           self.postMessage({
             type: "phase",
-            payload: { phase: "loading", id: payload?.id },
+            payload: { phase: "loading", id: payload?.id }
           });
         }
 
@@ -628,7 +628,7 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
         self.postMessage({
           type: "ready",
-          payload: { id: payload?.id },
+          payload: { id: payload?.id }
         });
       } catch (error) {
         self.postMessage({
@@ -636,7 +636,7 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           payload:
             error instanceof Error
               ? error.message
-              : "Failed to initialize model",
+              : "Failed to initialize model"
         });
       }
       break;
@@ -651,7 +651,7 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       ) {
         self.postMessage({
           type: "error",
-          payload: "Missing image or mask data",
+          payload: "Missing image or mask data"
         });
         return;
       }
@@ -660,7 +660,7 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         // Phase: process
         self.postMessage({
           type: "phase",
-          payload: { phase: "process", id: payload.id },
+          payload: { phase: "process", id: payload.id }
         });
 
         self.postMessage({
@@ -668,15 +668,15 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           payload: {
             phase: "process",
             progress: 10,
-            id: payload.id,
-          },
+            id: payload.id
+          }
         });
 
         const result = await removeArea(
           payload.imageData,
           payload.maskData,
           payload.width,
-          payload.height,
+          payload.height
         );
 
         self.postMessage({
@@ -684,8 +684,8 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           payload: {
             phase: "process",
             progress: 100,
-            id: payload.id,
-          },
+            id: payload.id
+          }
         });
 
         // Transfer the result buffer for efficiency
@@ -697,16 +697,16 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
               data: result,
               width: payload.width,
               height: payload.height,
-              id: payload.id,
-            },
+              id: payload.id
+            }
           },
-          { transfer: [result.buffer] },
+          { transfer: [result.buffer] }
         );
       } catch (error) {
         self.postMessage({
           type: "error",
           payload:
-            error instanceof Error ? error.message : "Failed to process image",
+            error instanceof Error ? error.message : "Failed to process image"
         });
       }
       break;

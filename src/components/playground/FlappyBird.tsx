@@ -67,7 +67,7 @@ const BIRD_BODY = [
   [8, 7, 7, 1, 1, 1, 1, 1, 8, 8, 6, 8, 0],
   [0, 8, 7, 7, 1, 1, 1, 1, 1, 8, 8, 0, 0],
   [0, 0, 8, 7, 7, 1, 1, 1, 1, 8, 0, 0, 0],
-  [0, 0, 0, 8, 8, 8, 8, 8, 8, 0, 0, 0, 0],
+  [0, 0, 0, 8, 8, 8, 8, 8, 8, 0, 0, 0, 0]
 ];
 
 // Wing animation frames (4x3 each) - positioned on left side of body
@@ -76,20 +76,20 @@ const WING_FRAMES = [
   [
     [8, 2, 2, 8],
     [0, 8, 2, 8],
-    [0, 0, 8, 0],
+    [0, 0, 8, 0]
   ],
   // Frame 1 - wing middle
   [
     [0, 8, 8, 0],
     [8, 2, 2, 8],
-    [0, 8, 8, 0],
+    [0, 8, 8, 0]
   ],
   // Frame 2 - wing down
   [
     [0, 0, 8, 0],
     [0, 8, 2, 8],
-    [8, 2, 2, 8],
-  ],
+    [8, 2, 2, 8]
+  ]
 ];
 
 // Pixel art letters and numbers (5x5 each)
@@ -99,274 +99,274 @@ const PIXEL_LETTERS: Record<string, number[][]> = {
     [1, 0, 0, 0, 1],
     [1, 1, 1, 1, 1],
     [1, 0, 0, 0, 1],
-    [1, 0, 0, 0, 1],
+    [1, 0, 0, 0, 1]
   ],
   B: [
     [1, 1, 1, 1, 0],
     [1, 0, 0, 0, 1],
     [1, 1, 1, 1, 0],
     [1, 0, 0, 0, 1],
-    [1, 1, 1, 1, 0],
+    [1, 1, 1, 1, 0]
   ],
   C: [
     [0, 1, 1, 1, 1],
     [1, 0, 0, 0, 0],
     [1, 0, 0, 0, 0],
     [1, 0, 0, 0, 0],
-    [0, 1, 1, 1, 1],
+    [0, 1, 1, 1, 1]
   ],
   D: [
     [1, 1, 1, 1, 0],
     [1, 0, 0, 0, 1],
     [1, 0, 0, 0, 1],
     [1, 0, 0, 0, 1],
-    [1, 1, 1, 1, 0],
+    [1, 1, 1, 1, 0]
   ],
   E: [
     [1, 1, 1, 1, 1],
     [1, 0, 0, 0, 0],
     [1, 1, 1, 1, 0],
     [1, 0, 0, 0, 0],
-    [1, 1, 1, 1, 1],
+    [1, 1, 1, 1, 1]
   ],
   F: [
     [1, 1, 1, 1, 1],
     [1, 0, 0, 0, 0],
     [1, 1, 1, 1, 0],
     [1, 0, 0, 0, 0],
-    [1, 0, 0, 0, 0],
+    [1, 0, 0, 0, 0]
   ],
   G: [
     [1, 1, 1, 1, 1],
     [1, 0, 0, 0, 0],
     [1, 0, 1, 1, 1],
     [1, 0, 0, 0, 1],
-    [1, 1, 1, 1, 1],
+    [1, 1, 1, 1, 1]
   ],
   H: [
     [1, 0, 0, 0, 1],
     [1, 0, 0, 0, 1],
     [1, 1, 1, 1, 1],
     [1, 0, 0, 0, 1],
-    [1, 0, 0, 0, 1],
+    [1, 0, 0, 0, 1]
   ],
   I: [
     [1, 1, 1, 1, 1],
     [0, 0, 1, 0, 0],
     [0, 0, 1, 0, 0],
     [0, 0, 1, 0, 0],
-    [1, 1, 1, 1, 1],
+    [1, 1, 1, 1, 1]
   ],
   J: [
     [0, 0, 0, 0, 1],
     [0, 0, 0, 0, 1],
     [0, 0, 0, 0, 1],
     [1, 0, 0, 0, 1],
-    [0, 1, 1, 1, 0],
+    [0, 1, 1, 1, 0]
   ],
   K: [
     [1, 0, 0, 0, 1],
     [1, 0, 0, 1, 0],
     [1, 1, 1, 0, 0],
     [1, 0, 0, 1, 0],
-    [1, 0, 0, 0, 1],
+    [1, 0, 0, 0, 1]
   ],
   L: [
     [1, 0, 0, 0, 0],
     [1, 0, 0, 0, 0],
     [1, 0, 0, 0, 0],
     [1, 0, 0, 0, 0],
-    [1, 1, 1, 1, 1],
+    [1, 1, 1, 1, 1]
   ],
   M: [
     [1, 0, 0, 0, 1],
     [1, 1, 0, 1, 1],
     [1, 0, 1, 0, 1],
     [1, 0, 0, 0, 1],
-    [1, 0, 0, 0, 1],
+    [1, 0, 0, 0, 1]
   ],
   N: [
     [1, 0, 0, 0, 1],
     [1, 1, 0, 0, 1],
     [1, 0, 1, 0, 1],
     [1, 0, 0, 1, 1],
-    [1, 0, 0, 0, 1],
+    [1, 0, 0, 0, 1]
   ],
   O: [
     [0, 1, 1, 1, 0],
     [1, 0, 0, 0, 1],
     [1, 0, 0, 0, 1],
     [1, 0, 0, 0, 1],
-    [0, 1, 1, 1, 0],
+    [0, 1, 1, 1, 0]
   ],
   P: [
     [1, 1, 1, 1, 0],
     [1, 0, 0, 0, 1],
     [1, 1, 1, 1, 0],
     [1, 0, 0, 0, 0],
-    [1, 0, 0, 0, 0],
+    [1, 0, 0, 0, 0]
   ],
   Q: [
     [0, 1, 1, 1, 0],
     [1, 0, 0, 0, 1],
     [1, 0, 0, 0, 1],
     [1, 0, 0, 1, 0],
-    [0, 1, 1, 0, 1],
+    [0, 1, 1, 0, 1]
   ],
   R: [
     [1, 1, 1, 1, 0],
     [1, 0, 0, 0, 1],
     [1, 1, 1, 1, 0],
     [1, 0, 0, 1, 0],
-    [1, 0, 0, 0, 1],
+    [1, 0, 0, 0, 1]
   ],
   S: [
     [0, 1, 1, 1, 1],
     [1, 0, 0, 0, 0],
     [0, 1, 1, 1, 0],
     [0, 0, 0, 0, 1],
-    [1, 1, 1, 1, 0],
+    [1, 1, 1, 1, 0]
   ],
   T: [
     [1, 1, 1, 1, 1],
     [0, 0, 1, 0, 0],
     [0, 0, 1, 0, 0],
     [0, 0, 1, 0, 0],
-    [0, 0, 1, 0, 0],
+    [0, 0, 1, 0, 0]
   ],
   U: [
     [1, 0, 0, 0, 1],
     [1, 0, 0, 0, 1],
     [1, 0, 0, 0, 1],
     [1, 0, 0, 0, 1],
-    [0, 1, 1, 1, 0],
+    [0, 1, 1, 1, 0]
   ],
   V: [
     [1, 0, 0, 0, 1],
     [1, 0, 0, 0, 1],
     [1, 0, 0, 0, 1],
     [0, 1, 0, 1, 0],
-    [0, 0, 1, 0, 0],
+    [0, 0, 1, 0, 0]
   ],
   W: [
     [1, 0, 0, 0, 1],
     [1, 0, 0, 0, 1],
     [1, 0, 1, 0, 1],
     [1, 1, 0, 1, 1],
-    [1, 0, 0, 0, 1],
+    [1, 0, 0, 0, 1]
   ],
   X: [
     [1, 0, 0, 0, 1],
     [0, 1, 0, 1, 0],
     [0, 0, 1, 0, 0],
     [0, 1, 0, 1, 0],
-    [1, 0, 0, 0, 1],
+    [1, 0, 0, 0, 1]
   ],
   Y: [
     [1, 0, 0, 0, 1],
     [0, 1, 0, 1, 0],
     [0, 0, 1, 0, 0],
     [0, 0, 1, 0, 0],
-    [0, 0, 1, 0, 0],
+    [0, 0, 1, 0, 0]
   ],
   Z: [
     [1, 1, 1, 1, 1],
     [0, 0, 0, 1, 0],
     [0, 0, 1, 0, 0],
     [0, 1, 0, 0, 0],
-    [1, 1, 1, 1, 1],
+    [1, 1, 1, 1, 1]
   ],
   "0": [
     [0, 1, 1, 1, 0],
     [1, 0, 0, 1, 1],
     [1, 0, 1, 0, 1],
     [1, 1, 0, 0, 1],
-    [0, 1, 1, 1, 0],
+    [0, 1, 1, 1, 0]
   ],
   "1": [
     [0, 0, 1, 0, 0],
     [0, 1, 1, 0, 0],
     [0, 0, 1, 0, 0],
     [0, 0, 1, 0, 0],
-    [0, 1, 1, 1, 0],
+    [0, 1, 1, 1, 0]
   ],
   "2": [
     [0, 1, 1, 1, 0],
     [1, 0, 0, 0, 1],
     [0, 0, 1, 1, 0],
     [0, 1, 0, 0, 0],
-    [1, 1, 1, 1, 1],
+    [1, 1, 1, 1, 1]
   ],
   "3": [
     [1, 1, 1, 1, 0],
     [0, 0, 0, 0, 1],
     [0, 1, 1, 1, 0],
     [0, 0, 0, 0, 1],
-    [1, 1, 1, 1, 0],
+    [1, 1, 1, 1, 0]
   ],
   "4": [
     [1, 0, 0, 1, 0],
     [1, 0, 0, 1, 0],
     [1, 1, 1, 1, 1],
     [0, 0, 0, 1, 0],
-    [0, 0, 0, 1, 0],
+    [0, 0, 0, 1, 0]
   ],
   "5": [
     [1, 1, 1, 1, 1],
     [1, 0, 0, 0, 0],
     [1, 1, 1, 1, 0],
     [0, 0, 0, 0, 1],
-    [1, 1, 1, 1, 0],
+    [1, 1, 1, 1, 0]
   ],
   "6": [
     [0, 1, 1, 1, 0],
     [1, 0, 0, 0, 0],
     [1, 1, 1, 1, 0],
     [1, 0, 0, 0, 1],
-    [0, 1, 1, 1, 0],
+    [0, 1, 1, 1, 0]
   ],
   "7": [
     [1, 1, 1, 1, 1],
     [0, 0, 0, 0, 1],
     [0, 0, 0, 1, 0],
     [0, 0, 1, 0, 0],
-    [0, 0, 1, 0, 0],
+    [0, 0, 1, 0, 0]
   ],
   "8": [
     [0, 1, 1, 1, 0],
     [1, 0, 0, 0, 1],
     [0, 1, 1, 1, 0],
     [1, 0, 0, 0, 1],
-    [0, 1, 1, 1, 0],
+    [0, 1, 1, 1, 0]
   ],
   "9": [
     [0, 1, 1, 1, 0],
     [1, 0, 0, 0, 1],
     [0, 1, 1, 1, 1],
     [0, 0, 0, 0, 1],
-    [0, 1, 1, 1, 0],
+    [0, 1, 1, 1, 0]
   ],
   ":": [
     [0, 0, 0, 0, 0],
     [0, 0, 1, 0, 0],
     [0, 0, 0, 0, 0],
     [0, 0, 1, 0, 0],
-    [0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0]
   ],
   "!": [
     [0, 0, 1, 0, 0],
     [0, 0, 1, 0, 0],
     [0, 0, 1, 0, 0],
     [0, 0, 0, 0, 0],
-    [0, 0, 1, 0, 0],
+    [0, 0, 1, 0, 0]
   ],
   "*": [
     [0, 0, 0, 0, 0],
     [0, 1, 0, 1, 0],
     [0, 0, 1, 0, 0],
     [0, 1, 0, 1, 0],
-    [0, 0, 0, 0, 0],
-  ],
+    [0, 0, 0, 0, 0]
+  ]
 };
 
 export function FlappyBird({
@@ -378,7 +378,7 @@ export function FlappyBird({
   idleMessage,
   hasResults,
   onViewResults,
-  modelId,
+  modelId
 }: FlappyBirdProps) {
   const { t } = useTranslation();
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -419,7 +419,7 @@ export function FlappyBird({
     y: 200,
     velocity: 0,
     width: BIRD_SIZE,
-    height: BIRD_SIZE,
+    height: BIRD_SIZE
   });
   const pipesRef = useRef<Pipe[]>([]);
   const scoreRef = useRef(0);
@@ -433,7 +433,7 @@ export function FlappyBird({
       y: 200,
       velocity: 0,
       width: BIRD_SIZE,
-      height: BIRD_SIZE,
+      height: BIRD_SIZE
     };
     pipesRef.current = [];
     scoreRef.current = 0;
@@ -513,13 +513,13 @@ export function FlappyBird({
       x: number,
       y: number,
       pixelSize: number,
-      color: string,
+      color: string
     ) => {
       ctx.fillStyle = color;
       const letters = text.split("");
       let offsetX = 0;
 
-      letters.forEach((letter) => {
+      letters.forEach(letter => {
         const sprite = PIXEL_LETTERS[letter];
         if (sprite) {
           sprite.forEach((row, rowIndex) => {
@@ -529,7 +529,7 @@ export function FlappyBird({
                   x + offsetX + colIndex * pixelSize,
                   y + rowIndex * pixelSize,
                   pixelSize,
-                  pixelSize,
+                  pixelSize
                 );
               }
             });
@@ -540,7 +540,7 @@ export function FlappyBird({
         }
       });
     },
-    [],
+    []
   );
 
   // Draw pixel bird with animated wing (colorful like original Flappy Bird)
@@ -556,7 +556,7 @@ export function FlappyBird({
         "#FA8132", // 5 - beak orange
         "#DC4D32", // 6 - beak red
         "#D8B828", // 7 - body darker yellow
-        "#543818", // 8 - outline brown
+        "#543818" // 8 - outline brown
       ];
 
       const pixelSize = PIXEL_SIZE;
@@ -572,7 +572,7 @@ export function FlappyBird({
               startX + colIndex * pixelSize,
               startY + rowIndex * pixelSize,
               pixelSize,
-              pixelSize,
+              pixelSize
             );
           }
         });
@@ -602,13 +602,13 @@ export function FlappyBird({
               wingStartX + colIndex * pixelSize,
               wingStartY + rowIndex * pixelSize,
               pixelSize,
-              pixelSize,
+              pixelSize
             );
           }
         });
       });
     },
-    [],
+    []
   );
 
   // Draw pixel pipe (green like original Flappy Bird)
@@ -618,7 +618,7 @@ export function FlappyBird({
       x: number,
       topHeight: number,
       canvasHeight: number,
-      isDark: boolean,
+      isDark: boolean
     ) => {
       const pipeBody = isDark ? "#4a7a4a" : "#73BF2E";
       const pipeLight = isDark ? "#5a9a5a" : "#8ED43F";
@@ -640,7 +640,7 @@ export function FlappyBird({
           x + pixelSize * 2,
           startY,
           PIPE_WIDTH - pixelSize * 4,
-          height,
+          height
         );
         // Right shadow
         ctx.fillStyle = pipeDark;
@@ -648,7 +648,7 @@ export function FlappyBird({
           x + PIPE_WIDTH - pixelSize * 2,
           startY,
           pixelSize * 2,
-          height,
+          height
         );
       };
 
@@ -682,7 +682,7 @@ export function FlappyBird({
       drawPipeCap(bottomStart, true);
       drawPipeBody(bottomStart + capHeight, canvasHeight + pixelSize);
     },
-    [],
+    []
   );
 
   // Background elements ref
@@ -691,12 +691,12 @@ export function FlappyBird({
       { x: 50, y: 40, size: 1 },
       { x: 180, y: 70, size: 0.7 },
       { x: 320, y: 30, size: 1.2 },
-      { x: 250, y: 90, size: 0.8 },
+      { x: 250, y: 90, size: 0.8 }
     ],
     grass: Array.from({ length: 80 }, (_, i) => ({
       x: i * 6,
-      h: 8 + Math.random() * 12,
-    })),
+      h: 8 + Math.random() * 12
+    }))
   });
 
   // Draw background
@@ -706,7 +706,7 @@ export function FlappyBird({
       canvasWidth: number,
       canvasHeight: number,
       isDark: boolean,
-      scrollOffset: number,
+      scrollOffset: number
     ) => {
       const pixelSize = PIXEL_SIZE;
 
@@ -726,7 +726,7 @@ export function FlappyBird({
       const cloudHighlight = isDark
         ? "rgba(100, 100, 120, 0.3)"
         : "rgba(255, 255, 255, 0.9)";
-      backgroundRef.current.clouds.forEach((cloud) => {
+      backgroundRef.current.clouds.forEach(cloud => {
         const cx =
           ((((cloud.x - scrollOffset * 0.15) % (canvasWidth + 100)) +
             canvasWidth +
@@ -779,7 +779,7 @@ export function FlappyBird({
       ctx.closePath();
       ctx.fill();
     },
-    [],
+    []
   );
 
   // Resize canvas pixel buffer to match its CSS layout size
@@ -822,7 +822,7 @@ export function FlappyBird({
       // Calculate delta time (capped to prevent huge jumps)
       const deltaTime = Math.min(
         (timestamp - lastFrameTimeRef.current) / 1000,
-        0.1,
+        0.1
       );
       lastFrameTimeRef.current = timestamp;
 
@@ -844,7 +844,7 @@ export function FlappyBird({
         canvas.width,
         canvas.height,
         isDark,
-        scrollOffsetRef.current,
+        scrollOffsetRef.current
       );
 
       if (currentGameState === "playing") {
@@ -908,7 +908,7 @@ export function FlappyBird({
       }
 
       // Draw pipes (pixel art style)
-      pipes.forEach((pipe) => {
+      pipes.forEach(pipe => {
         drawPixelPipe(ctx, pipe.x, pipe.topHeight, canvas.height, isDark);
       });
 
@@ -944,7 +944,7 @@ export function FlappyBird({
           canvas.width / 2 - scoreWidth / 2 + 2,
           20 + 2,
           scorePixelSize,
-          "rgba(0,0,0,0.5)",
+          "rgba(0,0,0,0.5)"
         );
         // Text
         drawPixelText(
@@ -953,7 +953,7 @@ export function FlappyBird({
           canvas.width / 2 - scoreWidth / 2,
           20,
           scorePixelSize,
-          "#FFFFFF",
+          "#FFFFFF"
         );
       }
 
@@ -977,7 +977,7 @@ export function FlappyBird({
           canvas.width / 2 - gameTextWidth / 2 + 2,
           canvas.height / 2 - 80 + 2,
           bigPixel,
-          shadowColor,
+          shadowColor
         );
         drawPixelText(
           ctx,
@@ -985,7 +985,7 @@ export function FlappyBird({
           canvas.width / 2 - gameTextWidth / 2,
           canvas.height / 2 - 80,
           bigPixel,
-          textColor,
+          textColor
         );
         drawPixelText(
           ctx,
@@ -993,7 +993,7 @@ export function FlappyBird({
           canvas.width / 2 - overTextWidth / 2 + 2,
           canvas.height / 2 - 45 + 2,
           bigPixel,
-          shadowColor,
+          shadowColor
         );
         drawPixelText(
           ctx,
@@ -1001,7 +1001,7 @@ export function FlappyBird({
           canvas.width / 2 - overTextWidth / 2,
           canvas.height / 2 - 45,
           bigPixel,
-          textColor,
+          textColor
         );
 
         // Score display (medium)
@@ -1015,7 +1015,7 @@ export function FlappyBird({
           canvas.width / 2 - scoreLabelWidth / 2 + 1,
           canvas.height / 2 + 10 + 1,
           medPixel,
-          shadowColor,
+          shadowColor
         );
         drawPixelText(
           ctx,
@@ -1023,7 +1023,7 @@ export function FlappyBird({
           canvas.width / 2 - scoreLabelWidth / 2,
           canvas.height / 2 + 10,
           medPixel,
-          textColor,
+          textColor
         );
 
         // Best score
@@ -1040,7 +1040,7 @@ export function FlappyBird({
           canvas.width / 2 - bestLabelWidth / 2 + 1,
           canvas.height / 2 + 35 + 1,
           medPixel,
-          shadowColor,
+          shadowColor
         );
         drawPixelText(
           ctx,
@@ -1048,7 +1048,7 @@ export function FlappyBird({
           canvas.width / 2 - bestLabelWidth / 2,
           canvas.height / 2 + 35,
           medPixel,
-          bestColor,
+          bestColor
         );
 
         // Tap to restart hint
@@ -1061,7 +1061,7 @@ export function FlappyBird({
           canvas.width / 2 - tapLabelWidth / 2 + 1,
           canvas.height / 2 + 70 + 1,
           smallPixel,
-          shadowColor,
+          shadowColor
         );
         drawPixelText(
           ctx,
@@ -1069,7 +1069,7 @@ export function FlappyBird({
           canvas.width / 2 - tapLabelWidth / 2,
           canvas.height / 2 + 70,
           smallPixel,
-          "rgba(255,255,255,0.6)",
+          "rgba(255,255,255,0.6)"
         );
       }
 
@@ -1089,7 +1089,7 @@ export function FlappyBird({
     drawPixelBird,
     drawPixelPipe,
     drawPixelText,
-    drawBackground,
+    drawBackground
   ]);
 
   const handleCanvasClick = useCallback(() => {
@@ -1112,14 +1112,14 @@ export function FlappyBird({
         style={{
           backgroundImage:
             "radial-gradient(circle, currentColor 1px, transparent 1px)",
-          backgroundSize: "24px 24px",
+          backgroundSize: "24px 24px"
         }}
       />
       <canvas
         ref={canvasRef}
         className={cn(
           "rounded-xl border border-border/30 shadow-sm transition-opacity duration-300 max-w-[480px] max-h-[600px] w-full h-full pointer-events-none",
-          gameState === "idle" && "opacity-40",
+          gameState === "idle" && "opacity-40"
         )}
         style={{ imageRendering: "pixelated" }}
       />
@@ -1145,18 +1145,18 @@ export function FlappyBird({
                 image: {
                   icon: ImageIcon,
                   color: "text-sky-500",
-                  label: "Image Generation",
+                  label: "Image Generation"
                 },
                 video: {
                   icon: Video,
                   color: "text-purple-500",
-                  label: "Video Generation",
+                  label: "Video Generation"
                 },
                 audio: {
                   icon: Music,
                   color: "text-emerald-500",
-                  label: "Audio Generation",
-                },
+                  label: "Audio Generation"
+                }
               }[outputType];
               const TypeIcon = typeConfig.icon;
 
@@ -1172,7 +1172,7 @@ export function FlappyBird({
                       {t("playground.flappyBird.resultsReady", "Results Ready")}
                     </p>
                     <button
-                      onClick={(e) => {
+                      onClick={e => {
                         e.stopPropagation();
                         onViewResults?.();
                       }}
@@ -1233,7 +1233,7 @@ export function FlappyBird({
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 animate-in fade-in slide-in-from-top-2 duration-300">
           <button
             className="flex items-center gap-2 px-4 py-2 rounded-full bg-primary text-primary-foreground text-sm font-medium shadow-lg hover:bg-primary/90 transition-colors"
-            onClick={(e) => {
+            onClick={e => {
               e.stopPropagation();
               onViewResults?.();
             }}
@@ -1249,8 +1249,8 @@ export function FlappyBird({
           <Badge
             variant="secondary"
             className="px-3 py-1.5 cursor-pointer select-none hover:bg-destructive hover:text-destructive-foreground transition-colors bg-background/80 backdrop-blur-sm border border-border/50"
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={(e) => {
+            onMouseDown={e => e.preventDefault()}
+            onClick={e => {
               e.stopPropagation();
               quitGame();
             }}

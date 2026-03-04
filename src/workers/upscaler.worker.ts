@@ -20,38 +20,44 @@ const CDN_MODELS: Record<
 > = {
   medium: {
     "2x": {
-      path: "https://cdn.jsdelivr.net/npm/@upscalerjs/esrgan-medium@1.0.0-beta.10/models/2x/model.json",
+      path:
+        "https://cdn.jsdelivr.net/npm/@upscalerjs/esrgan-medium@1.0.0-beta.10/models/2x/model.json",
       modelType: "layers",
-      scale: 2,
+      scale: 2
     },
     "3x": {
-      path: "https://cdn.jsdelivr.net/npm/@upscalerjs/esrgan-medium@1.0.0-beta.10/models/3x/model.json",
+      path:
+        "https://cdn.jsdelivr.net/npm/@upscalerjs/esrgan-medium@1.0.0-beta.10/models/3x/model.json",
       modelType: "layers",
-      scale: 3,
+      scale: 3
     },
     "4x": {
-      path: "https://cdn.jsdelivr.net/npm/@upscalerjs/esrgan-medium@1.0.0-beta.10/models/4x/model.json",
+      path:
+        "https://cdn.jsdelivr.net/npm/@upscalerjs/esrgan-medium@1.0.0-beta.10/models/4x/model.json",
       modelType: "layers",
-      scale: 4,
-    },
+      scale: 4
+    }
   },
   thick: {
     "2x": {
-      path: "https://cdn.jsdelivr.net/npm/@upscalerjs/esrgan-thick@1.0.0-beta.12/models/2x/model.json",
+      path:
+        "https://cdn.jsdelivr.net/npm/@upscalerjs/esrgan-thick@1.0.0-beta.12/models/2x/model.json",
       modelType: "layers",
-      scale: 2,
+      scale: 2
     },
     "3x": {
-      path: "https://cdn.jsdelivr.net/npm/@upscalerjs/esrgan-thick@1.0.0-beta.12/models/3x/model.json",
+      path:
+        "https://cdn.jsdelivr.net/npm/@upscalerjs/esrgan-thick@1.0.0-beta.12/models/3x/model.json",
       modelType: "layers",
-      scale: 3,
+      scale: 3
     },
     "4x": {
-      path: "https://cdn.jsdelivr.net/npm/@upscalerjs/esrgan-thick@1.0.0-beta.12/models/4x/model.json",
+      path:
+        "https://cdn.jsdelivr.net/npm/@upscalerjs/esrgan-thick@1.0.0-beta.12/models/4x/model.json",
       modelType: "layers",
-      scale: 4,
-    },
-  },
+      scale: 4
+    }
+  }
 };
 
 const getModel = async (model: ModelType, scale: ScaleType) => {
@@ -60,7 +66,7 @@ const getModel = async (model: ModelType, scale: ScaleType) => {
     const slimMap = {
       "2x": () => import("@upscalerjs/esrgan-slim/2x"),
       "3x": () => import("@upscalerjs/esrgan-slim/3x"),
-      "4x": () => import("@upscalerjs/esrgan-slim/4x"),
+      "4x": () => import("@upscalerjs/esrgan-slim/4x")
     };
     return (await slimMap[scale]()).default;
   }
@@ -92,7 +98,7 @@ self.onmessage = async (e: MessageEvent) => {
         // Signal start of download phase
         self.postMessage({
           type: "phase",
-          payload: { phase: "download", id },
+          payload: { phase: "download", id }
         });
 
         self.postMessage({
@@ -100,8 +106,8 @@ self.onmessage = async (e: MessageEvent) => {
           payload: {
             phase: "download",
             progress: 0,
-            id,
-          },
+            id
+          }
         });
 
         const modelDef = await getModel(model, scale);
@@ -111,8 +117,8 @@ self.onmessage = async (e: MessageEvent) => {
           payload: {
             phase: "download",
             progress: 50,
-            id,
-          },
+            id
+          }
         });
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -123,8 +129,8 @@ self.onmessage = async (e: MessageEvent) => {
           payload: {
             phase: "download",
             progress: 100,
-            id,
-          },
+            id
+          }
         });
 
         self.postMessage({ type: "loaded", payload: { id } });
@@ -144,7 +150,7 @@ self.onmessage = async (e: MessageEvent) => {
         // Signal start of process phase
         self.postMessage({
           type: "phase",
-          payload: { phase: "process", id },
+          payload: { phase: "process", id }
         });
 
         // Upscale using ImageData directly, output as tensor to avoid base64 issues in worker
@@ -162,12 +168,12 @@ self.onmessage = async (e: MessageEvent) => {
                 detail: {
                   current: Math.round(percent * 100),
                   total: 100,
-                  unit: "percent" as const,
+                  unit: "percent" as const
                 },
-                id,
-              },
+                id
+              }
             });
-          },
+          }
         });
 
         // Convert tensor to ImageData
@@ -199,10 +205,10 @@ self.onmessage = async (e: MessageEvent) => {
               imageData: resultImageData,
               width,
               height,
-              id,
-            },
+              id
+            }
           },
-          { transfer: [resultImageData.data.buffer] },
+          { transfer: [resultImageData.data.buffer] }
         );
         break;
       }

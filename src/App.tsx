@@ -39,8 +39,8 @@ function App() {
       if (storedLanguage === "auto") return;
 
       const supportedLangs = languages
-        .map((lang) => lang.code)
-        .filter((code) => code !== "auto");
+        .map(lang => lang.code)
+        .filter(code => code !== "auto");
       if (!supportedLangs.includes(storedLanguage)) return;
 
       if (i18n.language !== storedLanguage) {

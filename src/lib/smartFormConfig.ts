@@ -16,18 +16,18 @@ export interface SmartFormFamily {
   toggles: SmartFormToggle[];
   resolveVariant: (
     filledFields: Set<string>,
-    toggleValues: Record<string, string>,
+    toggleValues: Record<string, string>
   ) => string;
   mapValues?: (
     values: Record<string, unknown>,
-    resolvedVariantId: string,
+    resolvedVariantId: string
   ) => Record<string, unknown>;
   excludeFields?: string[];
 }
 
 // Helper to check if any file-like field is filled
 function hasFileField(filledFields: Set<string>, ...names: string[]): boolean {
-  return names.some((n) => filledFields.has(n));
+  return names.some(n => filledFields.has(n));
 }
 
 function hasImageFilled(filledFields: Set<string>): boolean {
@@ -37,7 +37,7 @@ function hasImageFilled(filledFields: Set<string>): boolean {
     "images",
     "image_url",
     "image_urls",
-    "input_image",
+    "input_image"
   );
 }
 
@@ -48,7 +48,7 @@ function hasVideoFilled(filledFields: Set<string>): boolean {
     "videos",
     "video_url",
     "video_urls",
-    "input_video",
+    "input_video"
   );
 }
 
@@ -72,7 +72,7 @@ export const SMART_FORM_FAMILIES: SmartFormFamily[] = [
       "bytedance/seedream-v4.5",
       "bytedance/seedream-v4.5/sequential",
       "bytedance/seedream-v4.5/edit",
-      "bytedance/seedream-v4.5/edit-sequential",
+      "bytedance/seedream-v4.5/edit-sequential"
     ],
     primaryVariant: "bytedance/seedream-v4.5",
     toggles: [
@@ -81,10 +81,10 @@ export const SMART_FORM_FAMILIES: SmartFormFamily[] = [
         labelKey: "smartPlayground.toggleMode",
         options: [
           { value: "normal", labelKey: "smartPlayground.modeNormal" },
-          { value: "sequential", labelKey: "smartPlayground.modeSequential" },
+          { value: "sequential", labelKey: "smartPlayground.modeSequential" }
         ],
-        default: "normal",
-      },
+        default: "normal"
+      }
     ],
     resolveVariant(filledFields, toggleValues) {
       const hasImage = hasImageFilled(filledFields);
@@ -94,7 +94,7 @@ export const SMART_FORM_FAMILIES: SmartFormFamily[] = [
       if (hasImage) return "bytedance/seedream-v4.5/edit";
       if (isSequential) return "bytedance/seedream-v4.5/sequential";
       return "bytedance/seedream-v4.5";
-    },
+    }
   },
 
   // 2. Seedance 1.5 Pro
@@ -111,7 +111,7 @@ export const SMART_FORM_FAMILIES: SmartFormFamily[] = [
       "bytedance/seedance-v1.5-pro/text-to-video",
       "bytedance/seedance-v1.5-pro/text-to-video-fast",
       "bytedance/seedance-v1.5-pro/video-extend",
-      "bytedance/seedance-v1.5-pro/video-extend-fast",
+      "bytedance/seedance-v1.5-pro/video-extend-fast"
     ],
     primaryVariant: "bytedance/seedance-v1.5-pro/image-to-video",
     toggles: [
@@ -120,10 +120,10 @@ export const SMART_FORM_FAMILIES: SmartFormFamily[] = [
         labelKey: "smartPlayground.toggleSpeed",
         options: [
           { value: "normal", labelKey: "smartPlayground.speedNormal" },
-          { value: "fast", labelKey: "smartPlayground.speedFast" },
+          { value: "fast", labelKey: "smartPlayground.speedFast" }
         ],
-        default: "normal",
-      },
+        default: "normal"
+      }
     ],
     resolveVariant(filledFields, toggleValues) {
       const hasVideo = hasVideoFilled(filledFields);
@@ -140,7 +140,7 @@ export const SMART_FORM_FAMILIES: SmartFormFamily[] = [
       return isFast
         ? "bytedance/seedance-v1.5-pro/text-to-video-fast"
         : "bytedance/seedance-v1.5-pro/text-to-video";
-    },
+    }
   },
 
   // 3. Wan Spicy
@@ -155,7 +155,7 @@ export const SMART_FORM_FAMILIES: SmartFormFamily[] = [
       "wavespeed-ai/wan-2.2-spicy/image-to-video",
       "wavespeed-ai/wan-2.2-spicy/image-to-video-lora",
       "wavespeed-ai/wan-2.2-spicy/video-extend",
-      "wavespeed-ai/wan-2.2-spicy/video-extend-lora",
+      "wavespeed-ai/wan-2.2-spicy/video-extend-lora"
     ],
     primaryVariant: "wavespeed-ai/wan-2.2-spicy/image-to-video",
     toggles: [],
@@ -167,7 +167,7 @@ export const SMART_FORM_FAMILIES: SmartFormFamily[] = [
       if (hasVideo) return "wavespeed-ai/wan-2.2-spicy/video-extend";
       if (hasLoras) return "wavespeed-ai/wan-2.2-spicy/image-to-video-lora";
       return "wavespeed-ai/wan-2.2-spicy/image-to-video";
-    },
+    }
   },
 
   // 4. Wan Animate
@@ -183,7 +183,7 @@ export const SMART_FORM_FAMILIES: SmartFormFamily[] = [
     toggles: [],
     resolveVariant() {
       return "wavespeed-ai/wan-2.2/animate";
-    },
+    }
   },
 
   // 5. InfiniteTalk
@@ -201,7 +201,7 @@ export const SMART_FORM_FAMILIES: SmartFormFamily[] = [
       "wavespeed-ai/infinitetalk/video-to-video",
       "wavespeed-ai/infinitetalk-fast",
       "wavespeed-ai/infinitetalk-fast/multi",
-      "wavespeed-ai/infinitetalk-fast/video-to-video",
+      "wavespeed-ai/infinitetalk-fast/video-to-video"
     ],
     primaryVariant: "wavespeed-ai/infinitetalk",
     toggles: [
@@ -210,10 +210,10 @@ export const SMART_FORM_FAMILIES: SmartFormFamily[] = [
         labelKey: "smartPlayground.toggleSpeed",
         options: [
           { value: "normal", labelKey: "smartPlayground.speedNormal" },
-          { value: "fast", labelKey: "smartPlayground.speedFast" },
+          { value: "fast", labelKey: "smartPlayground.speedFast" }
         ],
-        default: "normal",
-      },
+        default: "normal"
+      }
     ],
     resolveVariant(filledFields, toggleValues) {
       const hasVideo = hasVideoFilled(filledFields);
@@ -249,7 +249,7 @@ export const SMART_FORM_FAMILIES: SmartFormFamily[] = [
       delete mapped.left_audio;
       delete mapped.right_audio;
       return mapped;
-    },
+    }
   },
 
   // 6. Kling 2.6 Motion Control
@@ -262,7 +262,7 @@ export const SMART_FORM_FAMILIES: SmartFormFamily[] = [
     category: "other",
     variantIds: [
       "kwaivgi/kling-v2.6-pro/motion-control",
-      "kwaivgi/kling-v2.6-std/motion-control",
+      "kwaivgi/kling-v2.6-std/motion-control"
     ],
     primaryVariant: "kwaivgi/kling-v2.6-pro/motion-control",
     toggles: [
@@ -271,16 +271,16 @@ export const SMART_FORM_FAMILIES: SmartFormFamily[] = [
         labelKey: "smartPlayground.toggleQuality",
         options: [
           { value: "pro", labelKey: "smartPlayground.qualityPro" },
-          { value: "std", labelKey: "smartPlayground.qualityStd" },
+          { value: "std", labelKey: "smartPlayground.qualityStd" }
         ],
-        default: "pro",
-      },
+        default: "pro"
+      }
     ],
     resolveVariant(_filledFields, toggleValues) {
       return toggleValues.quality === "std"
         ? "kwaivgi/kling-v2.6-std/motion-control"
         : "kwaivgi/kling-v2.6-pro/motion-control";
-    },
+    }
   },
 
   // 7. Nano Banana Pro
@@ -297,7 +297,7 @@ export const SMART_FORM_FAMILIES: SmartFormFamily[] = [
       "google/nano-banana-pro/text-to-image-multi",
       "google/nano-banana-pro/edit",
       "google/nano-banana-pro/edit-ultra",
-      "google/nano-banana-pro/edit-multi",
+      "google/nano-banana-pro/edit-multi"
     ],
     primaryVariant: "google/nano-banana-pro/text-to-image",
     toggles: [
@@ -307,10 +307,10 @@ export const SMART_FORM_FAMILIES: SmartFormFamily[] = [
         options: [
           { value: "standard", labelKey: "smartPlayground.qualityStd" },
           { value: "ultra", labelKey: "smartPlayground.qualityUltra" },
-          { value: "multi", labelKey: "smartPlayground.qualityMulti" },
+          { value: "multi", labelKey: "smartPlayground.qualityMulti" }
         ],
-        default: "standard",
-      },
+        default: "standard"
+      }
     ],
     resolveVariant(filledFields, toggleValues) {
       const hasImage = hasImageFilled(filledFields);
@@ -325,10 +325,10 @@ export const SMART_FORM_FAMILIES: SmartFormFamily[] = [
       if (quality === "multi")
         return "google/nano-banana-pro/text-to-image-multi";
       return "google/nano-banana-pro/text-to-image";
-    },
-  },
+    }
+  }
 ];
 
 export function findFamilyById(id: string): SmartFormFamily | undefined {
-  return SMART_FORM_FAMILIES.find((f) => f.id === id);
+  return SMART_FORM_FAMILIES.find(f => f.id === id);
 }

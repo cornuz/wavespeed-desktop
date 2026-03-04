@@ -41,50 +41,50 @@ export const VIDEO_FORMATS: VideoFormat[] = [
     ext: "mp4",
     label: "MP4 (H.264)",
     codec: "libx264",
-    mimeType: "video/mp4",
+    mimeType: "video/mp4"
   },
   {
     id: "mp4-h265",
     ext: "mp4",
     label: "MP4 (H.265/HEVC)",
     codec: "libx265",
-    mimeType: "video/mp4",
+    mimeType: "video/mp4"
   },
   {
     id: "webm-vp9",
     ext: "webm",
     label: "WebM (VP9)",
     codec: "libvpx-vp9",
-    mimeType: "video/webm",
+    mimeType: "video/webm"
   },
   {
     id: "webm-vp8",
     ext: "webm",
     label: "WebM (VP8)",
     codec: "libvpx",
-    mimeType: "video/webm",
+    mimeType: "video/webm"
   },
   {
     id: "mov",
     ext: "mov",
     label: "MOV",
     codec: "libx264",
-    mimeType: "video/quicktime",
+    mimeType: "video/quicktime"
   },
   {
     id: "avi",
     ext: "avi",
     label: "AVI",
     codec: "libx264",
-    mimeType: "video/x-msvideo",
+    mimeType: "video/x-msvideo"
   },
   {
     id: "mkv",
     ext: "mkv",
     label: "MKV",
     codec: "libx264",
-    mimeType: "video/x-matroska",
-  },
+    mimeType: "video/x-matroska"
+  }
 ];
 
 export const AUDIO_FORMATS: AudioFormat[] = [
@@ -93,43 +93,43 @@ export const AUDIO_FORMATS: AudioFormat[] = [
     ext: "mp3",
     label: "MP3",
     codec: "libmp3lame",
-    mimeType: "audio/mpeg",
+    mimeType: "audio/mpeg"
   },
   {
     id: "aac",
     ext: "m4a",
     label: "AAC (M4A)",
     codec: "aac",
-    mimeType: "audio/mp4",
+    mimeType: "audio/mp4"
   },
   {
     id: "opus",
     ext: "ogg",
     label: "Opus (OGG)",
     codec: "libopus",
-    mimeType: "audio/ogg",
+    mimeType: "audio/ogg"
   },
   {
     id: "vorbis",
     ext: "ogg",
     label: "Vorbis (OGG)",
     codec: "libvorbis",
-    mimeType: "audio/ogg",
+    mimeType: "audio/ogg"
   },
   {
     id: "flac",
     ext: "flac",
     label: "FLAC (Lossless)",
     codec: "flac",
-    mimeType: "audio/flac",
+    mimeType: "audio/flac"
   },
   {
     id: "wav",
     ext: "wav",
     label: "WAV (Uncompressed)",
     codec: "pcm_s16le",
-    mimeType: "audio/wav",
-  },
+    mimeType: "audio/wav"
+  }
 ];
 
 export const IMAGE_FORMATS: ImageFormat[] = [
@@ -138,43 +138,43 @@ export const IMAGE_FORMATS: ImageFormat[] = [
     ext: "jpg",
     label: "JPEG",
     mimeType: "image/jpeg",
-    supportsQuality: true,
+    supportsQuality: true
   },
   {
     id: "png",
     ext: "png",
     label: "PNG",
     mimeType: "image/png",
-    supportsQuality: false,
+    supportsQuality: false
   },
   {
     id: "webp",
     ext: "webp",
     label: "WebP",
     mimeType: "image/webp",
-    supportsQuality: true,
+    supportsQuality: true
   },
   {
     id: "gif",
     ext: "gif",
     label: "GIF",
     mimeType: "image/gif",
-    supportsQuality: false,
+    supportsQuality: false
   },
   {
     id: "bmp",
     ext: "bmp",
     label: "BMP",
     mimeType: "image/bmp",
-    supportsQuality: false,
-  },
+    supportsQuality: false
+  }
 ];
 
 export const QUALITY_PRESETS: QualityPreset[] = [
   { id: "low", label: "Low (Fast)", videoBitrate: "1M", audioBitrate: "96k" },
   { id: "medium", label: "Medium", videoBitrate: "5M", audioBitrate: "128k" },
   { id: "high", label: "High", videoBitrate: "10M", audioBitrate: "192k" },
-  { id: "ultra", label: "Ultra", videoBitrate: "20M", audioBitrate: "320k" },
+  { id: "ultra", label: "Ultra", videoBitrate: "20M", audioBitrate: "320k" }
 ];
 
 export const RESOLUTION_PRESETS: ResolutionPreset[] = [
@@ -183,7 +183,7 @@ export const RESOLUTION_PRESETS: ResolutionPreset[] = [
   { id: "1080p", label: "1080p (1920x1080)", value: "1920x1080" },
   { id: "720p", label: "720p (1280x720)", value: "1280x720" },
   { id: "480p", label: "480p (854x480)", value: "854x480" },
-  { id: "360p", label: "360p (640x360)", value: "640x360" },
+  { id: "360p", label: "360p (640x360)", value: "640x360" }
 ];
 
 export const AUDIO_BITRATES = [
@@ -192,32 +192,35 @@ export const AUDIO_BITRATES = [
   { id: "128k", label: "128 kbps", value: "128k" },
   { id: "192k", label: "192 kbps", value: "192k" },
   { id: "256k", label: "256 kbps", value: "256k" },
-  { id: "320k", label: "320 kbps", value: "320k" },
+  { id: "320k", label: "320 kbps", value: "320k" }
 ];
 
 // Helper to get format by ID
 export function getVideoFormat(id: string): VideoFormat | undefined {
-  return VIDEO_FORMATS.find((f) => f.id === id);
+  return VIDEO_FORMATS.find(f => f.id === id);
 }
 
 export function getAudioFormat(id: string): AudioFormat | undefined {
-  return AUDIO_FORMATS.find((f) => f.id === id);
+  return AUDIO_FORMATS.find(f => f.id === id);
 }
 
 export function getImageFormat(id: string): ImageFormat | undefined {
-  return IMAGE_FORMATS.find((f) => f.id === id);
+  return IMAGE_FORMATS.find(f => f.id === id);
 }
 
 // Detect media type from file
 export function getMediaType(
-  file: File,
+  file: File
 ): "video" | "audio" | "image" | "unknown" {
   if (file.type.startsWith("video/")) return "video";
   if (file.type.startsWith("audio/")) return "audio";
   if (file.type.startsWith("image/")) return "image";
 
   // Fallback to extension
-  const ext = file.name.split(".").pop()?.toLowerCase();
+  const ext = file.name
+    .split(".")
+    .pop()
+    ?.toLowerCase();
   const videoExts = ["mp4", "webm", "mov", "avi", "mkv", "m4v", "wmv", "flv"];
   const audioExts = ["mp3", "m4a", "ogg", "wav", "flac", "aac", "wma"];
   const imageExts = ["jpg", "jpeg", "png", "webp", "gif", "bmp", "tiff"];
@@ -236,7 +239,9 @@ export function formatDuration(seconds: number): string {
   const s = Math.floor(seconds % 60);
 
   if (h > 0) {
-    return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+    return `${h}:${m.toString().padStart(2, "0")}:${s
+      .toString()
+      .padStart(2, "0")}`;
   }
   return `${m}:${s.toString().padStart(2, "0")}`;
 }

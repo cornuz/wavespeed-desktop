@@ -34,7 +34,7 @@ export function hasCycle(nodeIds: string[], edges: SimpleEdge[]): boolean {
 export function wouldCreateCycle(
   nodeIds: string[],
   edges: SimpleEdge[],
-  newEdge: SimpleEdge,
+  newEdge: SimpleEdge
 ): boolean {
   return hasCycle(nodeIds, [...edges, newEdge]);
 }

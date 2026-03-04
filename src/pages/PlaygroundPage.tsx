@@ -16,6 +16,7 @@ import {
 } from "@/stores/playgroundStore";
 import { useModelsStore } from "@/stores/modelsStore";
 import { useApiKeyStore } from "@/stores/apiKeyStore";
+import { apiClient } from "@/api/client";
 import { useTemplateStore } from "@/stores/templateStore";
 import { DynamicForm } from "@/components/playground/DynamicForm";
 import { ModelSelector } from "@/components/playground/ModelSelector";
@@ -83,6 +84,7 @@ export function PlaygroundPage() {
   const navigate = useNavigate();
   const { models, fetchModels } = useModelsStore();
   const {
+    apiKey,
     isLoading: isLoadingApiKey,
     isValidated,
     loadApiKey,
@@ -140,6 +142,11 @@ export function PlaygroundPage() {
 
   const templateLoadedRef = useRef<string | null>(null);
   const initialTabCreatedRef = useRef(false);
+
+  // Dynamic pricing state
+  const [calculatedPrice, setCalculatedPrice] = useState<number | null>(null);
+  const [isPricingLoading, setIsPricingLoading] = useState(false);
+  const pricingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Mobile view state: 'config' or 'output'
   const [mobileView, setMobileView] = useState<"config" | "output">("config");
@@ -342,6 +349,39 @@ export function PlaygroundPage() {
       fetchModels();
     }
   }, [isValidated, fetchModels]);
+
+  // Calculate dynamic pricing with debounce
+  useEffect(() => {
+    if (!activeTab?.selectedModel || !apiKey) {
+      setCalculatedPrice(null);
+      return;
+    }
+
+    if (pricingTimeoutRef.current) {
+      clearTimeout(pricingTimeoutRef.current);
+    }
+
+    pricingTimeoutRef.current = setTimeout(async () => {
+      setIsPricingLoading(true);
+      try {
+        const price = await apiClient.calculatePricing(
+          activeTab.selectedModel!.model_id,
+          activeTab.formValues,
+        );
+        setCalculatedPrice(price);
+      } catch {
+        setCalculatedPrice(null);
+      } finally {
+        setIsPricingLoading(false);
+      }
+    }, 500);
+
+    return () => {
+      if (pricingTimeoutRef.current) {
+        clearTimeout(pricingTimeoutRef.current);
+      }
+    };
+  }, [activeTab?.selectedModel, activeTab?.formValues, apiKey]);
 
   // Load template from URL query param
   useEffect(() => {
@@ -788,6 +828,15 @@ export function PlaygroundPage() {
                       activeTab?.batchState?.isRunning
                         ? `${t("playground.running")} (${activeTab.batchState.queue.length})`
                         : t("playground.running")
+                    }
+                    price={
+                      isPricingLoading
+                        ? "..."
+                        : calculatedPrice != null
+                          ? `${calculatedPrice.toFixed(4)}`
+                          : activeTab?.selectedModel?.base_price != null
+                            ? `${activeTab.selectedModel.base_price.toFixed(4)}`
+                            : undefined
                     }
                   />
                 </div>

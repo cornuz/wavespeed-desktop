@@ -6,7 +6,7 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
+  SelectValue
 } from "@/components/ui/select";
 import { X, RotateCcw, Check, Loader2, Play, Pause, Video } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -20,7 +20,7 @@ const ASPECT_RATIO_CONFIG: Record<
   "16:9": { width: 1920, height: 1080, class: "aspect-[16/9]" },
   "4:3": { width: 1440, height: 1080, class: "aspect-[4/3]" },
   "1:1": { width: 1080, height: 1080, class: "aspect-[1/1]" },
-  "9:16": { width: 1080, height: 1920, class: "aspect-[9/16]" },
+  "9:16": { width: 1080, height: 1920, class: "aspect-[9/16]" }
 };
 
 interface VideoRecorderProps {
@@ -32,7 +32,7 @@ interface VideoRecorderProps {
 export function VideoRecorder({
   onRecord,
   onClose,
-  disabled,
+  disabled
 }: VideoRecorderProps) {
   const { t } = useTranslation();
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -53,7 +53,7 @@ export function VideoRecorder({
   const [recordedUrl, setRecordedUrl] = useState<string | null>(null);
   const [duration, setDuration] = useState(0);
   const [facingMode, setFacingMode] = useState<"user" | "environment">(
-    "environment",
+    "environment"
   );
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>("16:9");
   const [, setAudioLevel] = useState(0);
@@ -92,12 +92,13 @@ export function VideoRecorder({
         const dataIndex = Math.floor((i * bufferLength) / barCount);
         const barHeight = (dataArray[dataIndex] / 255) * canvas.height;
 
-        ctx.fillStyle = `rgba(59, 130, 246, ${0.5 + (dataArray[dataIndex] / 255) * 0.4})`;
+        ctx.fillStyle = `rgba(59, 130, 246, ${0.5 +
+          (dataArray[dataIndex] / 255) * 0.4})`;
         ctx.fillRect(
           i * barWidth + barGap / 2,
           canvas.height - barHeight,
           barWidth - barGap,
-          barHeight,
+          barHeight
         );
       }
     };
@@ -116,7 +117,7 @@ export function VideoRecorder({
 
       // Stop any existing stream
       if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop());
+        streamRef.current.getTracks().forEach(track => track.stop());
         streamRef.current = null;
       }
 
@@ -126,14 +127,14 @@ export function VideoRecorder({
           video: {
             facingMode,
             width: { ideal: config.width },
-            height: { ideal: config.height },
+            height: { ideal: config.height }
           },
-          audio: true,
+          audio: true
         });
 
         if (!mounted) {
           // Component unmounted while waiting for permission
-          stream.getTracks().forEach((track) => track.stop());
+          stream.getTracks().forEach(track => track.stop());
           return;
         }
 
@@ -192,10 +193,10 @@ export function VideoRecorder({
     return () => {
       mounted = false;
       if (localStream) {
-        localStream.getTracks().forEach((track) => track.stop());
+        localStream.getTracks().forEach(track => track.stop());
       }
       if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop());
+        streamRef.current.getTracks().forEach(track => track.stop());
         streamRef.current = null;
       }
       if (timerRef.current) {
@@ -236,7 +237,7 @@ export function VideoRecorder({
 
   const switchCamera = async () => {
     if (isRecording) return;
-    setFacingMode((prev) => (prev === "user" ? "environment" : "user"));
+    setFacingMode(prev => (prev === "user" ? "environment" : "user"));
   };
 
   const startRecording = () => {
@@ -250,7 +251,7 @@ export function VideoRecorder({
       "video/webm;codecs=vp9,opus",
       "video/webm;codecs=vp8,opus",
       "video/webm",
-      "video/mp4",
+      "video/mp4"
     ];
 
     let mimeType = "";
@@ -262,10 +263,10 @@ export function VideoRecorder({
     }
 
     const mediaRecorder = new MediaRecorder(streamRef.current, {
-      mimeType: mimeType || undefined,
+      mimeType: mimeType || undefined
     });
 
-    mediaRecorder.ondataavailable = (event) => {
+    mediaRecorder.ondataavailable = event => {
       if (event.data.size > 0) {
         chunksRef.current.push(event.data);
       }
@@ -273,7 +274,7 @@ export function VideoRecorder({
 
     mediaRecorder.onstop = () => {
       const blob = new Blob(chunksRef.current, {
-        type: mimeType || "video/webm",
+        type: mimeType || "video/webm"
       });
       const url = URL.createObjectURL(blob);
       setRecordedBlob(blob);
@@ -290,7 +291,7 @@ export function VideoRecorder({
 
     // Start timer
     timerRef.current = setInterval(() => {
-      setDuration((prev) => prev + 1);
+      setDuration(prev => prev + 1);
     }, 1000);
   };
 
@@ -374,7 +375,7 @@ export function VideoRecorder({
 
   const handleClose = () => {
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current.getTracks().forEach(track => track.stop());
     }
     if (timerRef.current) {
       clearInterval(timerRef.current);
@@ -404,7 +405,7 @@ export function VideoRecorder({
       <div
         className={cn(
           "relative rounded-lg overflow-hidden bg-black max-h-80 mx-auto",
-          aspectConfig.class,
+          aspectConfig.class
         )}
       >
         {isLoading && (
@@ -428,7 +429,7 @@ export function VideoRecorder({
           className={cn(
             "w-full h-full object-cover",
             facingMode === "user" && "scale-x-[-1]",
-            recordedUrl && "hidden",
+            recordedUrl && "hidden"
           )}
         />
 
@@ -468,7 +469,7 @@ export function VideoRecorder({
                   style={{
                     width: videoDuration
                       ? `${(currentTime / videoDuration) * 100}%`
-                      : "0%",
+                      : "0%"
                   }}
                 />
               </div>
@@ -532,7 +533,7 @@ export function VideoRecorder({
                 "h-12 w-12 rounded-full transition-colors text-white",
                 isRecording
                   ? "bg-red-500 hover:bg-red-600"
-                  : "bg-primary hover:bg-primary/90",
+                  : "bg-primary hover:bg-primary/90"
               )}
               title={
                 isRecording
@@ -544,7 +545,7 @@ export function VideoRecorder({
             </Button>
             <Select
               value={aspectRatio}
-              onValueChange={(value) => setAspectRatio(value as AspectRatio)}
+              onValueChange={value => setAspectRatio(value as AspectRatio)}
               disabled={isLoading || !!error || disabled || isRecording}
             >
               <SelectTrigger className="w-20 h-9">

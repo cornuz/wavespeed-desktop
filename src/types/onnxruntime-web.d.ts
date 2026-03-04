@@ -17,7 +17,7 @@ declare module "onnxruntime-web" {
     constructor(
       type: "float32" | "int32" | "int64" | "uint8",
       data: TypedTensorDataType | number[] | bigint[],
-      dims: readonly number[],
+      dims: readonly number[]
     );
     readonly data: TypedTensorDataType;
     readonly dims: readonly number[];
@@ -43,11 +43,11 @@ declare module "onnxruntime-web" {
   export class InferenceSession {
     static create(
       modelPath: string | ArrayBuffer | Uint8Array,
-      options?: SessionOptions,
+      options?: SessionOptions
     ): Promise<InferenceSession>;
     run(
       feeds: OnnxValueMapType,
-      options?: RunOptions,
+      options?: RunOptions
     ): Promise<OnnxValueMapType>;
     release(): Promise<void>;
     readonly inputNames: readonly string[];

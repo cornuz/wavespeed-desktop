@@ -7,7 +7,7 @@ import {
   Menu,
   clipboard,
   protocol,
-  net,
+  net
 } from "electron";
 import { join, dirname } from "path";
 import {
@@ -19,7 +19,7 @@ import {
   unlinkSync,
   statSync,
   readdirSync,
-  copyFileSync,
+  copyFileSync
 } from "fs";
 import { readdir, stat } from "fs/promises";
 import AdmZip from "adm-zip";
@@ -103,8 +103,8 @@ let binaryPathLoggedOnce = false;
 function parseMaxNumberFromOutput(output: string): number | null {
   const values = output
     .split(/\r?\n/)
-    .map((line) => parseInt(line.replace(/[^\d]/g, "").trim(), 10))
-    .filter((value) => Number.isFinite(value) && value > 0);
+    .map(line => parseInt(line.replace(/[^\d]/g, "").trim(), 10))
+    .filter(value => Number.isFinite(value) && value > 0);
 
   if (values.length === 0) {
     return null;
@@ -117,7 +117,7 @@ function getNvidiaVramMb(): number | null {
   try {
     const output = execSync(
       "nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits",
-      { encoding: "utf8", timeout: 3000 },
+      { encoding: "utf8", timeout: 3000 }
     );
     return parseMaxNumberFromOutput(output);
   } catch (error) {
@@ -129,7 +129,7 @@ function getWindowsGpuVramMb(): number | null {
   try {
     const output = execSync(
       'powershell -NoProfile -Command "Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty AdapterRAM"',
-      { encoding: "utf8", timeout: 3000 },
+      { encoding: "utf8", timeout: 3000 }
     );
     const bytes = parseMaxNumberFromOutput(output);
     if (!bytes) return null;
@@ -138,7 +138,7 @@ function getWindowsGpuVramMb(): number | null {
     try {
       const output = execSync(
         "wmic path win32_VideoController get AdapterRAM",
-        { encoding: "utf8", timeout: 3000 },
+        { encoding: "utf8", timeout: 3000 }
       );
       const bytes = parseMaxNumberFromOutput(output);
       if (!bytes) return null;
@@ -224,7 +224,7 @@ const defaultSettings: Settings = {
   autoCheckUpdate: true,
   autoSaveAssets: true,
   assetsDirectory: defaultAssetsDirectory,
-  language: "auto",
+  language: "auto"
 };
 
 function loadSettings(): Settings {
@@ -270,8 +270,8 @@ function createWindow(): void {
           titleBarOverlay: {
             color: "#080c16",
             symbolColor: "#6b7280",
-            height: 32,
-          },
+            height: 32
+          }
         }
       : {}),
     webPreferences: {
@@ -279,8 +279,8 @@ function createWindow(): void {
       sandbox: false,
       contextIsolation: true,
       nodeIntegration: false,
-      webSecurity: !is.dev, // Disable web security in dev mode to bypass CORS
-    },
+      webSecurity: !is.dev // Disable web security in dev mode to bypass CORS
+    }
   });
 
   mainWindow.on("ready-to-show", () => {
@@ -290,7 +290,7 @@ function createWindow(): void {
   // macOS: Hide window instead of closing when clicking the red button
   // The app will only quit when user presses Cmd+Q
   if (process.platform === "darwin") {
-    mainWindow.on("close", (event) => {
+    mainWindow.on("close", event => {
       if (!(app as typeof app & { isQuitting?: boolean }).isQuitting) {
         event.preventDefault();
         if (mainWindow?.isFullScreen()) {
@@ -306,7 +306,7 @@ function createWindow(): void {
     });
   }
 
-  mainWindow.webContents.setWindowOpenHandler((details) => {
+  mainWindow.webContents.setWindowOpenHandler(details => {
     shell.openExternal(details.url);
     return { action: "deny" };
   });
@@ -319,9 +319,9 @@ function createWindow(): void {
         "Failed to load:",
         errorCode,
         errorDescription,
-        validatedURL,
+        validatedURL
       );
-    },
+    }
   );
 
   mainWindow.webContents.on("render-process-gone", (_, details) => {
@@ -364,7 +364,7 @@ function createWindow(): void {
         { label: "Copy", role: "copy", enabled: params.editFlags.canCopy },
         { label: "Paste", role: "paste", enabled: params.editFlags.canPaste },
         { type: "separator" },
-        { label: "Select All", role: "selectAll" },
+        { label: "Select All", role: "selectAll" }
       );
     } else if (params.selectionText) {
       // Add copy option when text is selected
@@ -377,12 +377,12 @@ function createWindow(): void {
       menuItems.push(
         {
           label: "Open Link in Browser",
-          click: () => shell.openExternal(params.linkURL),
+          click: () => shell.openExternal(params.linkURL)
         },
         {
           label: "Copy Link",
-          click: () => clipboard.writeText(params.linkURL),
-        },
+          click: () => clipboard.writeText(params.linkURL)
+        }
       );
     }
 
@@ -392,12 +392,12 @@ function createWindow(): void {
       menuItems.push(
         {
           label: "Copy Image",
-          click: () => mainWindow?.webContents.copyImageAt(params.x, params.y),
+          click: () => mainWindow?.webContents.copyImageAt(params.x, params.y)
         },
         {
           label: "Open Image in Browser",
-          click: () => shell.openExternal(params.srcURL),
-        },
+          click: () => shell.openExternal(params.srcURL)
+        }
       );
     }
 
@@ -417,7 +417,7 @@ ipcMain.handle("update-titlebar-theme", (_, isDark: boolean) => {
     mainWindow.setTitleBarOverlay({
       color: isDark ? "#080c16" : "#f6f7f9",
       symbolColor: isDark ? "#9ca3af" : "#6b7280",
-      height: 32,
+      height: 32
     });
   } catch {
     // setTitleBarOverlay may not be available on all platforms
@@ -442,7 +442,7 @@ ipcMain.handle("get-settings", () => {
     defaultTimeout: settings.defaultTimeout,
     updateChannel: settings.updateChannel,
     autoCheckUpdate: settings.autoCheckUpdate,
-    language: settings.language,
+    language: settings.language
   };
 });
 
@@ -498,8 +498,8 @@ ipcMain.handle(
       filters: [
         { name: "All Files", extensions: ["*"] },
         { name: "Images", extensions: ["png", "jpg", "jpeg", "gif", "webp"] },
-        { name: "Videos", extensions: ["mp4", "webm", "mov"] },
-      ],
+        { name: "Videos", extensions: ["mp4", "webm", "mov"] }
+      ]
     });
 
     if (result.canceled || !result.filePath) {
@@ -521,12 +521,12 @@ ipcMain.handle(
     }
 
     // Download the file from http/https
-    return new Promise((resolve) => {
+    return new Promise(resolve => {
       const httpProtocol = url.startsWith("https") ? https : http;
       const file = createWriteStream(result.filePath!);
 
       httpProtocol
-        .get(url, (response) => {
+        .get(url, response => {
           // Handle redirects
           if (response.statusCode === 301 || response.statusCode === 302) {
             const redirectUrl = response.headers.location;
@@ -535,14 +535,14 @@ ipcMain.handle(
                 ? https
                 : http;
               redirectProtocol
-                .get(redirectUrl, (redirectResponse) => {
+                .get(redirectUrl, redirectResponse => {
                   redirectResponse.pipe(file);
                   file.on("finish", () => {
                     file.close();
                     resolve({ success: true, filePath: result.filePath });
                   });
                 })
-                .on("error", (err) => {
+                .on("error", err => {
                   resolve({ success: false, error: err.message });
                 });
               return;
@@ -555,11 +555,11 @@ ipcMain.handle(
             resolve({ success: true, filePath: result.filePath });
           });
         })
-        .on("error", (err) => {
+        .on("error", err => {
           resolve({ success: false, error: err.message });
         });
     });
-  },
+  }
 );
 
 // Silent file save handler — saves a remote URL to a local directory without dialog
@@ -592,23 +592,23 @@ ipcMain.handle(
       }
 
       // Download from http/https
-      return new Promise((resolve) => {
+      return new Promise(resolve => {
         const httpProtocol = url.startsWith("https") ? https : http;
         const file = createWriteStream(filePath);
         httpProtocol
-          .get(url, (response) => {
+          .get(url, response => {
             if (response.statusCode === 301 || response.statusCode === 302) {
               const redirectUrl = response.headers.location;
               if (redirectUrl) {
                 const rp = redirectUrl.startsWith("https") ? https : http;
-                rp.get(redirectUrl, (rr) => {
+                rp.get(redirectUrl, rr => {
                   rr.pipe(file);
                   file.on("finish", () => {
                     file.close();
                     resolve({ success: true, filePath });
                   });
-                }).on("error", (err) =>
-                  resolve({ success: false, error: err.message }),
+                }).on("error", err =>
+                  resolve({ success: false, error: err.message })
                 );
                 return;
               }
@@ -619,14 +619,12 @@ ipcMain.handle(
               resolve({ success: true, filePath });
             });
           })
-          .on("error", (err) =>
-            resolve({ success: false, error: err.message }),
-          );
+          .on("error", err => resolve({ success: false, error: err.message }));
       });
     } catch (err) {
       return { success: false, error: (err as Error).message };
     }
-  },
+  }
 );
 
 // Assets metadata helpers
@@ -658,7 +656,7 @@ ipcMain.handle("get-assets-settings", () => {
   const settings = loadSettings();
   return {
     autoSaveAssets: settings.autoSaveAssets,
-    assetsDirectory: settings.assetsDirectory || defaultAssetsDirectory,
+    assetsDirectory: settings.assetsDirectory || defaultAssetsDirectory
   };
 });
 
@@ -667,7 +665,7 @@ ipcMain.handle(
   (_, newSettings: { autoSaveAssets?: boolean; assetsDirectory?: string }) => {
     saveSettings(newSettings);
     return true;
-  },
+  }
 );
 
 ipcMain.handle("get-default-assets-directory", () => {
@@ -677,7 +675,10 @@ ipcMain.handle("get-default-assets-directory", () => {
 ipcMain.handle("get-zimage-output-path", () => {
   // Use same ID format as other assets: base36 timestamp + random suffix
   const id =
-    Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
+    Date.now().toString(36) +
+    Math.random()
+      .toString(36)
+      .substring(2, 6);
   const settings = loadSettings();
   const assetsDir = settings.assetsDirectory || defaultAssetsDirectory;
   const imagesDir = join(assetsDir, "images");
@@ -695,7 +696,7 @@ ipcMain.handle("select-directory", async () => {
 
   const result = await dialog.showOpenDialog(focusedWindow, {
     properties: ["openDirectory", "createDirectory"],
-    title: "Select Assets Directory",
+    title: "Select Assets Directory"
   });
 
   if (result.canceled || !result.filePaths[0]) {
@@ -735,7 +736,7 @@ ipcMain.handle(
     }
 
     // Download file from http/https
-    return new Promise((resolve) => {
+    return new Promise(resolve => {
       const httpProtocol = url.startsWith("https") ? https : http;
       const file = createWriteStream(filePath);
 
@@ -748,10 +749,10 @@ ipcMain.handle(
               ? https
               : http;
             redirectProtocol
-              .get(redirectUrl, (redirectResponse) => {
+              .get(redirectUrl, redirectResponse => {
                 handleResponse(redirectResponse);
               })
-              .on("error", (err) => {
+              .on("error", err => {
                 resolve({ success: false, error: err.message });
               });
             return;
@@ -770,11 +771,11 @@ ipcMain.handle(
         });
       };
 
-      httpProtocol.get(url, handleResponse).on("error", (err) => {
+      httpProtocol.get(url, handleResponse).on("error", err => {
         resolve({ success: false, error: err.message });
       });
     });
-  },
+  }
 );
 
 ipcMain.handle("delete-asset", async (_, filePath: string) => {
@@ -858,7 +859,7 @@ ipcMain.handle(
     } catch (error) {
       return { success: false, error: (error as Error).message };
     }
-  },
+  }
 );
 
 ipcMain.handle("file-rename", (_, oldPath: string, newPath: string) => {
@@ -920,19 +921,19 @@ ipcMain.handle("scan-assets-directory", async () => {
     images: "image",
     videos: "video",
     audio: "audio",
-    text: "text",
+    text: "text"
   };
 
   // Process directories in parallel for better performance
   await Promise.all(
-    subDirs.map(async (subDir) => {
+    subDirs.map(async subDir => {
       const dirPath = join(assetsDir, subDir);
       if (!existsSync(dirPath)) return;
 
       try {
         const entries = await readdir(dirPath);
         // Process files in parallel batches
-        const filePromises = entries.map(async (entry) => {
+        const filePromises = entries.map(async entry => {
           const filePath = join(dirPath, entry);
           try {
             const stats = await stat(filePath);
@@ -942,7 +943,7 @@ ipcMain.handle("scan-assets-directory", async () => {
                 fileName: entry,
                 type: typeMap[subDir],
                 fileSize: stats.size,
-                createdAt: stats.birthtime.toISOString(),
+                createdAt: stats.birthtime.toISOString()
               };
             }
           } catch {
@@ -952,12 +953,12 @@ ipcMain.handle("scan-assets-directory", async () => {
         });
         const results = await Promise.all(filePromises);
         files.push(
-          ...results.filter((f): f is NonNullable<typeof f> => f !== null),
+          ...results.filter((f): f is NonNullable<typeof f> => f !== null)
         );
       } catch {
         // Skip directories we can't read
       }
-    }),
+    })
   );
 
   return files;
@@ -1005,7 +1006,7 @@ ipcMain.handle(
     } catch (error) {
       return { success: false, error: (error as Error).message };
     }
-  },
+  }
 );
 
 ipcMain.handle("sd-get-models-dir", () => {
@@ -1069,7 +1070,9 @@ ipcMain.handle("sd-extract-binary", (_, zipPath: string, destPath: string) => {
     const found = findBinary(tempExtractDir);
     if (!found) {
       throw new Error(
-        `Binary not found in extracted files. Looked for: ${possibleNames.join(", ")}`,
+        `Binary not found in extracted files. Looked for: ${possibleNames.join(
+          ", "
+        )}`
       );
     }
 
@@ -1123,7 +1126,7 @@ ipcMain.handle("sd-extract-binary", (_, zipPath: string, destPath: string) => {
         // Create a copy with the old name for compatibility
         require("fs").copyFileSync(sdCliPath, finalBinaryPath);
         console.log(
-          `[SD Extract] Created ${targetBinaryName} copy for compatibility`,
+          `[SD Extract] Created ${targetBinaryName} copy for compatibility`
         );
       }
     }
@@ -1149,13 +1152,13 @@ ipcMain.handle("sd-extract-binary", (_, zipPath: string, destPath: string) => {
           console.log("[SD Extract] Fixing macOS dynamic library paths...");
 
           // Find all dylib files
-          const dylibFiles = readdirSync(destDir).filter((f) =>
-            f.endsWith(".dylib"),
+          const dylibFiles = readdirSync(destDir).filter(f =>
+            f.endsWith(".dylib")
           );
 
           // Fix binary files
           const binaryFiles = [targetBinaryName, actualBinaryName].filter(
-            (name) => name && name !== null,
+            name => name && name !== null
           );
           for (const binaryFile of binaryFiles) {
             const binaryFullPath = join(destDir, binaryFile);
@@ -1165,7 +1168,7 @@ ipcMain.handle("sd-extract-binary", (_, zipPath: string, destPath: string) => {
                 try {
                   execSync(
                     `install_name_tool -delete_rpath "/Users/runner/work/stable-diffusion.cpp/stable-diffusion.cpp/build/bin" "${binaryFullPath}" 2>/dev/null || true`,
-                    { stdio: "ignore" },
+                    { stdio: "ignore" }
                   );
                 } catch (e) {
                   // Ignore if rpath doesn't exist
@@ -1175,7 +1178,7 @@ ipcMain.handle("sd-extract-binary", (_, zipPath: string, destPath: string) => {
                 try {
                   execSync(
                     `install_name_tool -add_rpath "@executable_path" "${binaryFullPath}" 2>/dev/null || true`,
-                    { stdio: "ignore" },
+                    { stdio: "ignore" }
                   );
                 } catch (e) {
                   // Ignore if rpath already exists
@@ -1186,7 +1189,7 @@ ipcMain.handle("sd-extract-binary", (_, zipPath: string, destPath: string) => {
                   try {
                     execSync(
                       `install_name_tool -change "/Users/runner/work/stable-diffusion.cpp/stable-diffusion.cpp/build/bin/${dylibFile}" "@executable_path/${dylibFile}" "${binaryFullPath}" 2>/dev/null || true`,
-                      { stdio: "ignore" },
+                      { stdio: "ignore" }
                     );
                   } catch (e) {
                     // Ignore if reference doesn't exist
@@ -1197,7 +1200,7 @@ ipcMain.handle("sd-extract-binary", (_, zipPath: string, destPath: string) => {
               } catch (err) {
                 console.warn(
                   `[SD Extract] Could not fully fix rpath for ${binaryFile}:`,
-                  (err as Error).message,
+                  (err as Error).message
                 );
               }
             }
@@ -1210,7 +1213,7 @@ ipcMain.handle("sd-extract-binary", (_, zipPath: string, destPath: string) => {
               // Update the dylib's install name to use @rpath
               execSync(
                 `install_name_tool -id "@rpath/${dylibFile}" "${dylibFullPath}" 2>/dev/null || true`,
-                { stdio: "ignore" },
+                { stdio: "ignore" }
               );
 
               // Update references to other dylibs
@@ -1219,7 +1222,7 @@ ipcMain.handle("sd-extract-binary", (_, zipPath: string, destPath: string) => {
                   try {
                     execSync(
                       `install_name_tool -change "/Users/runner/work/stable-diffusion.cpp/stable-diffusion.cpp/build/bin/${otherDylib}" "@rpath/${otherDylib}" "${dylibFullPath}" 2>/dev/null || true`,
-                      { stdio: "ignore" },
+                      { stdio: "ignore" }
                     );
                   } catch (e) {
                     // Ignore
@@ -1231,7 +1234,7 @@ ipcMain.handle("sd-extract-binary", (_, zipPath: string, destPath: string) => {
             } catch (err) {
               console.warn(
                 `[SD Extract] Could not fix install name for ${dylibFile}:`,
-                (err as Error).message,
+                (err as Error).message
               );
             }
           }
@@ -1240,7 +1243,7 @@ ipcMain.handle("sd-extract-binary", (_, zipPath: string, destPath: string) => {
         } catch (err) {
           console.warn(
             "[SD Extract] Failed to fix macOS library paths:",
-            (err as Error).message,
+            (err as Error).message
           );
         }
       }
@@ -1298,7 +1301,7 @@ function setupAutoUpdater() {
   if (!existsSync(updateConfigPath)) {
     console.warn(
       "[AutoUpdater] app-update.yml not found, skipping auto-updater setup:",
-      updateConfigPath,
+      updateConfigPath
     );
     return;
   }
@@ -1313,7 +1316,8 @@ function setupAutoUpdater() {
     // Use generic provider pointing to nightly release assets
     autoUpdater.setFeedURL({
       provider: "generic",
-      url: "https://github.com/WaveSpeedAI/wavespeed-desktop/releases/download/nightly",
+      url:
+        "https://github.com/WaveSpeedAI/wavespeed-desktop/releases/download/nightly"
     });
   } else {
     autoUpdater.allowPrerelease = false;
@@ -1328,7 +1332,7 @@ function setupAutoUpdater() {
     sendUpdateStatus("available", {
       version: info.version,
       releaseNotes: info.releaseNotes,
-      releaseDate: info.releaseDate,
+      releaseDate: info.releaseDate
     });
   });
 
@@ -1336,23 +1340,23 @@ function setupAutoUpdater() {
     sendUpdateStatus("not-available", { version: info.version });
   });
 
-  autoUpdater.on("download-progress", (progress) => {
+  autoUpdater.on("download-progress", progress => {
     sendUpdateStatus("downloading", {
       percent: progress.percent,
       bytesPerSecond: progress.bytesPerSecond,
       transferred: progress.transferred,
-      total: progress.total,
+      total: progress.total
     });
   });
 
   autoUpdater.on("update-downloaded", (info: UpdateInfo) => {
     sendUpdateStatus("downloaded", {
       version: info.version,
-      releaseNotes: info.releaseNotes,
+      releaseNotes: info.releaseNotes
     });
   });
 
-  autoUpdater.on("error", (error) => {
+  autoUpdater.on("error", error => {
     sendUpdateStatus("error", { message: error.message });
   });
 }
@@ -1362,7 +1366,7 @@ ipcMain.handle("check-for-updates", async () => {
   if (is.dev) {
     return {
       status: "dev-mode",
-      message: "Auto-update disabled in development",
+      message: "Auto-update disabled in development"
     };
   }
   try {
@@ -1412,7 +1416,8 @@ ipcMain.handle("set-update-channel", (_, channel: "stable" | "nightly") => {
     // Use generic provider pointing to nightly release assets
     autoUpdater.setFeedURL({
       provider: "generic",
-      url: "https://github.com/WaveSpeedAI/wavespeed-desktop/releases/download/nightly",
+      url:
+        "https://github.com/WaveSpeedAI/wavespeed-desktop/releases/download/nightly"
     });
   } else {
     autoUpdater.allowPrerelease = false;
@@ -1421,7 +1426,7 @@ ipcMain.handle("set-update-channel", (_, channel: "stable" | "nightly") => {
       provider: "github",
       owner: "WaveSpeedAI",
       repo: "wavespeed-desktop",
-      releaseType: "release",
+      releaseType: "release"
     });
   }
   return true;
@@ -1471,12 +1476,12 @@ ipcMain.handle("sd-get-binary-path", () => {
     // Binary not found in any location
     return {
       success: false,
-      error: `Binary not found. Checked: ${userDataBinaryPath}, ${resourceBinaryPath}`,
+      error: `Binary not found. Checked: ${userDataBinaryPath}, ${resourceBinaryPath}`
     };
   } catch (error) {
     return {
       success: false,
-      error: (error as Error).message,
+      error: (error as Error).message
     };
   }
 });
@@ -1499,7 +1504,7 @@ function checkMetalSupport(): boolean {
     // Metal was introduced in OS X 10.11
     if (majorVersion < 15) {
       console.log(
-        "[Metal Check] macOS version too old for Metal (Darwin kernel < 15)",
+        "[Metal Check] macOS version too old for Metal (Darwin kernel < 15)"
       );
       metalSupportCache = false;
       return false;
@@ -1509,7 +1514,7 @@ function checkMetalSupport(): boolean {
     try {
       const output = execSync("system_profiler SPDisplaysDataType", {
         encoding: "utf8",
-        timeout: 5000,
+        timeout: 5000
       });
 
       // Check if output contains "Metal" support indication
@@ -1566,7 +1571,7 @@ ipcMain.handle("sd-get-system-info", () => {
         try {
           const output = execSync("lspci 2>/dev/null | grep -i nvidia", {
             encoding: "utf8",
-            timeout: 3000,
+            timeout: 3000
           });
           if (output.toLowerCase().includes("nvidia")) {
             acceleration = "CUDA";
@@ -1588,7 +1593,7 @@ ipcMain.handle("sd-get-system-info", () => {
   }
 
   console.log(
-    `[System Info] Platform: ${platform}, Acceleration: ${acceleration}`,
+    `[System Info] Platform: ${platform}, Acceleration: ${acceleration}`
   );
 
   // Cache the result
@@ -1596,7 +1601,7 @@ ipcMain.handle("sd-get-system-info", () => {
     platform,
     arch,
     acceleration,
-    supported: true,
+    supported: true
   };
 
   return systemInfoCache;
@@ -1612,7 +1617,7 @@ ipcMain.handle("sd-get-gpu-vram", () => {
     return {
       success: false,
       vramMb: null,
-      error: (error as Error).message,
+      error: (error as Error).message
     };
   }
 });
@@ -1640,7 +1645,7 @@ ipcMain.handle(
       samplingMethod?: string;
       scheduler?: string;
       outputPath: string;
-    },
+    }
   ) => {
     try {
       // Get binary path using the same logic as sd-get-binary-path
@@ -1667,7 +1672,7 @@ ipcMain.handle(
         const resourceBinaryPath = join(
           basePath,
           `${platform}-${arch}`,
-          binaryName,
+          binaryName
         );
         if (existsSync(resourceBinaryPath)) {
           binaryPath = resourceBinaryPath;
@@ -1721,21 +1726,21 @@ ipcMain.handle(
         samplingMethod: params.samplingMethod,
         scheduler: params.scheduler,
         outputPath: params.outputPath,
-        onProgress: (progress) => {
+        onProgress: progress => {
           // Send progress to frontend
           event.sender.send("sd-progress", {
             phase: progress.phase,
             progress: progress.progress,
-            detail: progress.detail,
+            detail: progress.detail
           });
         },
-        onLog: (log) => {
+        onLog: log => {
           // Send logs to frontend
           event.sender.send("sd-log", {
             type: log.type,
-            message: log.message,
+            message: log.message
           });
-        },
+        }
       });
 
       // Also track via legacy activeSDProcess for backward compatibility
@@ -1745,10 +1750,10 @@ ipcMain.handle(
     } catch (error) {
       return {
         success: false,
-        error: (error as Error).message,
+        error: (error as Error).message
       };
     }
-  },
+  }
 );
 
 /**
@@ -1764,15 +1769,15 @@ ipcMain.handle("sd-list-models", () => {
 
     const files = readdirSync(modelsDir);
     const models = files
-      .filter((f) => f.endsWith(".gguf") && !f.endsWith(".part")) // Exclude .part files
-      .map((f) => {
+      .filter(f => f.endsWith(".gguf") && !f.endsWith(".part")) // Exclude .part files
+      .map(f => {
         const filePath = join(modelsDir, f);
         const stats = statSync(filePath);
         return {
           name: f,
           path: filePath,
           size: stats.size,
-          createdAt: stats.birthtime.toISOString(),
+          createdAt: stats.birthtime.toISOString()
         };
       });
 
@@ -1780,7 +1785,7 @@ ipcMain.handle("sd-list-models", () => {
   } catch (error) {
     return {
       success: false,
-      error: (error as Error).message,
+      error: (error as Error).message
     };
   }
 });
@@ -1797,7 +1802,7 @@ ipcMain.handle("sd-delete-model", (_, modelPath: string) => {
   } catch (error) {
     return {
       success: false,
-      error: (error as Error).message,
+      error: (error as Error).message
     };
   }
 });
@@ -1848,7 +1853,7 @@ ipcMain.handle("sd-delete-binary", () => {
   } catch (error) {
     return {
       success: false,
-      error: (error as Error).message,
+      error: (error as Error).message
     };
   }
 });
@@ -1882,12 +1887,12 @@ ipcMain.handle("sd-check-auxiliary-models", () => {
       llmExists: existsSync(llmPath),
       vaeExists: existsSync(vaePath),
       llmPath,
-      vaePath,
+      vaePath
     };
   } catch (error) {
     return {
       success: false,
-      error: (error as Error).message,
+      error: (error as Error).message
     };
   }
 });
@@ -1918,7 +1923,7 @@ ipcMain.handle("sd-list-auxiliary-models", () => {
         name: "Qwen3-4B-Instruct LLM",
         path: llmPath,
         size: stats.size,
-        type: "llm",
+        type: "llm"
       });
     }
 
@@ -1928,7 +1933,7 @@ ipcMain.handle("sd-list-auxiliary-models", () => {
         name: "Z-Image VAE",
         path: vaePath,
         size: stats.size,
-        type: "vae",
+        type: "vae"
       });
     }
 
@@ -1936,7 +1941,7 @@ ipcMain.handle("sd-list-auxiliary-models", () => {
   } catch (error) {
     return {
       success: false,
-      error: (error as Error).message,
+      error: (error as Error).message
     };
   }
 });
@@ -1963,7 +1968,7 @@ ipcMain.handle("sd-delete-auxiliary-model", (_, type: "llm" | "vae") => {
   } catch (error) {
     return {
       success: false,
-      error: (error as Error).message,
+      error: (error as Error).message
     };
   }
 });
@@ -1988,7 +1993,7 @@ ipcMain.handle("sd-cancel-generation", async () => {
   } catch (error) {
     return {
       success: false,
-      error: (error as Error).message,
+      error: (error as Error).message
     };
   }
 });
@@ -2002,7 +2007,7 @@ ipcMain.handle(
     _,
     fileName: string,
     data: Uint8Array,
-    type: "llm" | "vae" | "model",
+    type: "llm" | "vae" | "model"
   ) => {
     try {
       let destPath: string;
@@ -2028,15 +2033,15 @@ ipcMain.handle(
 
       return {
         success: true,
-        filePath: destPath,
+        filePath: destPath
       };
     } catch (error) {
       return {
         success: false,
-        error: (error as Error).message,
+        error: (error as Error).message
       };
     }
-  },
+  }
 );
 
 // Register custom protocol for local asset files (must be before app.whenReady)
@@ -2047,9 +2052,9 @@ protocol.registerSchemesAsPrivileged([
       secure: true,
       supportFetchAPI: true,
       stream: true,
-      bypassCSP: true,
-    },
-  },
+      bypassCSP: true
+    }
+  }
 ]);
 
 // App lifecycle
@@ -2057,9 +2062,9 @@ app.whenReady().then(() => {
   electronApp.setAppUserModelId("com.wavespeed.desktop");
 
   // Handle local-asset:// protocol for loading local files (videos, images, etc.)
-  protocol.handle("local-asset", (request) => {
+  protocol.handle("local-asset", request => {
     const filePath = decodeURIComponent(
-      request.url.replace("local-asset://", ""),
+      request.url.replace("local-asset://", "")
     );
     return net.fetch(pathToFileURL(filePath).href);
   });
@@ -2071,7 +2076,7 @@ app.whenReady().then(() => {
   createWindow();
 
   // Initialize workflow module (sql.js DB, node registry, IPC handlers)
-  initWorkflowModule().catch((err) => {
+  initWorkflowModule().catch(err => {
     console.error("[Workflow] Failed to initialize:", err);
   });
 
@@ -2083,14 +2088,14 @@ app.whenReady().then(() => {
     const settings = loadSettings();
     if (settings.autoCheckUpdate !== false) {
       setTimeout(() => {
-        autoUpdater.checkForUpdates().catch((err) => {
+        autoUpdater.checkForUpdates().catch(err => {
           console.error("Failed to check for updates:", err);
         });
       }, 3000);
     }
   }
 
-  app.on("activate", function () {
+  app.on("activate", function() {
     // macOS: Show the hidden window when clicking dock icon
     if (mainWindow) {
       mainWindow.show();

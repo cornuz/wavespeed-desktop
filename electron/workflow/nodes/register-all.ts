@@ -18,6 +18,6 @@ export function registerAllNodes(): void {
   nodeRegistry.register(concatDef, new ConcatHandler());
   nodeRegistry.register(selectDef, new SelectHandler());
   console.log(
-    `[Registry] Registered ${nodeRegistry.getAll().length} node types`,
+    `[Registry] Registered ${nodeRegistry.getAll().length} node types`
   );
 }

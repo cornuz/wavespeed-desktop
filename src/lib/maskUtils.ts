@@ -6,7 +6,7 @@ export function floodFill(
   ctx: CanvasRenderingContext2D,
   startX: number,
   startY: number,
-  fillColor: [number, number, number, number],
+  fillColor: [number, number, number, number]
 ): void {
   const canvas = ctx.canvas;
   const width = canvas.width;
@@ -97,9 +97,9 @@ export function invertMask(ctx: CanvasRenderingContext2D): void {
  * Extract first frame from a video URL as a data URL
  */
 export async function extractVideoFrame(
-  videoUrl: string,
+  videoUrl: string
 ): Promise<string | null> {
-  return new Promise((resolve) => {
+  return new Promise(resolve => {
     const video = document.createElement("video");
     video.crossOrigin = "anonymous";
     video.src = videoUrl;
@@ -156,7 +156,7 @@ export async function extractVideoFrame(
 export function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob> {
   return new Promise((resolve, reject) => {
     canvas.toBlob(
-      (blob) => {
+      blob => {
         if (blob) {
           resolve(blob);
         } else {
@@ -164,7 +164,7 @@ export function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob> {
         }
       },
       "image/png",
-      1.0,
+      1.0
     );
   });
 }
@@ -193,7 +193,7 @@ function computeDistanceToEdge(
   binary: Uint8Array,
   width: number,
   height: number,
-  searchRadius: number,
+  searchRadius: number
 ): Float32Array {
   const dist = new Float32Array(width * height);
 
@@ -241,7 +241,7 @@ function computeDistanceToEdge(
  */
 export function featherMask(
   maskCanvas: HTMLCanvasElement,
-  featherRadius: number = 4,
+  featherRadius: number = 4
 ): HTMLCanvasElement {
   const width = maskCanvas.width;
   const height = maskCanvas.height;

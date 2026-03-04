@@ -12,7 +12,7 @@ import {
   initWebGPU,
   gaussianBlur,
   erodeMask,
-  disposeWebGPU,
+  disposeWebGPU
 } from "./webgpuCompute";
 
 // Configure transformers.js
@@ -68,7 +68,7 @@ let segmenter: any = null;
  * The dispose method exists at runtime but isn't in TypeScript types
  */
 function disposeTensor(tensor: ort.Tensor): void {
-  (tensor as unknown as { dispose?: () => void }).dispose?.();
+  ((tensor as unknown) as { dispose?: () => void }).dispose?.();
 }
 
 interface FaceBox {
@@ -99,7 +99,7 @@ const DEFAULT_TIMEOUT = 3600000;
 async function featherMask(
   mask: Uint8Array,
   size: number,
-  featherRadius: number,
+  featherRadius: number
 ): Promise<Uint8Array> {
   const kernelSize = featherRadius * 2 + 1;
 
@@ -127,7 +127,7 @@ async function featherMask(
 async function downloadModel(
   url: string,
   onProgress: (current: number, total: number) => void,
-  timeout: number = DEFAULT_TIMEOUT,
+  timeout: number = DEFAULT_TIMEOUT
 ): Promise<ArrayBuffer> {
   // Try to get from cache first
   const cache = await caches.open(CACHE_NAME);
@@ -147,7 +147,7 @@ async function downloadModel(
   try {
     const response = await fetch(url, {
       headers: { Origin: self.location.origin },
-      signal: controller.signal,
+      signal: controller.signal
     });
 
     if (!response.ok) {
@@ -170,7 +170,7 @@ async function downloadModel(
       if (controller.signal.aborted) {
         reader.cancel();
         throw new Error(
-          `Model download timed out after ${timeoutSeconds} seconds`,
+          `Model download timed out after ${timeoutSeconds} seconds`
         );
       }
 
@@ -197,8 +197,8 @@ async function downloadModel(
       const cacheResponse = new Response(buffer.buffer, {
         headers: {
           "Content-Type": "application/octet-stream",
-          "Content-Length": buffer.byteLength.toString(),
-        },
+          "Content-Length": buffer.byteLength.toString()
+        }
       });
       await cache.put(url, cacheResponse);
     } catch (e) {
@@ -210,7 +210,7 @@ async function downloadModel(
     clearTimeout(timeoutId);
     if ((error as Error).name === "AbortError") {
       throw new Error(
-        `Model download timed out after ${timeoutSeconds} seconds`,
+        `Model download timed out after ${timeoutSeconds} seconds`
       );
     }
     throw error;
@@ -230,19 +230,19 @@ async function isModelCached(url: string): Promise<boolean> {
  * Initialize ONNX session with WebGPU (fallback to WASM)
  */
 async function createSession(
-  modelBuffer: ArrayBuffer,
+  modelBuffer: ArrayBuffer
 ): Promise<ort.InferenceSession> {
   // Try WebGPU first if available
   if (useWebGPU) {
     try {
       return await ort.InferenceSession.create(modelBuffer, {
         executionProviders: ["webgpu"],
-        graphOptimizationLevel: "all",
+        graphOptimizationLevel: "all"
       });
     } catch (e) {
       const errorMsg = e instanceof Error ? e.message : String(e);
       console.warn(
-        `WebGPU session creation failed, falling back to WASM. Reason: ${errorMsg}`,
+        `WebGPU session creation failed, falling back to WASM. Reason: ${errorMsg}`
       );
       useWebGPU = false;
     }
@@ -253,7 +253,7 @@ async function createSession(
     executionProviders: ["wasm"],
     graphOptimizationLevel: "all",
     enableCpuMemArena: true,
-    executionMode: "parallel",
+    executionMode: "parallel"
   });
 }
 
@@ -264,7 +264,7 @@ function letterboxResize(
   imageData: Float32Array,
   srcW: number,
   srcH: number,
-  targetSize: number,
+  targetSize: number
 ): { data: Float32Array; scale: number; padX: number; padY: number } {
   // Calculate scale to fit target size
   const scale = Math.min(targetSize / srcW, targetSize / srcH);
@@ -372,7 +372,7 @@ function parseYoloOutput(
   imgH: number,
   scale: number,
   padX: number,
-  padY: number,
+  padY: number
 ): FaceBox[] {
   const boxes: FaceBox[] = [];
 
@@ -409,7 +409,7 @@ function parseYoloOutput(
         y: clampedY,
         width: clampedW,
         height: clampedH,
-        confidence,
+        confidence
       });
     }
   }
@@ -423,7 +423,7 @@ function parseYoloOutput(
 async function detectFaces(
   imageData: Float32Array,
   width: number,
-  height: number,
+  height: number
 ): Promise<FaceBox[]> {
   if (!yoloSession) throw new Error("YOLO session not initialized");
 
@@ -432,7 +432,7 @@ async function detectFaces(
     imageData,
     width,
     height,
-    YOLO_INPUT_SIZE,
+    YOLO_INPUT_SIZE
   );
 
   // Create tensor
@@ -440,7 +440,7 @@ async function detectFaces(
     1,
     3,
     YOLO_INPUT_SIZE,
-    YOLO_INPUT_SIZE,
+    YOLO_INPUT_SIZE
   ]);
 
   // Run inference - use actual input name from model
@@ -473,7 +473,7 @@ function cropAndResizeFace(
   imgH: number,
   box: FaceBox,
   targetSize: number,
-  padding: number = 0.2,
+  padding: number = 0.2
 ): {
   data: Float32Array;
   cropBox: { x: number; y: number; w: number; h: number };
@@ -550,7 +550,7 @@ async function enhanceFace(faceData: Float32Array): Promise<Float32Array> {
     1,
     3,
     GFPGAN_INPUT_SIZE,
-    GFPGAN_INPUT_SIZE,
+    GFPGAN_INPUT_SIZE
   ]);
 
   // Run inference - use actual input name from model
@@ -583,7 +583,7 @@ async function parseFace(
   imgW: number,
   imgH: number,
   faceBox: FaceBox,
-  outputSize: number = GFPGAN_INPUT_SIZE,
+  outputSize: number = GFPGAN_INPUT_SIZE
 ): Promise<Uint8Array> {
   if (!segmenter) throw new Error("Face segmenter not initialized");
 
@@ -706,7 +706,7 @@ function pasteEnhancedFaceWithMask(
   imgW: number,
   imgH: number,
   cropBox: { x: number; y: number; w: number; h: number },
-  edgeFeatherSize: number = 8,
+  edgeFeatherSize: number = 8
 ): Float32Array {
   const result = new Float32Array(originalData);
   const { x: cropX, y: cropY, w: cropW, h: cropH } = cropBox;
@@ -746,7 +746,7 @@ function pasteEnhancedFaceWithMask(
           distToLeft,
           distToRight,
           distToTop,
-          distToBottom,
+          distToBottom
         );
         const edgeFactor = Math.min(1.0, minDist / edgeFeatherSize);
 
@@ -811,7 +811,7 @@ async function processImage(
   imageData: Float32Array,
   width: number,
   height: number,
-  onProgress: (progress: number, faces?: number) => void,
+  onProgress: (progress: number, faces?: number) => void
 ): Promise<{ result: Float32Array; faceCount: number }> {
   // Detect faces
   onProgress(10);
@@ -837,7 +837,7 @@ async function processImage(
       height,
       face,
       GFPGAN_INPUT_SIZE,
-      0.3,
+      0.3
     );
 
     // Generate face mask using semantic segmentation (from original image with tighter crop)
@@ -846,7 +846,7 @@ async function processImage(
       width,
       height,
       face,
-      GFPGAN_INPUT_SIZE,
+      GFPGAN_INPUT_SIZE
     );
 
     // Enhance face
@@ -859,7 +859,7 @@ async function processImage(
       faceMask,
       width,
       height,
-      cropBox,
+      cropBox
     );
 
     onProgress(20 + (i + 1) * progressPerFace, faces.length);
@@ -890,14 +890,14 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         // Check for WebGPU support
         useWebGPU = await checkWebGPU();
         console.log(
-          `Face Enhancer using ${useWebGPU ? "WebGPU" : "WASM"} backend`,
+          `Face Enhancer using ${useWebGPU ? "WebGPU" : "WASM"} backend`
         );
 
         // Initialize WebGPU compute for accelerated mask processing
         if (useWebGPU) {
           const gpuInitialized = await initWebGPU();
           console.log(
-            `WebGPU compute: ${gpuInitialized ? "enabled" : "disabled"}`,
+            `WebGPU compute: ${gpuInitialized ? "enabled" : "disabled"}`
           );
         }
 
@@ -915,7 +915,7 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         if (!yoloCached) {
           self.postMessage({
             type: "phase",
-            payload: { phase: "download", id: payload?.id },
+            payload: { phase: "download", id: payload?.id }
           });
         }
 
@@ -932,11 +932,11 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
                 detail: yoloCached
                   ? undefined
                   : { current, total, unit: "bytes" },
-                id: payload?.id,
-              },
+                id: payload?.id
+              }
             });
           },
-          timeout,
+          timeout
         );
         totalProgress = yoloWeight * 100;
 
@@ -944,7 +944,7 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         if (!gfpganCached) {
           self.postMessage({
             type: "phase",
-            payload: { phase: "download", id: payload?.id },
+            payload: { phase: "download", id: payload?.id }
           });
         }
 
@@ -962,17 +962,17 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
                 detail: gfpganCached
                   ? undefined
                   : { current, total, unit: "bytes" },
-                id: payload?.id,
-              },
+                id: payload?.id
+              }
             });
           },
-          timeout,
+          timeout
         );
 
         // Create ONNX sessions
         self.postMessage({
           type: "phase",
-          payload: { phase: "loading", id: payload?.id },
+          payload: { phase: "loading", id: payload?.id }
         });
 
         yoloSession = await createSession(yoloBuffer);
@@ -984,8 +984,8 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           "image-segmentation",
           "Xenova/face-parsing",
           {
-            device: useWebGPU ? "webgpu" : "wasm",
-          },
+            device: useWebGPU ? "webgpu" : "wasm"
+          }
         );
 
         self.postMessage({ type: "ready", payload: { id: payload?.id } });
@@ -995,7 +995,7 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           payload:
             error instanceof Error
               ? error.message
-              : "Failed to initialize models",
+              : "Failed to initialize models"
         });
       }
       break;
@@ -1011,7 +1011,7 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         // Phase: detect
         self.postMessage({
           type: "phase",
-          payload: { phase: "detect", id: payload.id },
+          payload: { phase: "detect", id: payload.id }
         });
 
         let faceCount = 0;
@@ -1026,7 +1026,7 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             if (progress >= 20 && faceCount > 0) {
               self.postMessage({
                 type: "phase",
-                payload: { phase: "enhance", id: payload.id },
+                payload: { phase: "enhance", id: payload.id }
               });
             }
             self.postMessage({
@@ -1034,10 +1034,10 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
               payload: {
                 phase: progress < 20 ? "detect" : "enhance",
                 progress,
-                id: payload.id,
-              },
+                id: payload.id
+              }
             });
-          },
+          }
         );
 
         faceCount = count;
@@ -1051,16 +1051,16 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
               width: payload.width,
               height: payload.height,
               faces: faceCount,
-              id: payload.id,
-            },
+              id: payload.id
+            }
           },
-          { transfer: [result.buffer] },
+          { transfer: [result.buffer] }
         );
       } catch (error) {
         self.postMessage({
           type: "error",
           payload:
-            error instanceof Error ? error.message : "Failed to enhance image",
+            error instanceof Error ? error.message : "Failed to enhance image"
         });
       }
       break;

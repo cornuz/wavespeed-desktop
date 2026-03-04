@@ -13,7 +13,7 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
+  SelectValue
 } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import {
@@ -24,7 +24,7 @@ import {
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
-  AlertDialogTitle,
+  AlertDialogTitle
 } from "@/components/ui/alert-dialog";
 import {
   ArrowLeft,
@@ -33,7 +33,7 @@ import {
   Loader2,
   Eraser,
   X,
-  RefreshCw,
+  RefreshCw
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -48,7 +48,7 @@ interface ResultImages {
 // Phase configuration for background remover
 const PHASES = [
   { id: "download", labelKey: "freeTools.progress.downloading", weight: 0.1 },
-  { id: "process", labelKey: "freeTools.progress.processing", weight: 0.9 },
+  { id: "process", labelKey: "freeTools.progress.processing", weight: 0.9 }
 ];
 
 export function BackgroundRemoverPage() {
@@ -60,7 +60,7 @@ export function BackgroundRemoverPage() {
   const canvasRefs = {
     foreground: useRef<HTMLCanvasElement>(null),
     background: useRef<HTMLCanvasElement>(null),
-    mask: useRef<HTMLCanvasElement>(null),
+    mask: useRef<HTMLCanvasElement>(null)
   };
   const dragCounterRef = useRef(0);
 
@@ -69,7 +69,7 @@ export function BackgroundRemoverPage() {
   const [resultImages, setResultImages] = useState<ResultImages>({
     foreground: null,
     background: null,
-    mask: null,
+    mask: null
   });
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingKey, setProcessingKey] = useState(0);
@@ -80,7 +80,7 @@ export function BackgroundRemoverPage() {
   } | null>(null);
   const [model, setModel] = useState<ModelType>("isnet_fp16");
   const [downloadFormat, setDownloadFormat] = useState<"png" | "jpeg" | "webp">(
-    "png",
+    "png"
   );
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [showBackWarning, setShowBackWarning] = useState(false);
@@ -92,32 +92,36 @@ export function BackgroundRemoverPage() {
     updatePhase,
     reset: resetProgress,
     resetAndStart,
-    complete: completeAllPhases,
+    complete: completeAllPhases
   } = useMultiPhaseProgress({ phases: PHASES });
 
   const [error, setError] = useState<string | null>(null);
 
-  const { removeBackgroundAll, dispose, retryWorker, hasFailed } =
-    useBackgroundRemoverWorker({
-      onPhase: (phase) => {
-        // Start the corresponding phase when worker reports it
-        if (phase === "download") {
-          startPhase("download");
-        } else if (phase === "process") {
-          startPhase("process");
-        }
-      },
-      onProgress: (phase, progressValue, detail) => {
-        // Update the phase that worker reports
-        const phaseId = phase === "download" ? "download" : "process";
-        updatePhase(phaseId, progressValue, detail);
-      },
-      onError: (err) => {
-        console.error("Worker error:", err);
-        setError(err);
-        setIsProcessing(false);
-      },
-    });
+  const {
+    removeBackgroundAll,
+    dispose,
+    retryWorker,
+    hasFailed
+  } = useBackgroundRemoverWorker({
+    onPhase: phase => {
+      // Start the corresponding phase when worker reports it
+      if (phase === "download") {
+        startPhase("download");
+      } else if (phase === "process") {
+        startPhase("process");
+      }
+    },
+    onProgress: (phase, progressValue, detail) => {
+      // Update the phase that worker reports
+      const phaseId = phase === "download" ? "download" : "process";
+      updatePhase(phaseId, progressValue, detail);
+    },
+    onError: err => {
+      console.error("Worker error:", err);
+      setError(err);
+      setIsProcessing(false);
+    }
+  });
 
   const handleRetry = useCallback(() => {
     setError(null);
@@ -150,7 +154,7 @@ export function BackgroundRemoverPage() {
       setOriginalBlob(file);
 
       const reader = new FileReader();
-      reader.onload = (e) => {
+      reader.onload = e => {
         const dataUrl = e.target?.result as string;
         setOriginalImage(dataUrl);
         setResultImages({ foreground: null, background: null, mask: null });
@@ -165,7 +169,7 @@ export function BackgroundRemoverPage() {
       };
       reader.readAsDataURL(file);
     },
-    [resetProgress],
+    [resetProgress]
   );
 
   const handleDrop = useCallback(
@@ -178,7 +182,7 @@ export function BackgroundRemoverPage() {
       const file = e.dataTransfer.files[0];
       if (file) handleFileSelect(file);
     },
-    [handleFileSelect, isProcessing],
+    [handleFileSelect, isProcessing]
   );
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -208,7 +212,7 @@ export function BackgroundRemoverPage() {
     if (!originalBlob) return;
 
     setIsProcessing(true);
-    setProcessingKey((k) => k + 1);
+    setProcessingKey(k => k + 1);
     resetAndStart("download");
 
     try {
@@ -223,18 +227,18 @@ export function BackgroundRemoverPage() {
       setResultImages({
         foreground: foregroundUrl,
         background: backgroundUrl,
-        mask: maskUrl,
+        mask: maskUrl
       });
 
       // Draw to canvases for download format conversion
       const drawToCanvas = async (
         blob: Blob,
-        canvas: HTMLCanvasElement | null,
+        canvas: HTMLCanvasElement | null
       ) => {
         if (!canvas) return;
         const url = URL.createObjectURL(blob);
         const img = new Image();
-        await new Promise<void>((resolve) => {
+        await new Promise<void>(resolve => {
           img.onload = () => {
             canvas.width = img.width;
             canvas.height = img.height;
@@ -250,7 +254,7 @@ export function BackgroundRemoverPage() {
       await Promise.all([
         drawToCanvas(results.foreground, canvasRefs.foreground.current),
         drawToCanvas(results.background, canvasRefs.background.current),
-        drawToCanvas(results.mask, canvasRefs.mask.current),
+        drawToCanvas(results.mask, canvasRefs.mask.current)
       ]);
 
       completeAllPhases();
@@ -296,7 +300,7 @@ export function BackgroundRemoverPage() {
     link.download = generateFreeToolFilename(
       "bg-remover",
       downloadFormat,
-      type,
+      type
     );
     document.body.appendChild(link);
     link.click();
@@ -353,7 +357,7 @@ export function BackgroundRemoverPage() {
             "border-2 border-dashed cursor-pointer transition-colors",
             isDragging
               ? "border-primary bg-primary/5"
-              : "border-muted-foreground/25 hover:border-primary/50",
+              : "border-muted-foreground/25 hover:border-primary/50"
           )}
           onClick={() => fileInputRef.current?.click()}
           onDrop={handleDrop}
@@ -380,7 +384,7 @@ export function BackgroundRemoverPage() {
         type="file"
         accept="image/*"
         className="hidden"
-        onChange={(e) => {
+        onChange={e => {
           const file = e.target.files?.[0];
           if (file) handleFileSelect(file);
         }}
@@ -402,7 +406,7 @@ export function BackgroundRemoverPage() {
 
             <Select
               value={model}
-              onValueChange={(v) => setModel(v as ModelType)}
+              onValueChange={v => setModel(v as ModelType)}
               disabled={isProcessing}
             >
               <SelectTrigger className="w-36">
@@ -442,7 +446,7 @@ export function BackgroundRemoverPage() {
             {hasResults && (
               <Select
                 value={downloadFormat}
-                onValueChange={(v) =>
+                onValueChange={v =>
                   setDownloadFormat(v as "png" | "jpeg" | "webp")
                 }
               >

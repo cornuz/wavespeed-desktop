@@ -89,5 +89,5 @@ export const useApiKeyStore = create<ApiKeyState>((set, get) => ({
       set({ isValidated: false, isValidating: false });
       return false;
     }
-  },
+  }
 }));

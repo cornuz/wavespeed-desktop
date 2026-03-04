@@ -2,7 +2,7 @@
  * Node palette — categorised list of available node types.
  * Drag to canvas or click to add. Resizable width via drag handle.
  */
-import { type DragEvent, useCallback, useMemo, useState } from "react";
+import { type DragEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useUIStore } from "../../stores/ui.store";
 import { useWorkflowStore } from "../../stores/workflow.store";
@@ -55,6 +55,12 @@ export function NodePalette({ definitions }: NodePaletteProps) {
   const [dragging, setDragging] = useState(false);
   const [query, setQuery] = useState("");
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Auto-focus search input when palette opens
+  useEffect(() => {
+    searchInputRef.current?.focus();
+  }, []);
 
   const onDragStart = (event: DragEvent, nodeType: string) => {
     event.dataTransfer.setData("application/reactflow-nodetype", nodeType);
@@ -173,9 +179,16 @@ export function NodePalette({ definitions }: NodePaletteProps) {
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/60 pointer-events-none" />
           <input
+            ref={searchInputRef}
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && displayDefs.length > 0) {
+                e.preventDefault();
+                handleClick(displayDefs[0]);
+              }
+            }}
             placeholder={t(
               "workflow.searchNodesPlaceholder",
               "Search nodes...",

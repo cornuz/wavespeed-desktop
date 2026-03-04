@@ -43,7 +43,7 @@ export const languages = [
   // Other languages
   { code: "ar", name: "Arabic", nativeName: "العربية" },
   { code: "hi", name: "Hindi", nativeName: "हिन्दी" },
-  { code: "tr", name: "Turkish", nativeName: "Türkçe" },
+  { code: "tr", name: "Turkish", nativeName: "Türkçe" }
 ];
 
 const resources = {
@@ -64,7 +64,7 @@ const resources = {
   th: { translation: th },
   vi: { translation: vi },
   tr: { translation: tr },
-  ar: { translation: ar },
+  ar: { translation: ar }
 };
 
 // Get saved language from localStorage
@@ -81,12 +81,12 @@ i18n
     lng: effectiveLanguage || undefined, // Use saved language or let detector decide
     fallbackLng: "en",
     interpolation: {
-      escapeValue: false, // React already escapes
+      escapeValue: false // React already escapes
     },
     detection: {
       order: ["navigator"], // Only use navigator when auto mode
-      caches: [], // Don't cache when in auto mode
-    },
+      caches: [] // Don't cache when in auto mode
+    }
   });
 
 export default i18n;

@@ -24,11 +24,11 @@ function loadApiKeyFromDesktopSettings(): string {
   } catch (error) {
     console.error(
       "[ServiceLocator] Failed to load API key from Desktop settings:",
-      error,
+      error
     );
   }
   throw new Error(
-    "WaveSpeed API key not configured. Go to Settings to add it.",
+    "WaveSpeed API key not configured. Go to Settings to add it."
   );
 }
 
@@ -41,7 +41,7 @@ export interface WaveSpeedMainClient {
   run(
     model: string,
     input: Record<string, unknown>,
-    options?: { signal?: AbortSignal },
+    options?: { signal?: AbortSignal }
   ): Promise<{ outputs: unknown[]; [key: string]: unknown }>;
   uploadFile(file: File, filename: string): Promise<string>;
 }
@@ -58,7 +58,7 @@ export function getWaveSpeedClient(): WaveSpeedMainClient {
     async run(
       model: string,
       input: Record<string, unknown>,
-      options?: { signal?: AbortSignal },
+      options?: { signal?: AbortSignal }
     ) {
       const signal = options?.signal;
 
@@ -75,7 +75,7 @@ export function getWaveSpeedClient(): WaveSpeedMainClient {
           signal.addEventListener(
             "abort",
             () => reject(new DOMException("Cancelled", "AbortError")),
-            { once: true },
+            { once: true }
           );
         });
         return Promise.race([p, abortPromise]);
@@ -88,11 +88,11 @@ export function getWaveSpeedClient(): WaveSpeedMainClient {
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${apiKey}`,
-            "X-Client-Name": "wavespeed-desktop-workflow",
+            "X-Client-Name": "wavespeed-desktop-workflow"
           },
           body: JSON.stringify(input),
-          ...(signal && { signal }),
-        }),
+          ...(signal && { signal })
+        })
       );
       const submitData = (await submitRes.json()) as {
         code: number;
@@ -116,8 +116,8 @@ export function getWaveSpeedClient(): WaveSpeedMainClient {
         const pollRes = await withAbort(
           fetch(`${BASE_URL}/api/v3/predictions/${requestId}/result`, {
             headers: { Authorization: `Bearer ${apiKey}` },
-            ...(signal && { signal }),
-          }),
+            ...(signal && { signal })
+          })
         );
         const pollData = (await pollRes.json()) as {
           code: number;
@@ -131,7 +131,7 @@ export function getWaveSpeedClient(): WaveSpeedMainClient {
           throw new Error(pollData.data.error || "Prediction failed");
 
         // Wait 1s but bail out immediately if aborted
-        await withAbort(new Promise((r) => setTimeout(r, 1000)));
+        await withAbort(new Promise(r => setTimeout(r, 1000)));
       }
     },
 
@@ -142,9 +142,9 @@ export function getWaveSpeedClient(): WaveSpeedMainClient {
       const res = await fetch(`${BASE_URL}/api/v3/media/upload/binary`, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${apiKey}`,
+          Authorization: `Bearer ${apiKey}`
         },
-        body: formData,
+        body: formData
       });
       const data = (await res.json()) as {
         code: number;
@@ -154,7 +154,7 @@ export function getWaveSpeedClient(): WaveSpeedMainClient {
       if (data.code !== 200)
         throw new Error(data.message || "Failed to upload file");
       return data.data.download_url;
-    },
+    }
   };
 
   return _wsClient;

@@ -20,6 +20,6 @@ declare module "sql.js" {
   }
 
   export default function initSqlJs(
-    config?: Record<string, unknown>,
+    config?: Record<string, unknown>
   ): Promise<SqlJsStatic>;
 }

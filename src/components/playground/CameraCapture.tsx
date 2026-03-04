@@ -6,7 +6,7 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
+  SelectValue
 } from "@/components/ui/select";
 import { X, RotateCcw, Check, Loader2, Camera } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -20,7 +20,7 @@ const ASPECT_RATIO_CONFIG: Record<
   "16:9": { width: 1920, height: 1080, class: "aspect-[16/9]" },
   "4:3": { width: 1440, height: 1080, class: "aspect-[4/3]" },
   "1:1": { width: 1080, height: 1080, class: "aspect-[1/1]" },
-  "9:16": { width: 1080, height: 1920, class: "aspect-[9/16]" },
+  "9:16": { width: 1080, height: 1920, class: "aspect-[9/16]" }
 };
 
 interface CameraCaptureProps {
@@ -32,7 +32,7 @@ interface CameraCaptureProps {
 export function CameraCapture({
   onCapture,
   onClose,
-  disabled,
+  disabled
 }: CameraCaptureProps) {
   const { t } = useTranslation();
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -43,7 +43,7 @@ export function CameraCapture({
   const [error, setError] = useState<string | null>(null);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [facingMode, setFacingMode] = useState<"user" | "environment">(
-    "environment",
+    "environment"
   );
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>("16:9");
 
@@ -56,7 +56,7 @@ export function CameraCapture({
 
       // Stop any existing stream
       if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop());
+        streamRef.current.getTracks().forEach(track => track.stop());
         streamRef.current = null;
       }
 
@@ -66,14 +66,14 @@ export function CameraCapture({
           video: {
             facingMode,
             width: { ideal: config.width },
-            height: { ideal: config.height },
+            height: { ideal: config.height }
           },
-          audio: false,
+          audio: false
         });
 
         if (!mounted) {
           // Component unmounted while waiting for permission
-          stream.getTracks().forEach((track) => track.stop());
+          stream.getTracks().forEach(track => track.stop());
           return;
         }
 
@@ -118,14 +118,14 @@ export function CameraCapture({
     return () => {
       mounted = false;
       if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop());
+        streamRef.current.getTracks().forEach(track => track.stop());
         streamRef.current = null;
       }
     };
   }, [facingMode, aspectRatio, t]);
 
   const switchCamera = () => {
-    setFacingMode((prev) => (prev === "user" ? "environment" : "user"));
+    setFacingMode(prev => (prev === "user" ? "environment" : "user"));
   };
 
   const takePhoto = () => {
@@ -160,19 +160,19 @@ export function CameraCapture({
     if (!canvasRef.current) return;
 
     canvasRef.current.toBlob(
-      (blob) => {
+      blob => {
         if (blob) {
           onCapture(blob);
         }
       },
       "image/jpeg",
-      0.9,
+      0.9
     );
   };
 
   const handleClose = () => {
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current.getTracks().forEach(track => track.stop());
     }
     onClose();
   };
@@ -184,7 +184,7 @@ export function CameraCapture({
       <div
         className={cn(
           "relative rounded-lg overflow-hidden bg-black max-h-80 mx-auto",
-          aspectConfig.class,
+          aspectConfig.class
         )}
       >
         {isLoading && (
@@ -208,7 +208,7 @@ export function CameraCapture({
           className={cn(
             "w-full h-full object-cover",
             facingMode === "user" && "scale-x-[-1]",
-            capturedImage && "hidden",
+            capturedImage && "hidden"
           )}
         />
 
@@ -259,7 +259,7 @@ export function CameraCapture({
             </Button>
             <Select
               value={aspectRatio}
-              onValueChange={(value) => setAspectRatio(value as AspectRatio)}
+              onValueChange={value => setAspectRatio(value as AspectRatio)}
               disabled={isLoading || !!error || disabled}
             >
               <SelectTrigger className="w-20 h-9">

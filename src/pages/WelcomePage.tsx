@@ -12,7 +12,7 @@ import {
   GitBranch,
   ArrowRight,
   Sparkles,
-  Star,
+  Star
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -45,7 +45,7 @@ function FeatureCard({
   shapeGradient,
   href,
   badge,
-  onClick,
+  onClick
 }: FeatureCardProps) {
   const navigate = useNavigate();
   const { t } = useTranslation();
@@ -57,7 +57,7 @@ function FeatureCard({
         "relative group cursor-pointer overflow-hidden rounded-2xl border bg-card/50 backdrop-blur-sm transition-all duration-300 hover:scale-[1.02] hover:shadow-lg",
         isNewFeature
           ? "border-blue-500/30 ring-2 ring-blue-500/10 hover:ring-blue-500/20"
-          : "border-border/50 hover:border-border",
+          : "border-border/50 hover:border-border"
       )}
       onClick={() => {
         if (onClick) {
@@ -83,7 +83,7 @@ function FeatureCard({
       <div
         className={cn(
           "absolute inset-0 opacity-20 transition-opacity duration-300 group-hover:opacity-30",
-          gradient,
+          gradient
         )}
       />
 
@@ -91,13 +91,13 @@ function FeatureCard({
       <div
         className={cn(
           "absolute -top-4 -right-4 w-24 h-24 rounded-2xl rotate-12 opacity-30 transition-all duration-500 group-hover:rotate-45 group-hover:opacity-50",
-          shapeGradient,
+          shapeGradient
         )}
       />
       <div
         className={cn(
           "absolute -bottom-6 -left-6 w-20 h-20 rounded-full opacity-20 transition-all duration-500 group-hover:scale-125 group-hover:opacity-40",
-          shapeGradient,
+          shapeGradient
         )}
       />
 
@@ -143,7 +143,7 @@ export function WelcomePage() {
       onClick: () => {
         sessionStorage.setItem("pg_rightPanelTab", "featured");
         navigate("/playground");
-      },
+      }
     },
     {
       icon: <Boxes className="h-6 w-6 text-blue-600 dark:text-blue-400" />,
@@ -153,7 +153,7 @@ export function WelcomePage() {
         "bg-gradient-to-br from-blue-500/40 via-cyan-500/20 to-transparent",
       shapeGradient: "from-blue-500/40 to-cyan-500/30",
       href: "/models",
-      badge: "500+",
+      badge: "500+"
     },
     {
       icon: (
@@ -164,7 +164,7 @@ export function WelcomePage() {
       gradient:
         "bg-gradient-to-br from-purple-500/40 via-violet-500/20 to-transparent",
       shapeGradient: "from-purple-500/40 to-violet-500/30",
-      href: "/playground",
+      href: "/playground"
     },
     {
       icon: <FileText className="h-6 w-6 text-pink-600 dark:text-pink-400" />,
@@ -173,7 +173,7 @@ export function WelcomePage() {
       gradient:
         "bg-gradient-to-br from-pink-500/40 via-rose-500/20 to-transparent",
       shapeGradient: "from-pink-500/40 to-rose-500/30",
-      href: "/templates",
+      href: "/templates"
     },
     {
       icon: (
@@ -184,7 +184,7 @@ export function WelcomePage() {
       gradient:
         "bg-gradient-to-br from-emerald-500/40 via-green-500/20 to-transparent",
       shapeGradient: "from-emerald-500/40 to-green-500/30",
-      href: "/history",
+      href: "/history"
     },
     // Assets: hidden on mobile (mobile downloads directly to device)
     ...(!isMobile
@@ -198,8 +198,8 @@ export function WelcomePage() {
             gradient:
               "bg-gradient-to-br from-teal-500/40 via-cyan-500/20 to-transparent",
             shapeGradient: "from-teal-500/40 to-cyan-500/30",
-            href: "/assets",
-          },
+            href: "/assets"
+          }
         ]
       : []),
     // Workflow: desktop only
@@ -215,8 +215,8 @@ export function WelcomePage() {
               "bg-gradient-to-br from-blue-500/40 via-indigo-500/20 to-transparent",
             shapeGradient: "from-blue-500/40 to-indigo-500/30",
             href: "/workflow",
-            badge: t("welcome.features.workflow.badge"),
-          },
+            badge: t("welcome.features.workflow.badge")
+          }
         ]
       : []),
 
@@ -228,7 +228,7 @@ export function WelcomePage() {
         "bg-gradient-to-br from-orange-500/40 via-amber-500/20 to-transparent",
       shapeGradient: "from-orange-500/40 to-amber-500/30",
       href: "/free-tools",
-      badge: t("welcome.features.freeTools.badge"),
+      badge: t("welcome.features.freeTools.badge")
     },
     // Z-Image: hidden on mobile (no local SD model support)
     ...(!isMobile
@@ -243,10 +243,10 @@ export function WelcomePage() {
               "bg-gradient-to-br from-yellow-500/40 via-amber-500/20 to-transparent",
             shapeGradient: "from-yellow-500/40 to-amber-500/30",
             href: "/z-image",
-            badge: t("welcome.features.zImage.badge"),
-          },
+            badge: t("welcome.features.zImage.badge")
+          }
         ]
-      : []),
+      : [])
   ];
 
   return (
@@ -264,8 +264,8 @@ export function WelcomePage() {
               {isMobile
                 ? "WaveSpeed Mobile"
                 : navigator.userAgent.toLowerCase().includes("electron")
-                  ? "WaveSpeed Desktop"
-                  : "WaveSpeedAI Studio"}
+                ? "WaveSpeed Desktop"
+                : "WaveSpeedAI Studio"}
             </h1>
           </div>
           <p className="text-base text-muted-foreground max-w-lg mx-auto">
@@ -276,7 +276,7 @@ export function WelcomePage() {
         {/* Feature Cards Grid */}
         <div className="w-full max-w-5xl mx-auto mb-5">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
-            {features.map((feature) => (
+            {features.map(feature => (
               <FeatureCard key={feature.href} {...feature} />
             ))}
           </div>

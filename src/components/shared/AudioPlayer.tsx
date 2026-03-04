@@ -13,7 +13,7 @@ interface AudioPlayerProps {
 export function AudioPlayer({
   src,
   compact = false,
-  className,
+  className
 }: AudioPlayerProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -35,11 +35,9 @@ export function AudioPlayer({
       try {
         const response = await fetch(src);
         const arrayBuffer = await response.arrayBuffer();
-        const audioContext = new (
-          window.AudioContext ||
-          (window as unknown as { webkitAudioContext: typeof AudioContext })
-            .webkitAudioContext
-        )();
+        const audioContext = new (window.AudioContext ||
+          ((window as unknown) as { webkitAudioContext: typeof AudioContext })
+            .webkitAudioContext)();
         const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
 
         // Get audio data from first channel
@@ -58,7 +56,7 @@ export function AudioPlayer({
 
         // Normalize
         const maxVal = Math.max(...filteredData);
-        const normalized = filteredData.map((val) => val / maxVal);
+        const normalized = filteredData.map(val => val / maxVal);
         setWaveformData(normalized);
 
         await audioContext.close();
@@ -67,7 +65,7 @@ export function AudioPlayer({
         // Generate fallback waveform
         const fallback = Array.from(
           { length: 100 },
-          (_, i) => 0.3 + Math.sin(i * 0.2) * 0.3 + Math.random() * 0.2,
+          (_, i) => 0.3 + Math.sin(i * 0.2) * 0.3 + Math.random() * 0.2
         );
         setWaveformData(fallback);
       }
@@ -123,11 +121,9 @@ export function AudioPlayer({
   const initAudioContext = useCallback(() => {
     if (audioContextRef.current || !audioRef.current) return;
 
-    const audioContext = new (
-      window.AudioContext ||
-      (window as unknown as { webkitAudioContext: typeof AudioContext })
-        .webkitAudioContext
-    )();
+    const audioContext = new (window.AudioContext ||
+      ((window as unknown) as { webkitAudioContext: typeof AudioContext })
+        .webkitAudioContext)();
     const analyser = audioContext.createAnalyser();
     analyser.fftSize = 256;
     analyser.smoothingTimeConstant = 0.8;
@@ -340,7 +336,7 @@ export function AudioPlayer({
     <div
       className={cn(
         "flex flex-col items-center justify-center gap-4 p-6 w-full max-w-lg mx-auto",
-        className,
+        className
       )}
     >
       <audio

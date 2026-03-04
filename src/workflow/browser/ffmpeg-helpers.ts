@@ -20,12 +20,12 @@ function createWorkerPromise<T>(
   handler: (
     worker: Worker,
     resolve: (v: T) => void,
-    reject: (e: Error) => void,
-  ) => void,
+    reject: (e: Error) => void
+  ) => void
 ): Promise<T> {
   const worker = new Worker(
     new URL("../../workers/ffmpeg.worker.ts", import.meta.url),
-    { type: "module" },
+    { type: "module" }
   );
   return new Promise<T>((resolve, reject) => {
     handler(worker, resolve, reject);
@@ -36,7 +36,7 @@ function createWorkerPromise<T>(
 }
 
 async function urlToArrayBuffer(
-  url: string,
+  url: string
 ): Promise<{ buffer: ArrayBuffer; name: string }> {
   const resp = await fetch(url);
   if (!resp.ok) throw new Error(`Failed to fetch ${url}: ${resp.status}`);
@@ -62,7 +62,7 @@ const MIME_MAP: Record<string, string> = {
   jpeg: "image/jpeg",
   webp: "image/webp",
   gif: "image/gif",
-  bmp: "image/bmp",
+  bmp: "image/bmp"
 };
 
 function resultToBlobUrl(result: WorkerResult): string {
@@ -74,20 +74,20 @@ function resultToBlobUrl(result: WorkerResult): string {
 
 export async function ffmpegMerge(
   inputUrls: string[],
-  format: string,
+  format: string
 ): Promise<string> {
   const fetched = await Promise.all(inputUrls.map(urlToArrayBuffer));
-  const files = fetched.map((f) => f.buffer);
-  const fileNames = fetched.map((f) => f.name);
+  const files = fetched.map(f => f.buffer);
+  const fileNames = fetched.map(f => f.name);
 
   const result = await createWorkerPromise<WorkerResult>(
     (worker, resolve, reject) => {
       const id = 0;
-      worker.onmessage = (e) => {
+      worker.onmessage = e => {
         if (e.data.type === "result" && e.data.payload.id === id) {
           resolve({
             data: e.data.payload.data,
-            filename: e.data.payload.filename,
+            filename: e.data.payload.filename
           });
         } else if (e.data.type === "error") {
           reject(new Error(e.data.payload));
@@ -101,12 +101,12 @@ export async function ffmpegMerge(
             fileNames,
             outputFormat: format,
             outputExt: format,
-            id,
-          },
+            id
+          }
         },
-        { transfer: files },
+        { transfer: files }
       );
-    },
+    }
   );
 
   return resultToBlobUrl(result);
@@ -116,18 +116,18 @@ export async function ffmpegTrim(
   inputUrl: string,
   startTime: number,
   endTime: number,
-  format: string,
+  format: string
 ): Promise<string> {
   const { buffer, name } = await urlToArrayBuffer(inputUrl);
 
   const result = await createWorkerPromise<WorkerResult>(
     (worker, resolve, reject) => {
       const id = 0;
-      worker.onmessage = (e) => {
+      worker.onmessage = e => {
         if (e.data.type === "result" && e.data.payload.id === id) {
           resolve({
             data: e.data.payload.data,
-            filename: e.data.payload.filename,
+            filename: e.data.payload.filename
           });
         } else if (e.data.type === "error") {
           reject(new Error(e.data.payload));
@@ -143,12 +143,12 @@ export async function ffmpegTrim(
             endTime,
             outputFormat: format,
             outputExt: format,
-            id,
-          },
+            id
+          }
         },
-        { transfer: [buffer] },
+        { transfer: [buffer] }
       );
-    },
+    }
   );
 
   return resultToBlobUrl(result);
@@ -158,18 +158,18 @@ export async function ffmpegConvert(
   inputUrl: string,
   outputFormat: string,
   outputExt: string,
-  options?: ConvertOptions,
+  options?: ConvertOptions
 ): Promise<string> {
   const { buffer, name } = await urlToArrayBuffer(inputUrl);
 
   const result = await createWorkerPromise<WorkerResult>(
     (worker, resolve, reject) => {
       const id = 0;
-      worker.onmessage = (e) => {
+      worker.onmessage = e => {
         if (e.data.type === "result" && e.data.payload.id === id) {
           resolve({
             data: e.data.payload.data,
-            filename: e.data.payload.filename,
+            filename: e.data.payload.filename
           });
         } else if (e.data.type === "error") {
           reject(new Error(e.data.payload));
@@ -184,12 +184,12 @@ export async function ffmpegConvert(
             outputFormat,
             outputExt,
             options,
-            id,
-          },
+            id
+          }
         },
-        { transfer: [buffer] },
+        { transfer: [buffer] }
       );
-    },
+    }
   );
 
   return resultToBlobUrl(result);

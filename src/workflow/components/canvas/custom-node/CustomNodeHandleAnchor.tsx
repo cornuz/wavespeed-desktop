@@ -20,7 +20,7 @@ import { HANDLE_SIZE } from "./CustomNodeTypes";
 
 export const handleLeft = (
   _connected: boolean,
-  media = false,
+  media = false
 ): React.CSSProperties => ({
   width: HANDLE_SIZE,
   height: HANDLE_SIZE,
@@ -35,7 +35,7 @@ export const handleLeft = (
   transition: "background 150ms ease, box-shadow 150ms ease",
   boxShadow: _connected
     ? `0 0 0 2px ${media ? "hsla(142,71%,45%,.2)" : "hsla(var(--primary)/.2)"}`
-    : "none",
+    : "none"
 });
 
 export const handleRight = (): React.CSSProperties => ({
@@ -45,7 +45,7 @@ export const handleRight = (): React.CSSProperties => ({
   border: "2px solid hsl(var(--primary))",
   background: "hsl(var(--primary))",
   zIndex: 40,
-  boxShadow: "0 0 0 2px hsla(var(--primary)/.2)",
+  boxShadow: "0 0 0 2px hsla(var(--primary)/.2)"
 });
 
 /* ── HandleAnchor component ──────────────────────────────────────────── */
@@ -55,7 +55,7 @@ export function HandleAnchor({
   type,
   connected,
   media,
-  children,
+  children
 }: {
   id: string;
   type: "target" | "source";
@@ -111,7 +111,7 @@ export function HandleAnchor({
     transform: "translateY(-50%)",
     ...(type === "target"
       ? { left: offset ?? -(HANDLE_SIZE / 2 + 1) }
-      : { right: offset ?? -(HANDLE_SIZE / 2 + 1) }),
+      : { right: offset ?? -(HANDLE_SIZE / 2 + 1) })
   };
 
   return (

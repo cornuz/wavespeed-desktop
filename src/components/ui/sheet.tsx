@@ -15,7 +15,7 @@ const SheetOverlay = React.forwardRef<
   <DialogPrimitive.Overlay
     className={cn(
       "fixed inset-0 z-50 bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
-      className,
+      className
     )}
     {...props}
     ref={ref}
@@ -36,7 +36,7 @@ const SheetContent = React.forwardRef<
       className={cn(
         "fixed z-50 gap-4 bg-background shadow-lg transition ease-in-out data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:duration-300 data-[state=open]:duration-500",
         "inset-y-0 right-0 h-full w-3/4 border-l data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right sm:max-w-[480px]",
-        className,
+        className
       )}
       {...props}
     >
@@ -93,5 +93,5 @@ export {
   SheetContent,
   SheetHeader,
   SheetTitle,
-  SheetDescription,
+  SheetDescription
 };

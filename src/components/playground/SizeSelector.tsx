@@ -50,7 +50,7 @@ const PRESETS_1K = [
   { label: "4:3", width: 1152, height: 864 }, // 995,328 px
   { label: "3:4", width: 864, height: 1152 }, // 995,328 px
   { label: "3:2", width: 1216, height: 832 }, // 1,011,712 px
-  { label: "2:3", width: 832, height: 1216 }, // 1,011,712 px
+  { label: "2:3", width: 832, height: 1216 } // 1,011,712 px
 ];
 
 // 2K presets (~4 megapixels total, similar to 2048×2048)
@@ -61,7 +61,7 @@ const PRESETS_2K = [
   { label: "4:3", width: 2304, height: 1728 }, // 3,981,312 px
   { label: "3:4", width: 1728, height: 2304 }, // 3,981,312 px
   { label: "3:2", width: 2432, height: 1664 }, // 4,046,848 px
-  { label: "2:3", width: 1664, height: 2432 }, // 4,046,848 px
+  { label: "2:3", width: 1664, height: 2432 } // 4,046,848 px
 ];
 
 // Generate presets based on min/max range
@@ -100,7 +100,7 @@ export function SizeSelector({
   onChange,
   disabled,
   min = 256,
-  max = 1536,
+  max = 1536
 }: SizeSelectorProps) {
   const [width, setWidth] = useState(1024);
   const [height, setHeight] = useState(1024);
@@ -153,7 +153,7 @@ export function SizeSelector({
     setWidthInput(String(height));
     setHeightInput(String(width));
     onChange(`${height}*${width}`);
-    setSwapRotation((r) => r + 180);
+    setSwapRotation(r => r + 180);
   }, [width, height, onChange]);
 
   // Generate presets based on min/max range
@@ -165,7 +165,7 @@ export function SizeSelector({
     <div className="space-y-3">
       {/* Preset buttons */}
       <div className="flex flex-wrap gap-1.5">
-        {availablePresets.map((preset) => (
+        {availablePresets.map(preset => (
           <Button
             key={`${preset.width}x${preset.height}`}
             type="button"
@@ -193,7 +193,7 @@ export function SizeSelector({
           <Input
             type="number"
             value={widthInput}
-            onChange={(e) => {
+            onChange={e => {
               const next = e.target.value;
               setWidthInput(next);
               if (next === "") return;
@@ -253,7 +253,7 @@ export function SizeSelector({
           <Input
             type="number"
             value={heightInput}
-            onChange={(e) => {
+            onChange={e => {
               const next = e.target.value;
               setHeightInput(next);
               if (next === "") return;

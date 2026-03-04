@@ -15,7 +15,7 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
+  SelectValue
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -27,7 +27,7 @@ import {
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
-  AlertDialogTitle,
+  AlertDialogTitle
 } from "@/components/ui/alert-dialog";
 import {
   ArrowLeft,
@@ -38,7 +38,7 @@ import {
   X,
   Columns2,
   SplitSquareHorizontal,
-  RefreshCw,
+  RefreshCw
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -52,29 +52,29 @@ const PHASES = [
   {
     id: "face-download",
     labelKey: "freeTools.progress.downloading",
-    weight: 0.1,
+    weight: 0.1
   },
   { id: "face-loading", labelKey: "freeTools.progress.loading", weight: 0.1 },
   {
     id: "face-detect",
     labelKey: "freeTools.faceEnhancer.detecting",
-    weight: 0.1,
+    weight: 0.1
   },
   {
     id: "face-enhance",
     labelKey: "freeTools.faceEnhancer.enhancing",
-    weight: 0.2,
+    weight: 0.2
   },
   {
     id: "upscale-download",
     labelKey: "freeTools.progress.downloading",
-    weight: 0.1,
+    weight: 0.1
   },
   {
     id: "upscale-process",
     labelKey: "freeTools.progress.processing",
-    weight: 0.4,
-  },
+    weight: 0.4
+  }
 ];
 
 export function ImageEnhancerPage() {
@@ -102,7 +102,7 @@ export function ImageEnhancerPage() {
   const [scale, setScale] = useState<ScaleType>("2x");
   const [enhanceFace, setEnhanceFace] = useState(false);
   const [downloadFormat, setDownloadFormat] = useState<"png" | "jpeg" | "webp">(
-    "jpeg",
+    "jpeg"
   );
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [showBackWarning, setShowBackWarning] = useState(false);
@@ -119,42 +119,47 @@ export function ImageEnhancerPage() {
     completePhase,
     reset: resetProgress,
     resetAndStart,
-    complete: completeAllPhases,
+    complete: completeAllPhases
   } = useMultiPhaseProgress({ phases: PHASES });
 
   const [error, setError] = useState<string | null>(null);
 
-  const { loadModel, upscale, dispose, hasFailed, retryWorker } =
-    useUpscalerWorker({
-      onPhase: (phase) => {
-        // Start the corresponding phase when worker reports it
-        if (phase === "download") {
-          startPhase("upscale-download");
-        } else if (phase === "process") {
-          startPhase("upscale-process");
-        }
-      },
-      onProgress: (phase, progressValue, detail) => {
-        // Update the phase that worker reports
-        const phaseId =
-          phase === "download" ? "upscale-download" : "upscale-process";
-        updatePhase(phaseId, progressValue, detail);
-      },
-      onError: (err) => {
-        console.error("Worker error:", err);
-        setError(err);
-        setIsProcessing(false);
-      },
-    });
+  const {
+    loadModel,
+    upscale,
+    dispose,
+    hasFailed,
+    retryWorker
+  } = useUpscalerWorker({
+    onPhase: phase => {
+      // Start the corresponding phase when worker reports it
+      if (phase === "download") {
+        startPhase("upscale-download");
+      } else if (phase === "process") {
+        startPhase("upscale-process");
+      }
+    },
+    onProgress: (phase, progressValue, detail) => {
+      // Update the phase that worker reports
+      const phaseId =
+        phase === "download" ? "upscale-download" : "upscale-process";
+      updatePhase(phaseId, progressValue, detail);
+    },
+    onError: err => {
+      console.error("Worker error:", err);
+      setError(err);
+      setIsProcessing(false);
+    }
+  });
 
   const {
     initModel: initFaceModel,
     enhance: enhanceFaces,
     dispose: disposeFaceEnhancer,
     hasFailed: hasFaceFailed,
-    retryWorker: retryFaceWorker,
+    retryWorker: retryFaceWorker
   } = useFaceEnhancerWorker({
-    onPhase: (phase) => {
+    onPhase: phase => {
       if (phase === "download") {
         startPhase("face-download");
       } else if (phase === "loading") {
@@ -170,17 +175,17 @@ export function ImageEnhancerPage() {
         phase === "download"
           ? "face-download"
           : phase === "loading"
-            ? "face-loading"
-            : phase === "detect"
-              ? "face-detect"
-              : "face-enhance";
+          ? "face-loading"
+          : phase === "detect"
+          ? "face-detect"
+          : "face-enhance";
       updatePhase(phaseId, progressValue, detail);
     },
-    onError: (err) => {
+    onError: err => {
       console.error("Face enhancer error:", err);
       setError(err);
       setIsProcessing(false);
-    },
+    }
   });
 
   const handleRetry = useCallback(() => {
@@ -204,7 +209,7 @@ export function ImageEnhancerPage() {
     disposeFaceEnhancer,
     resetPage,
     location.pathname,
-    navigate,
+    navigate
   ]);
 
   const handleConfirmBack = useCallback(() => {
@@ -220,7 +225,7 @@ export function ImageEnhancerPage() {
       if (!file.type.startsWith("image/")) return;
 
       const reader = new FileReader();
-      reader.onload = (e) => {
+      reader.onload = e => {
         const dataUrl = e.target?.result as string;
         setError(null);
         setOriginalImage(dataUrl);
@@ -237,7 +242,7 @@ export function ImageEnhancerPage() {
       };
       reader.readAsDataURL(file);
     },
-    [resetProgress],
+    [resetProgress]
   );
 
   const handleDrop = useCallback(
@@ -250,7 +255,7 @@ export function ImageEnhancerPage() {
       const file = e.dataTransfer.files[0];
       if (file) handleFileSelect(file);
     },
-    [handleFileSelect, isProcessing],
+    [handleFileSelect, isProcessing]
   );
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -306,7 +311,7 @@ export function ImageEnhancerPage() {
       document.addEventListener("mousemove", handleMouseMove);
       document.addEventListener("mouseup", handleMouseUp);
     },
-    [handleSliderMove],
+    [handleSliderMove]
   );
 
   const handleSliderTouchStart = useCallback(
@@ -329,7 +334,7 @@ export function ImageEnhancerPage() {
       document.addEventListener("touchmove", handleTouchMove);
       document.addEventListener("touchend", handleTouchEnd);
     },
-    [handleSliderMove],
+    [handleSliderMove]
   );
 
   const handleEnhance = async () => {
@@ -395,7 +400,7 @@ export function ImageEnhancerPage() {
 
       setEnhancedSize({
         width: originalSize.width * scaleMultiplier,
-        height: originalSize.height * scaleMultiplier,
+        height: originalSize.height * scaleMultiplier
       });
 
       // Draw to canvas for face enhancement and download format conversion
@@ -404,7 +409,7 @@ export function ImageEnhancerPage() {
       canvas.height = originalSize.height * scaleMultiplier;
       const ctx = canvas.getContext("2d")!;
       const resultImg = new Image();
-      await new Promise<void>((resolve) => {
+      await new Promise<void>(resolve => {
         resultImg.onload = () => {
           ctx.drawImage(resultImg, 0, 0);
           resolve();
@@ -485,7 +490,7 @@ export function ImageEnhancerPage() {
             "border-2 border-dashed cursor-pointer transition-colors",
             isDragging
               ? "border-primary bg-primary/5"
-              : "border-muted-foreground/25 hover:border-primary/50",
+              : "border-muted-foreground/25 hover:border-primary/50"
           )}
           onClick={() => fileInputRef.current?.click()}
           onDrop={handleDrop}
@@ -512,7 +517,7 @@ export function ImageEnhancerPage() {
         type="file"
         accept="image/*"
         className="hidden"
-        onChange={(e) => {
+        onChange={e => {
           const file = e.target.files?.[0];
           if (file) handleFileSelect(file);
         }}
@@ -534,7 +539,7 @@ export function ImageEnhancerPage() {
 
             <Select
               value={model}
-              onValueChange={(v) => setModel(v as ModelType)}
+              onValueChange={v => setModel(v as ModelType)}
               disabled={isProcessing}
             >
               <SelectTrigger className="w-36">
@@ -555,7 +560,7 @@ export function ImageEnhancerPage() {
 
             <Select
               value={scale}
-              onValueChange={(v) => setScale(v as ScaleType)}
+              onValueChange={v => setScale(v as ScaleType)}
               disabled={isProcessing}
             >
               <SelectTrigger className="w-20">
@@ -626,7 +631,7 @@ export function ImageEnhancerPage() {
 
                 <Select
                   value={downloadFormat}
-                  onValueChange={(v) =>
+                  onValueChange={v =>
                     setDownloadFormat(v as "png" | "jpeg" | "webp")
                   }
                 >
@@ -794,7 +799,7 @@ export function ImageEnhancerPage() {
                     alt="Original"
                     className="absolute inset-0 w-full max-h-[70vh] object-contain pointer-events-none"
                     style={{
-                      clipPath: `inset(0 ${100 - sliderPosition}% 0 0)`,
+                      clipPath: `inset(0 ${100 - sliderPosition}% 0 0)`
                     }}
                     draggable={false}
                   />
@@ -806,7 +811,7 @@ export function ImageEnhancerPage() {
                       left: `${sliderPosition}%`,
                       transform: "translateX(-50%)",
                       boxShadow:
-                        "0 0 0 1px rgba(0,0,0,0.3), 0 0 8px rgba(0,0,0,0.5)",
+                        "0 0 0 1px rgba(0,0,0,0.3), 0 0 8px rgba(0,0,0,0.5)"
                     }}
                   >
                     {/* Handle grip */}
@@ -835,7 +840,7 @@ export function ImageEnhancerPage() {
       {/* Fullscreen Preview Dialog */}
       <Dialog
         open={!!previewImage}
-        onOpenChange={(open) => !open && setPreviewImage(null)}
+        onOpenChange={open => !open && setPreviewImage(null)}
       >
         <DialogContent
           className="w-screen h-screen max-w-none max-h-none p-0 border-0 bg-black flex items-center justify-center"

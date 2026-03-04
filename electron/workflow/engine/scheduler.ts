@@ -8,7 +8,7 @@ interface SimpleEdge {
 
 export function topologicalLevels(
   nodeIds: string[],
-  edges: SimpleEdge[],
+  edges: SimpleEdge[]
 ): string[][] {
   const inDegree = new Map<string, number>();
   const adj = new Map<string, string[]>();
@@ -21,7 +21,7 @@ export function topologicalLevels(
     inDegree.set(e.targetNodeId, (inDegree.get(e.targetNodeId) ?? 0) + 1);
   }
   const levels: string[][] = [];
-  let queue = nodeIds.filter((id) => inDegree.get(id) === 0);
+  let queue = nodeIds.filter(id => inDegree.get(id) === 0);
   while (queue.length > 0) {
     levels.push([...queue]);
     const nextQueue: string[] = [];
@@ -40,7 +40,7 @@ export function topologicalLevels(
 export function downstreamNodes(
   startNodeId: string,
   nodeIds: string[],
-  edges: SimpleEdge[],
+  edges: SimpleEdge[]
 ): string[] {
   const adj = new Map<string, string[]>();
   for (const id of nodeIds) adj.set(id, []);

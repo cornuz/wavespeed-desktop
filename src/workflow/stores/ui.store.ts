@@ -56,10 +56,10 @@ export interface UIState {
   closePreview: () => void;
   /** Show naming dialog and return a promise that resolves with the name (+ optional overwrite id) or null */
   promptWorkflowName: (
-    defaultName?: string,
+    defaultName?: string
   ) => Promise<{ name: string; overwriteId?: string } | null>;
   resolveNamingDialog: (
-    result: { name: string; overwriteId?: string } | null,
+    result: { name: string; overwriteId?: string } | null
   ) => void;
 }
 
@@ -83,53 +83,53 @@ export const useUIStore = create<UIState>((set, get) => ({
   namingDialogResolve: null,
   interactionMode: "hand",
   getViewportCenter: () => ({ x: 200, y: 150 }),
-  setGetViewportCenter: (fn) => set({ getViewportCenter: fn }),
+  setGetViewportCenter: fn => set({ getViewportCenter: fn }),
 
-  selectNode: (nodeId) =>
+  selectNode: nodeId =>
     set({
       selectedNodeId: nodeId,
       selectedNodeIds: nodeId ? new Set([nodeId]) : new Set(),
-      showSettings: false,
+      showSettings: false
     }),
 
-  selectNodes: (nodeIds) =>
+  selectNodes: nodeIds =>
     set({
       selectedNodeId:
         nodeIds.length === 1
           ? nodeIds[0]
           : nodeIds.length > 0
-            ? nodeIds[nodeIds.length - 1]
-            : null,
+          ? nodeIds[nodeIds.length - 1]
+          : null,
       selectedNodeIds: new Set(nodeIds),
-      showSettings: false,
+      showSettings: false
     }),
 
-  setInteractionMode: (mode) => set({ interactionMode: mode }),
+  setInteractionMode: mode => set({ interactionMode: mode }),
 
-  toggleNodeConfig: () => set((s) => ({ showNodeConfig: !s.showNodeConfig })),
-  toggleResults: () => set((s) => ({ showResults: !s.showResults })),
+  toggleNodeConfig: () => set(s => ({ showNodeConfig: !s.showNodeConfig })),
+  toggleResults: () => set(s => ({ showResults: !s.showResults })),
   toggleSettings: () =>
-    set((s) => ({
+    set(s => ({
       showSettings: !s.showSettings,
-      selectedNodeId: s.showSettings ? s.selectedNodeId : null,
+      selectedNodeId: s.showSettings ? s.selectedNodeId : null
     })),
   toggleNodePalette: () =>
-    set((s) => ({
+    set(s => ({
       showNodePalette: !s.showNodePalette,
-      showWorkflowPanel: false,
+      showWorkflowPanel: false
     })),
   toggleWorkflowPanel: () =>
-    set((s) => ({
+    set(s => ({
       showWorkflowPanel: !s.showWorkflowPanel,
-      showNodePalette: false,
+      showNodePalette: false
     })),
   toggleWorkflowResultsPanel: () =>
-    set((s) => ({ showWorkflowResultsPanel: !s.showWorkflowResultsPanel })),
-  setWorkflowResultsPanelWidth: (width) =>
+    set(s => ({ showWorkflowResultsPanel: !s.showWorkflowResultsPanel })),
+  setWorkflowResultsPanelWidth: width =>
     set({ workflowResultsPanelWidth: Math.max(180, Math.min(500, width)) }),
-  setSidebarWidth: (width) =>
+  setSidebarWidth: width =>
     set({ sidebarWidth: Math.max(180, Math.min(400, width)) }),
-  toggleGrid: () => set((s) => ({ showGrid: !s.showGrid })),
+  toggleGrid: () => set(s => ({ showGrid: !s.showGrid })),
   openPreview: (src, items) =>
     set(() => {
       const list = Array.isArray(items) && items.length > 0 ? items : [src];
@@ -137,26 +137,26 @@ export const useUIStore = create<UIState>((set, get) => ({
       return {
         previewSrc: src,
         previewItems: list,
-        previewIndex: idx,
+        previewIndex: idx
       };
     }),
   prevPreview: () =>
-    set((s) => {
+    set(s => {
       if (s.previewItems.length <= 1 || s.previewIndex < 0) return {};
       const nextIndex =
         (s.previewIndex - 1 + s.previewItems.length) % s.previewItems.length;
       return {
         previewIndex: nextIndex,
-        previewSrc: s.previewItems[nextIndex] ?? s.previewSrc,
+        previewSrc: s.previewItems[nextIndex] ?? s.previewSrc
       };
     }),
   nextPreview: () =>
-    set((s) => {
+    set(s => {
       if (s.previewItems.length <= 1 || s.previewIndex < 0) return {};
       const nextIndex = (s.previewIndex + 1) % s.previewItems.length;
       return {
         previewIndex: nextIndex,
-        previewSrc: s.previewItems[nextIndex] ?? s.previewSrc,
+        previewSrc: s.previewItems[nextIndex] ?? s.previewSrc
       };
     }),
   closePreview: () =>
@@ -164,19 +164,19 @@ export const useUIStore = create<UIState>((set, get) => ({
 
   promptWorkflowName: (defaultName = "") => {
     return new Promise<{ name: string; overwriteId?: string } | null>(
-      (resolve) => {
+      resolve => {
         set({
           showNamingDialog: true,
           namingDialogDefault: defaultName,
-          namingDialogResolve: resolve,
+          namingDialogResolve: resolve
         });
-      },
+      }
     );
   },
 
-  resolveNamingDialog: (result) => {
+  resolveNamingDialog: result => {
     const { namingDialogResolve } = get();
     if (namingDialogResolve) namingDialogResolve(result);
     set({ showNamingDialog: false, namingDialogResolve: null });
-  },
+  }
 }));

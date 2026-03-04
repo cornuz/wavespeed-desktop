@@ -53,5 +53,5 @@ export const persistentStorage = {
     } catch {
       return null;
     }
-  },
+  }
 };

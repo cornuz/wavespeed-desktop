@@ -30,21 +30,21 @@ export function CompInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
     <input
       {...rest}
       value={localValue}
-      onChange={(e) => {
+      onChange={e => {
         setLocalValue(e.target.value);
         if (!composingRef.current) onChange?.(e);
       }}
-      onCompositionStart={(e) => {
+      onCompositionStart={e => {
         composingRef.current = true;
         onCompositionStart?.(e);
       }}
-      onCompositionEnd={(e) => {
+      onCompositionEnd={e => {
         composingRef.current = false;
         const val = (e.target as HTMLInputElement).value;
         setLocalValue(val);
         onChange?.({
           target: e.target,
-          currentTarget: e.currentTarget,
+          currentTarget: e.currentTarget
         } as React.ChangeEvent<HTMLInputElement>);
         onCompositionEnd?.(e);
       }}
@@ -53,7 +53,7 @@ export function CompInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
 }
 
 export function CompTextarea(
-  props: React.TextareaHTMLAttributes<HTMLTextAreaElement>,
+  props: React.TextareaHTMLAttributes<HTMLTextAreaElement>
 ) {
   const {
     value: externalValue,
@@ -73,21 +73,21 @@ export function CompTextarea(
     <textarea
       {...rest}
       value={localValue}
-      onChange={(e) => {
+      onChange={e => {
         setLocalValue(e.target.value);
         if (!composingRef.current) onChange?.(e);
       }}
-      onCompositionStart={(e) => {
+      onCompositionStart={e => {
         composingRef.current = true;
         onCompositionStart?.(e);
       }}
-      onCompositionEnd={(e) => {
+      onCompositionEnd={e => {
         composingRef.current = false;
         const val = (e.target as HTMLTextAreaElement).value;
         setLocalValue(val);
         onChange?.({
           target: e.target,
-          currentTarget: e.currentTarget,
+          currentTarget: e.currentTarget
         } as React.ChangeEvent<HTMLTextAreaElement>);
         onCompositionEnd?.(e);
       }}

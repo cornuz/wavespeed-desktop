@@ -23,11 +23,11 @@ export function LogConsole({ isGenerating }: LogConsoleProps) {
       return;
     }
 
-    const removeListener = window.electronAPI.onSdLog((data) => {
+    const removeListener = window.electronAPI.onSdLog(data => {
       addSdLog({
         type: data.type,
         message: data.message,
-        timestamp: new Date(),
+        timestamp: new Date()
       });
     });
 
@@ -61,7 +61,7 @@ export function LogConsole({ isGenerating }: LogConsoleProps) {
       hour: "2-digit",
       minute: "2-digit",
       second: "2-digit",
-      fractionalSecondDigits: 3,
+      fractionalSecondDigits: 3
     } as Intl.DateTimeFormatOptions);
   };
 
@@ -93,7 +93,7 @@ export function LogConsole({ isGenerating }: LogConsoleProps) {
             <Button
               variant="ghost"
               size="sm"
-              onClick={(e) => {
+              onClick={e => {
                 e.stopPropagation();
                 clearSdLogs();
               }}
@@ -124,12 +124,12 @@ export function LogConsole({ isGenerating }: LogConsoleProps) {
                 No logs yet. Waiting for SD process output...
               </div>
             ) : (
-              sdLogs.map((log) => (
+              sdLogs.map(log => (
                 <div
                   key={log.id}
                   className={cn(
                     "flex gap-2 leading-tight py-0.5",
-                    log.type === "stderr" && "text-yellow-400",
+                    log.type === "stderr" && "text-yellow-400"
                   )}
                 >
                   <span className="text-gray-500 shrink-0 text-[9px]">

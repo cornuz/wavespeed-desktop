@@ -18,7 +18,7 @@ import {
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
-  AlertDialogTitle,
+  AlertDialogTitle
 } from "@/components/ui/alert-dialog";
 import {
   ArrowLeft,
@@ -27,14 +27,14 @@ import {
   Loader2,
   Scissors,
   RefreshCw,
-  Music,
+  Music
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // Phase configuration for media trimmer
 const PHASES = [
   { id: "download", labelKey: "freeTools.ffmpeg.loading", weight: 0.1 },
-  { id: "process", labelKey: "freeTools.ffmpeg.trimming", weight: 0.9 },
+  { id: "process", labelKey: "freeTools.ffmpeg.trimming", weight: 0.9 }
 ];
 
 export function MediaTrimmerPage() {
@@ -68,11 +68,11 @@ export function MediaTrimmerPage() {
     updatePhase,
     reset: resetProgress,
     resetAndStart,
-    complete: completeAllPhases,
+    complete: completeAllPhases
   } = useMultiPhaseProgress({ phases: PHASES });
 
   const { trim, hasFailed, retryWorker } = useFFmpegWorker({
-    onPhase: (phase) => {
+    onPhase: phase => {
       if (phase === "download") {
         startPhase("download");
       } else if (phase === "process") {
@@ -83,12 +83,12 @@ export function MediaTrimmerPage() {
       const phaseId = phase === "download" ? "download" : "process";
       updatePhase(phaseId, progressValue, detail);
     },
-    onError: (err) => {
+    onError: err => {
       console.error("Worker error:", err);
       setError(err);
       setIsProcessing(false);
       resetProgress();
-    },
+    }
   });
 
   const handleRetry = useCallback(() => {
@@ -132,7 +132,7 @@ export function MediaTrimmerPage() {
       setCurrentTime(0);
       resetProgress();
     },
-    [mediaUrl, trimmedUrl, resetProgress],
+    [mediaUrl, trimmedUrl, resetProgress]
   );
 
   const handleDrop = useCallback(
@@ -145,7 +145,7 @@ export function MediaTrimmerPage() {
       const file = e.dataTransfer.files[0];
       if (file) handleFileSelect(file);
     },
-    [handleFileSelect, isProcessing],
+    [handleFileSelect, isProcessing]
   );
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -204,8 +204,10 @@ export function MediaTrimmerPage() {
 
     // Determine output format from input
     const ext =
-      mediaFile.name.split(".").pop()?.toLowerCase() ||
-      (mediaType === "video" ? "mp4" : "mp3");
+      mediaFile.name
+        .split(".")
+        .pop()
+        ?.toLowerCase() || (mediaType === "video" ? "mp4" : "mp3");
     const mimeType = mediaType === "video" ? "video/mp4" : "audio/mpeg";
 
     try {
@@ -219,7 +221,7 @@ export function MediaTrimmerPage() {
         startTime,
         endTime,
         ext,
-        ext,
+        ext
       );
 
       // Create blob and URL
@@ -240,7 +242,11 @@ export function MediaTrimmerPage() {
   const handleDownload = () => {
     if (!trimmedUrl || !trimmedBlob || !mediaFile) return;
 
-    const ext = mediaFile.name.split(".").pop()?.toLowerCase() || "mp4";
+    const ext =
+      mediaFile.name
+        .split(".")
+        .pop()
+        ?.toLowerCase() || "mp4";
     const baseName = mediaFile.name.replace(/\.[^.]+$/, "");
     const filename = `${baseName}_trimmed.${ext}`;
 
@@ -294,7 +300,7 @@ export function MediaTrimmerPage() {
             "border-2 border-dashed cursor-pointer transition-colors",
             isDragging
               ? "border-primary bg-primary/5"
-              : "border-muted-foreground/25 hover:border-primary/50",
+              : "border-muted-foreground/25 hover:border-primary/50"
           )}
           onClick={() => fileInputRef.current?.click()}
         >
@@ -320,7 +326,7 @@ export function MediaTrimmerPage() {
         type="file"
         accept="video/*,audio/*,.mp4,.webm,.mov,.avi,.mkv,.mp3,.m4a,.ogg,.wav,.flac"
         className="hidden"
-        onChange={(e) => {
+        onChange={e => {
           const file = e.target.files?.[0];
           if (file) handleFileSelect(file);
           e.target.value = "";

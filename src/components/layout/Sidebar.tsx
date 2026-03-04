@@ -7,7 +7,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Tooltip,
   TooltipContent,
-  TooltipTrigger,
+  TooltipTrigger
 } from "@/components/ui/tooltip";
 import {
   Home,
@@ -22,7 +22,7 @@ import {
   Sparkles,
   GitBranch,
   Layers,
-  X,
+  X
 } from "lucide-react";
 
 interface NavItem {
@@ -45,7 +45,7 @@ export function Sidebar({
   onToggle,
   lastFreeToolsPage,
   isMobileOpen,
-  onMobileClose,
+  onMobileClose
 }: SidebarProps) {
   const { t } = useTranslation();
   const location = useLocation();
@@ -92,37 +92,37 @@ export function Sidebar({
     {
       titleKey: "nav.home",
       href: "/",
-      icon: Home,
+      icon: Home
     },
     {
       titleKey: "nav.models",
       href: "/models",
-      icon: Layers,
+      icon: Layers
     },
     {
       titleKey: "nav.playground",
       href: "/playground",
       icon: PlayCircle,
-      matchPrefix: true,
-    },
+      matchPrefix: true
+    }
   ];
 
   const manageItems: NavItem[] = [
     {
       titleKey: "nav.templates",
       href: "/templates",
-      icon: FolderOpen,
+      icon: FolderOpen
     },
     {
       titleKey: "nav.history",
       href: "/history",
-      icon: History,
+      icon: History
     },
     {
       titleKey: "nav.assets",
       href: "/assets",
-      icon: FolderHeart,
-    },
+      icon: FolderHeart
+    }
   ];
 
   const toolsItems: NavItem[] = [
@@ -130,19 +130,19 @@ export function Sidebar({
       titleKey: "nav.workflow",
       href: "/workflow",
       icon: GitBranch,
-      matchPrefix: true,
+      matchPrefix: true
     },
     {
       titleKey: "nav.freeTools",
       href: "/free-tools",
       icon: Sparkles,
-      matchPrefix: true,
+      matchPrefix: true
     },
     {
       titleKey: "nav.zImage",
       href: "/z-image",
-      icon: Zap,
-    },
+      icon: Zap
+    }
   ];
 
   // Check if a nav item is active
@@ -159,21 +159,21 @@ export function Sidebar({
   const navGroups = [
     { key: "create", label: "Create", items: createItems },
     { key: "manage", label: "Manage", items: manageItems },
-    { key: "tools", label: "Tools", items: toolsItems },
+    { key: "tools", label: "Tools", items: toolsItems }
   ];
 
   const bottomNavItems = [
     {
       titleKey: "nav.settings",
       href: "/settings",
-      icon: Settings,
-    },
+      icon: Settings
+    }
   ];
 
   // Sliding active-indicator for main nav
   const navRef = useRef<HTMLElement>(null);
   const [indicatorStyle, setIndicatorStyle] = useState<React.CSSProperties>({
-    opacity: 0,
+    opacity: 0
   });
   const hasPositioned = useRef(false);
 
@@ -182,10 +182,10 @@ export function Sidebar({
       const nav = navRef.current;
       if (!nav) return;
       const activeBtn = nav.querySelector(
-        "[data-nav-active]",
+        "[data-nav-active]"
       ) as HTMLElement | null;
       if (!activeBtn) {
-        setIndicatorStyle((s) => ({ ...s, opacity: 0 }));
+        setIndicatorStyle(s => ({ ...s, opacity: 0 }));
         return;
       }
       const nr = nav.getBoundingClientRect();
@@ -195,7 +195,7 @@ export function Sidebar({
         left: br.left - nr.left,
         width: br.width,
         height: br.height,
-        opacity: 1,
+        opacity: 1
       });
       hasPositioned.current = true;
     };
@@ -216,7 +216,7 @@ export function Sidebar({
         "flex h-full flex-col bg-background/95 backdrop-blur transition-all duration-300 shrink-0 electron-drag",
         collapsed ? "w-12" : "w-48",
         // Mobile overlay when hamburger opens
-        isMobileOpen && "!fixed inset-y-0 left-0 z-50 w-72 shadow-2xl",
+        isMobileOpen && "!fixed inset-y-0 left-0 z-50 w-72 shadow-2xl"
       )}
     >
       {/* Mobile close button */}
@@ -241,11 +241,11 @@ export function Sidebar({
             className={cn(
               "absolute rounded-lg bg-primary shadow-sm pointer-events-none",
               hasPositioned.current &&
-                "transition-[top,left,width,height,opacity] duration-300 ease-out",
+                "transition-[top,left,width,height,opacity] duration-300 ease-out"
             )}
             style={indicatorStyle}
           />
-          {navGroups.map((group) => (
+          {navGroups.map(group => (
             <div
               key={group.key}
               className={collapsed && !isMobileOpen ? "contents" : "space-y-5"}
@@ -256,7 +256,7 @@ export function Sidebar({
                 </div>
               )}
 
-              {group.items.map((item) => {
+              {group.items.map(item => {
                 const active = isActive(item);
                 const showTooltip = collapsed && !isMobileOpen && tooltipReady;
                 const isNewFeature = item.href === "/workflow";
@@ -296,7 +296,7 @@ export function Sidebar({
                             : "text-muted-foreground hover:bg-muted hover:text-foreground",
                           isNewFeature &&
                             !active &&
-                            "ring-2 ring-blue-500/20 hover:ring-blue-500/30",
+                            "ring-2 ring-blue-500/20 hover:ring-blue-500/30"
                         )}
                       >
                         {/* Glow effect for new feature */}
@@ -318,15 +318,12 @@ export function Sidebar({
                           </>
                         )}
                         {/* Blue dot for collapsed state — only when not active */}
-                        {isNewFeature &&
-                          !active &&
-                          collapsed &&
-                          !isMobileOpen && (
-                            <span className="absolute top-1 right-1 flex h-2 w-2 z-10 animate-in fade-in zoom-in-50 duration-500">
-                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                              <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
-                            </span>
-                          )}
+                        {isNewFeature && !active && collapsed && !isMobileOpen && (
+                          <span className="absolute top-1 right-1 flex h-2 w-2 z-10 animate-in fade-in zoom-in-50 duration-500">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+                          </span>
+                        )}
                       </button>
                     </TooltipTrigger>
                     {showTooltip && (
@@ -353,7 +350,7 @@ export function Sidebar({
       {/* Bottom Navigation */}
       <div className="mt-auto p-1.5 electron-no-drag">
         <nav className="flex flex-col gap-1">
-          {bottomNavItems.map((item) => {
+          {bottomNavItems.map(item => {
             const active = location.pathname === item.href;
             const showTooltip = collapsed && !isMobileOpen && tooltipReady;
             return (
@@ -373,7 +370,7 @@ export function Sidebar({
                         : "justify-start gap-2.5 px-2.5",
                       active
                         ? "bg-primary text-primary-foreground shadow-sm hover:bg-primary/95 hover:text-primary-foreground"
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
                     )}
                   >
                     <item.icon className="h-5 w-5 shrink-0" />
@@ -407,7 +404,7 @@ export function Sidebar({
                   "mt-3 h-8 w-full rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground",
                   collapsed
                     ? "justify-center px-0"
-                    : "justify-start gap-2.5 px-2.5",
+                    : "justify-start gap-2.5 px-2.5"
                 )}
               >
                 {collapsed ? (

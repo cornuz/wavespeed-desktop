@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 export function useInView<T extends Element>(
-  options?: IntersectionObserverInit,
+  options?: IntersectionObserverInit
 ) {
   const ref = useRef<T | null>(null);
   const [isInView, setIsInView] = useState(false);
@@ -21,7 +21,7 @@ export function useInView<T extends Element>(
           observer.disconnect();
         }
       },
-      { root, rootMargin, threshold },
+      { root, rootMargin, threshold }
     );
 
     observer.observe(node);

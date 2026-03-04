@@ -6,5 +6,5 @@ import { createContext } from "react";
 export const PageResetContext = createContext<{
   resetPage: (path: string) => void;
 }>({
-  resetPage: () => {},
+  resetPage: () => {}
 });

@@ -33,7 +33,7 @@ function imageDataToFloat32(imageData: ImageData): Float32Array {
 function float32ToImageData(
   data: Float32Array,
   width: number,
-  height: number,
+  height: number
 ): ImageData {
   const imageData = new ImageData(width, height);
   const pixels = imageData.data;
@@ -53,7 +53,7 @@ function float32ToImageData(
 function imageDataToDataURL(
   imageData: ImageData,
   width: number,
-  height: number,
+  height: number
 ): string {
   const canvas = document.createElement("canvas");
   canvas.width = width;
@@ -90,7 +90,7 @@ async function loadImageAsImageData(url: string): Promise<ImageData> {
 export async function runImageEnhancer(
   inputUrl: string,
   params: ImageEnhancerParams,
-  onProgress?: (progress: number, message?: string) => void,
+  onProgress?: (progress: number, message?: string) => void
 ): Promise<string> {
   const model = (params.model ?? "slim") as ModelType;
   const scale = (params.scale ?? "2x") as ScaleType;
@@ -107,7 +107,7 @@ export async function runImageEnhancer(
 
   const worker = new Worker(
     new URL("../../workers/upscaler.worker.ts", import.meta.url),
-    { type: "module" },
+    { type: "module" }
   );
 
   return new Promise((resolve, reject) => {
@@ -118,7 +118,7 @@ export async function runImageEnhancer(
           15,
           payload?.phase === "download"
             ? "Downloading model..."
-            : "Processing...",
+            : "Processing..."
         );
       } else if (type === "progress") {
         const p = payload?.progress ?? 0;
@@ -127,7 +127,7 @@ export async function runImageEnhancer(
         onProgress?.(25, "Model loaded, upscaling...");
         worker.postMessage({
           type: "upscale",
-          payload: { imageData, id: 0 },
+          payload: { imageData, id: 0 }
         });
       } else if (type === "result") {
         const { imageData: resultData, width, height } = payload;
@@ -142,14 +142,14 @@ export async function runImageEnhancer(
     };
 
     worker.onmessage = handleMessage;
-    worker.onerror = (ev) => {
+    worker.onerror = ev => {
       worker.terminate();
       reject(new Error(ev.message || "Worker error"));
     };
 
     worker.postMessage({
       type: "load",
-      payload: { model, scale, id: 0 },
+      payload: { model, scale, id: 0 }
     });
   });
 }
@@ -160,7 +160,7 @@ export async function runImageEnhancer(
 export async function runBackgroundRemover(
   inputUrl: string,
   params: BackgroundRemoverParams,
-  onProgress?: (progress: number, message?: string) => void,
+  onProgress?: (progress: number, message?: string) => void
 ): Promise<string> {
   const model = (params.model ?? "isnet_fp16") as BgRemoverModel;
   if (!["isnet_quint8", "isnet_fp16", "isnet"].includes(model)) {
@@ -174,7 +174,7 @@ export async function runBackgroundRemover(
 
   const worker = new Worker(
     new URL("../../workers/backgroundRemover.worker.ts", import.meta.url),
-    { type: "module" },
+    { type: "module" }
   );
 
   return new Promise((resolve, reject) => {
@@ -185,7 +185,7 @@ export async function runBackgroundRemover(
           20,
           payload?.phase === "download"
             ? "Downloading model..."
-            : "Removing background...",
+            : "Removing background..."
         );
       } else if (type === "progress") {
         const p = payload?.progress ?? 0;
@@ -209,14 +209,14 @@ export async function runBackgroundRemover(
     };
 
     worker.onmessage = handleMessage;
-    worker.onerror = (ev) => {
+    worker.onerror = ev => {
       worker.terminate();
       reject(new Error(ev.message || "Worker error"));
     };
 
     worker.postMessage({
       type: "process",
-      payload: { imageBlob, model, outputType: "foreground", id: 0 },
+      payload: { imageBlob, model, outputType: "foreground", id: 0 }
     });
   });
 }
@@ -227,7 +227,7 @@ export async function runBackgroundRemover(
 export async function runFaceEnhancer(
   inputUrl: string,
   _params: Record<string, unknown>,
-  onProgress?: (progress: number, message?: string) => void,
+  onProgress?: (progress: number, message?: string) => void
 ): Promise<string> {
   onProgress?.(5, "Loading image...");
   const imageData = await loadImageAsImageData(inputUrl);
@@ -235,7 +235,7 @@ export async function runFaceEnhancer(
 
   const worker = new Worker(
     new URL("../../workers/faceEnhancer.worker.ts", import.meta.url),
-    { type: "module" },
+    { type: "module" }
   );
 
   return new Promise((resolve, reject) => {
@@ -256,10 +256,10 @@ export async function runFaceEnhancer(
               imageData: dataCopy,
               width: imageData.width,
               height: imageData.height,
-              id: 0,
-            },
+              id: 0
+            }
           },
-          { transfer: [dataCopy.buffer] },
+          { transfer: [dataCopy.buffer] }
         );
       } else if (type === "result") {
         const { data, width, height } = payload;
@@ -277,7 +277,7 @@ export async function runFaceEnhancer(
     };
 
     worker.onmessage = handleMessage;
-    worker.onerror = (ev) => {
+    worker.onerror = ev => {
       worker.terminate();
       reject(new Error(ev.message || "Worker error"));
     };
@@ -292,7 +292,7 @@ export async function runFaceEnhancer(
 export async function runVideoEnhancer(
   inputUrl: string,
   params: { model?: string; scale?: string },
-  onProgress?: (progress: number, message?: string) => void,
+  onProgress?: (progress: number, message?: string) => void
 ): Promise<string> {
   const model = (params.model ?? "slim") as ModelType;
   const scale = (params.scale ?? "2x") as ScaleType;
@@ -331,7 +331,7 @@ export async function runVideoEnhancer(
   onProgress?.(2, "Loading upscaler model...");
   const upscalerWorker = new Worker(
     new URL("../../workers/upscaler.worker.ts", import.meta.url),
-    { type: "module" },
+    { type: "module" }
   );
 
   await new Promise<void>((resolve, reject) => {
@@ -347,7 +347,7 @@ export async function runVideoEnhancer(
     upscalerWorker.onmessage = handler;
     upscalerWorker.postMessage({
       type: "load",
-      payload: { model, scale, id: 0 },
+      payload: { model, scale, id: 0 }
     });
   });
 
@@ -367,7 +367,7 @@ export async function runVideoEnhancer(
       upscalerWorker.onmessage = handler;
       upscalerWorker.postMessage({
         type: "upscale",
-        payload: { imageData, id: 0 },
+        payload: { imageData, id: 0 }
       });
     });
   };
@@ -379,28 +379,28 @@ export async function runVideoEnhancer(
       codec: "V_VP9",
       width: outputCanvas.width,
       height: outputCanvas.height,
-      frameRate: targetFps,
+      frameRate: targetFps
     },
-    firstTimestampBehavior: "offset",
+    firstTimestampBehavior: "offset"
   });
 
   const encoder = new VideoEncoder({
     output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
-    error: (e) => console.error("Encoder error:", e),
+    error: e => console.error("Encoder error:", e)
   });
   encoder.configure({
     codec: "vp09.00.10.08",
     width: outputCanvas.width,
     height: outputCanvas.height,
     bitrate: 8_000_000,
-    framerate: targetFps,
+    framerate: targetFps
   });
 
   video.pause();
   for (let i = 0; i < totalFrames; i++) {
     const t = i * frameInterval;
     video.currentTime = t;
-    await new Promise<void>((r) => {
+    await new Promise<void>(r => {
       video.onseeked = () => r();
     });
     sourceCtx.drawImage(video, 0, 0);
@@ -408,11 +408,11 @@ export async function runVideoEnhancer(
       0,
       0,
       video.videoWidth,
-      video.videoHeight,
+      video.videoHeight
     );
     const dataUrl = await upscaleFrame(imageData);
     const img = new Image();
-    await new Promise<void>((r) => {
+    await new Promise<void>(r => {
       img.onload = () => {
         outputCtx.drawImage(img, 0, 0);
         r();
@@ -420,7 +420,7 @@ export async function runVideoEnhancer(
       img.src = dataUrl;
     });
     const frame = new VideoFrame(outputCanvas, {
-      timestamp: Math.round(t * 1_000_000),
+      timestamp: Math.round(t * 1_000_000)
     });
     encoder.encode(frame, { keyFrame: i % 30 === 0 });
     frame.close();
@@ -455,17 +455,17 @@ export async function runFaceSwapper(
   sourceUrl: string,
   targetUrl: string,
   _params: Record<string, unknown>,
-  onProgress?: (progress: number, message?: string) => void,
+  onProgress?: (progress: number, message?: string) => void
 ): Promise<string> {
   onProgress?.(5, "Loading images...");
   const [sourceImageData, targetImageData] = await Promise.all([
     loadImageAsImageData(sourceUrl),
-    loadImageAsImageData(targetUrl),
+    loadImageAsImageData(targetUrl)
   ]);
 
   const worker = new Worker(
     new URL("../../workers/faceSwapper.worker.ts", import.meta.url),
-    { type: "module" },
+    { type: "module" }
   );
 
   const initPromise = new Promise<void>((resolve, reject) => {
@@ -481,7 +481,7 @@ export async function runFaceSwapper(
     worker.onmessage = handler;
     worker.postMessage({
       type: "init",
-      payload: { id: 0, timeout: 600000, enableEnhancement: false },
+      payload: { id: 0, timeout: 600000, enableEnhancement: false }
     });
   });
 
@@ -490,19 +490,17 @@ export async function runFaceSwapper(
 
   const detectFaces = (
     imageData: ImageData,
-    imageId: "source" | "target",
-  ): Promise<
-    Array<{
-      landmarks: number[][];
-      box: {
-        x: number;
-        y: number;
-        width: number;
-        height: number;
-        confidence: number;
-      };
-    }>
-  > => {
+    imageId: "source" | "target"
+  ): Promise<Array<{
+    landmarks: number[][];
+    box: {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      confidence: number;
+    };
+  }>> => {
     return new Promise((resolve, reject) => {
       const float32 = imageDataToFloat32(imageData);
       const id = Math.floor(Math.random() * 1e6);
@@ -524,10 +522,10 @@ export async function runFaceSwapper(
             width: imageData.width,
             height: imageData.height,
             imageId,
-            id,
-          },
+            id
+          }
         },
-        { transfer: [float32.buffer] },
+        { transfer: [float32.buffer] }
       );
     });
   };
@@ -550,7 +548,7 @@ export async function runFaceSwapper(
         const imgData = float32ToImageData(
           data instanceof Float32Array ? data : new Float32Array(data),
           width,
-          height,
+          height
         );
         resolve(imageDataToDataURL(imgData, width, height));
       } else if (e.data.type === "error") {
@@ -572,14 +570,14 @@ export async function runFaceSwapper(
           targetImage: tgtF32,
           targetWidth: targetImageData.width,
           targetHeight: targetImageData.height,
-          targetFaces: targetFaces.map((f) => ({
+          targetFaces: targetFaces.map(f => ({
             landmarks: f.landmarks,
-            box: f.box,
+            box: f.box
           })),
-          id,
-        },
+          id
+        }
       },
-      { transfer: [srcF32.buffer, tgtF32.buffer] },
+      { transfer: [srcF32.buffer, tgtF32.buffer] }
     );
   });
 
@@ -592,7 +590,7 @@ export async function runFaceSwapper(
 async function loadMaskAsFloat32(
   url: string,
   width: number,
-  height: number,
+  height: number
 ): Promise<Float32Array> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Failed to fetch mask: ${res.status}`);
@@ -629,7 +627,7 @@ async function loadMaskAsFloat32(
 
 /** Convert image to Float32Array CHW 0-1 for LaMa */
 async function loadImageAsFloat32CHW(
-  url: string,
+  url: string
 ): Promise<{ data: Float32Array; width: number; height: number }> {
   const imageData = await loadImageAsImageData(url);
   const { data, width, height } = imageData;
@@ -645,17 +643,17 @@ async function loadImageAsFloat32CHW(
 function float32CHWToDataURL(
   data: Float32Array,
   width: number,
-  height: number,
+  height: number
 ): string {
   const imageData = new ImageData(width, height);
   const out = imageData.data;
   for (let i = 0; i < width * height; i++) {
     out[i * 4] = Math.round(Math.min(1, Math.max(0, data[i])) * 255);
     out[i * 4 + 1] = Math.round(
-      Math.min(1, Math.max(0, data[width * height + i])) * 255,
+      Math.min(1, Math.max(0, data[width * height + i])) * 255
     );
     out[i * 4 + 2] = Math.round(
-      Math.min(1, Math.max(0, data[2 * width * height + i])) * 255,
+      Math.min(1, Math.max(0, data[2 * width * height + i])) * 255
     );
     out[i * 4 + 3] = 255;
   }
@@ -673,19 +671,17 @@ export async function runImageEraser(
   imageUrl: string,
   maskUrl: string,
   _params: Record<string, unknown>,
-  onProgress?: (progress: number, message?: string) => void,
+  onProgress?: (progress: number, message?: string) => void
 ): Promise<string> {
   onProgress?.(5, "Loading image and mask...");
-  const {
-    data: imageData,
-    width,
-    height,
-  } = await loadImageAsFloat32CHW(imageUrl);
+  const { data: imageData, width, height } = await loadImageAsFloat32CHW(
+    imageUrl
+  );
   const maskData = await loadMaskAsFloat32(maskUrl, width, height);
 
   const worker = new Worker(
     new URL("../../workers/imageEraser.worker.ts", import.meta.url),
-    { type: "module" },
+    { type: "module" }
   );
 
   return new Promise((resolve, reject) => {
@@ -708,10 +704,10 @@ export async function runImageEraser(
               maskData: maskCopy,
               width,
               height,
-              id: 0,
-            },
+              id: 0
+            }
           },
-          { transfer: [imgCopy.buffer, maskCopy.buffer] },
+          { transfer: [imgCopy.buffer, maskCopy.buffer] }
         );
       } else if (type === "result") {
         const { data, width: w, height: h } = payload;
@@ -728,7 +724,7 @@ export async function runImageEraser(
     };
 
     worker.onmessage = handleMessage;
-    worker.onerror = (ev) => {
+    worker.onerror = ev => {
       worker.terminate();
       reject(new Error(ev.message || "Worker error"));
     };
@@ -757,7 +753,7 @@ export async function runSegmentAnything(
     __previewMask?: string;
     invertMask?: boolean;
   },
-  onProgress?: (progress: number, message?: string) => void,
+  onProgress?: (progress: number, message?: string) => void
 ): Promise<string> {
   const invert = Boolean(params.invertMask);
 
@@ -808,7 +804,7 @@ export async function runSegmentAnything(
           Array.isArray((p as SegmentPointInput).point) &&
           ((p as SegmentPointInput).point as unknown[]).length >= 2 &&
           ((p as SegmentPointInput).label === 0 ||
-            (p as SegmentPointInput).label === 1),
+            (p as SegmentPointInput).label === 1)
       );
     } else {
       points = [];
@@ -824,7 +820,7 @@ export async function runSegmentAnything(
 
   const worker = new Worker(
     new URL("../../workers/segmentAnything.worker.ts", import.meta.url),
-    { type: "module" },
+    { type: "module" }
   );
 
   onProgress?.(10, "Loading model and encoding image...");
@@ -841,15 +837,15 @@ export async function runSegmentAnything(
     worker.onmessage = handler;
     worker.postMessage({
       type: "segment",
-      payload: { id: 0, imageDataUrl: imageUrl },
+      payload: { id: 0, imageDataUrl: imageUrl }
     });
   });
 
   onProgress?.(60, "Decoding mask...");
   const decodeId = 1;
-  const pointsForWorker = points.map((p) => ({
+  const pointsForWorker = points.map(p => ({
     point: p.point as [number, number],
-    label: p.label as 0 | 1,
+    label: p.label as 0 | 1
   }));
   const maskResult = await new Promise<{
     mask: Uint8Array;
@@ -863,7 +859,7 @@ export async function runSegmentAnything(
         resolve({
           mask: new Uint8Array(mask),
           width,
-          height,
+          height
         });
       } else if (e.data.type === "error") {
         worker.removeEventListener("message", handler);
@@ -873,7 +869,7 @@ export async function runSegmentAnything(
     worker.onmessage = handler;
     worker.postMessage({
       type: "decodeMask",
-      payload: { id: decodeId, points: pointsForWorker },
+      payload: { id: decodeId, points: pointsForWorker }
     });
   });
 

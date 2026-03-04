@@ -13,7 +13,7 @@ export const FACE_LABELS = new Set([
   "r_brow",
   "mouth",
   "u_lip",
-  "l_lip",
+  "l_lip"
 ]);
 
 /**
@@ -22,7 +22,7 @@ export const FACE_LABELS = new Set([
 export function featherMask(
   mask: Uint8Array,
   size: number,
-  radius: number,
+  radius: number
 ): Uint8Array {
   const result = new Uint8Array(mask);
 

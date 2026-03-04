@@ -9,13 +9,13 @@ import { Badge } from "@/components/ui/badge";
 import {
   HoverCard,
   HoverCardContent,
-  HoverCardTrigger,
+  HoverCardTrigger
 } from "@/components/ui/hover-card";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuTrigger,
+  DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 import {
   PlayCircle,
@@ -27,7 +27,7 @@ import {
   ArrowDownNarrowWide,
   ArrowUpNarrowWide,
   ChevronDown,
-  RefreshCw,
+  RefreshCw
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -77,7 +77,7 @@ const ModelCard = memo(function ModelCard({
   isFav,
   onSelect,
   onToggleFav,
-  onNewTab,
+  onNewTab
 }: {
   model: {
     model_id: string;
@@ -107,7 +107,7 @@ const ModelCard = memo(function ModelCard({
             <span
               className={cn(
                 "text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 whitespace-nowrap",
-                getTypeColor(model.type),
+                getTypeColor(model.type)
               )}
             >
               {model.type}
@@ -127,7 +127,7 @@ const ModelCard = memo(function ModelCard({
                   size="sm"
                   variant="ghost"
                   className="h-6 w-6 p-0"
-                  onClick={(e) => e.stopPropagation()}
+                  onClick={e => e.stopPropagation()}
                 >
                   <Info className="h-3 w-3" />
                 </Button>
@@ -170,12 +170,12 @@ const ModelCard = memo(function ModelCard({
               size="sm"
               variant="ghost"
               className="h-6 w-6 p-0"
-              onClick={(e) => onToggleFav(e, model.model_id)}
+              onClick={e => onToggleFav(e, model.model_id)}
             >
               <Star
                 className={cn(
                   "h-3 w-3",
-                  isFav && "fill-yellow-400 text-yellow-400",
+                  isFav && "fill-yellow-400 text-yellow-400"
                 )}
               />
             </Button>
@@ -183,7 +183,7 @@ const ModelCard = memo(function ModelCard({
               size="sm"
               variant="ghost"
               className="h-6 w-6 p-0"
-              onClick={(e) => {
+              onClick={e => {
                 e.stopPropagation();
                 onSelect(model.model_id);
               }}
@@ -194,7 +194,7 @@ const ModelCard = memo(function ModelCard({
               size="sm"
               variant="ghost"
               className="h-6 w-6 p-0"
-              onClick={(e) => onNewTab(e, model.model_id)}
+              onClick={e => onNewTab(e, model.model_id)}
             >
               <ExternalLink className="h-3 w-3" />
             </Button>
@@ -207,7 +207,7 @@ const ModelCard = memo(function ModelCard({
 
 export function ExplorePanel({
   onSelectModel,
-  externalSearch,
+  externalSearch
 }: ExplorePanelProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -238,7 +238,7 @@ export function ExplorePanel({
 
   const allTypes = useMemo(() => {
     const typeSet = new Set<string>();
-    models.forEach((m) => {
+    models.forEach(m => {
       if (m.type) typeSet.add(m.type);
     });
     return Array.from(typeSet).sort();
@@ -247,19 +247,18 @@ export function ExplorePanel({
   // Filtered + sorted list (synchronous — model list is small enough)
   const filteredModels = useMemo(() => {
     let result = models;
-    if (showFavoritesOnly)
-      result = result.filter((m) => isFavorite(m.model_id));
-    if (typeFilter) result = result.filter((m) => m.type === typeFilter);
+    if (showFavoritesOnly) result = result.filter(m => isFavorite(m.model_id));
+    if (typeFilter) result = result.filter(m => m.type === typeFilter);
     if (search.trim()) {
-      return fuzzySearch(result, search, (m) => [
+      return fuzzySearch(result, search, m => [
         getModelShortName(m.model_id),
-        m.model_id,
-      ]).map((r) => r.item);
+        m.model_id
+      ]).map(r => r.item);
     }
     const sorted = [...result].sort((a, b) => {
       if (sortKey === "name")
         return getModelShortName(a.model_id).localeCompare(
-          getModelShortName(b.model_id),
+          getModelShortName(b.model_id)
         );
       if (sortKey === "price") return (a.base_price ?? 0) - (b.base_price ?? 0);
       return (a.sort_order ?? 9999) - (b.sort_order ?? 9999);
@@ -272,7 +271,7 @@ export function ExplorePanel({
     showFavoritesOnly,
     isFavorite,
     sortKey,
-    sortAsc,
+    sortAsc
   ]);
 
   // Responsive grid columns — use window resize to measure scroll container width
@@ -307,12 +306,10 @@ export function ExplorePanel({
   // Callback ref to assign scrollContainerRef and do initial measurement
   const scrollRefCallback = useCallback(
     (el: HTMLDivElement | null) => {
-      (
-        scrollContainerRef as React.MutableRefObject<HTMLDivElement | null>
-      ).current = el;
+      (scrollContainerRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
       if (el) setCols(calcCols(el.getBoundingClientRect().width));
     },
-    [calcCols],
+    [calcCols]
   );
 
   const rowCount = Math.ceil(filteredModels.length / cols);
@@ -320,7 +317,7 @@ export function ExplorePanel({
     count: rowCount,
     getScrollElement: () => scrollContainerRef.current,
     estimateSize: () => CARD_HEIGHT + GAP,
-    overscan: 5,
+    overscan: 5
   });
 
   const handleToggleFavorite = useCallback(
@@ -328,23 +325,23 @@ export function ExplorePanel({
       e.stopPropagation();
       toggleFavorite(modelId);
     },
-    [toggleFavorite],
+    [toggleFavorite]
   );
 
   const handleOpenInNewTab = useCallback(
     (e: React.MouseEvent, modelId: string) => {
       e.stopPropagation();
-      const model = models.find((m) => m.model_id === modelId);
+      const model = models.find(m => m.model_id === modelId);
       createTab(model);
       navigate(`/playground/${encodeURIComponent(modelId)}`);
     },
-    [models, createTab, navigate],
+    [models, createTab, navigate]
   );
 
   const sortLabels: Record<SortKey, string> = {
     popularity: t("models.popularity", "Popularity"),
     name: t("models.name", "Name"),
-    price: t("models.price", "Price"),
+    price: t("models.price", "Price")
   };
 
   return (
@@ -358,10 +355,10 @@ export function ExplorePanel({
               <input
                 type="text"
                 value={searchInput}
-                onChange={(e) => handleSearchChange(e.target.value)}
+                onChange={e => handleSearchChange(e.target.value)}
                 placeholder={t(
                   "playground.explore.searchPlaceholder",
-                  "Search models...",
+                  "Search models..."
                 )}
                 className="w-full h-[34px] pl-9 pr-8 rounded-lg border border-border bg-muted/40 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/30 transition-all"
               />
@@ -380,14 +377,14 @@ export function ExplorePanel({
               className={cn(
                 "h-[34px] w-[34px] p-0 shrink-0 border border-border",
                 showFavoritesOnly &&
-                  "bg-yellow-500/10 border-yellow-500/30 text-yellow-500",
+                  "bg-yellow-500/10 border-yellow-500/30 text-yellow-500"
               )}
               onClick={() => setShowFavoritesOnly(!showFavoritesOnly)}
             >
               <Star
                 className={cn(
                   "h-4 w-4",
-                  showFavoritesOnly && "fill-yellow-400 text-yellow-400",
+                  showFavoritesOnly && "fill-yellow-400 text-yellow-400"
                 )}
               />
             </Button>
@@ -403,13 +400,13 @@ export function ExplorePanel({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="min-w-[120px]">
-                {(Object.keys(sortLabels) as SortKey[]).map((key) => (
+                {(Object.keys(sortLabels) as SortKey[]).map(key => (
                   <DropdownMenuItem
                     key={key}
                     onClick={() => setSortKey(key)}
                     className={cn(
                       "text-xs",
-                      sortKey === key && "font-semibold text-primary",
+                      sortKey === key && "font-semibold text-primary"
                     )}
                   >
                     {sortLabels[key]}
@@ -460,10 +457,10 @@ export function ExplorePanel({
             {showFavoritesOnly
               ? t("playground.explore.favorites", "Favorites")
               : search
-                ? t("playground.explore.searchResults", "{{count}} results", {
-                    count: filteredModels.length,
-                  })
-                : t("playground.explore.allModels", "All Models")}
+              ? t("playground.explore.searchResults", "{{count}} results", {
+                  count: filteredModels.length
+                })
+              : t("playground.explore.allModels", "All Models")}
           </h3>
           <div className="flex gap-1.5 flex-wrap mb-3">
             <button
@@ -472,12 +469,12 @@ export function ExplorePanel({
                 "text-xs px-2.5 py-1 rounded-full font-medium transition-colors whitespace-nowrap",
                 !typeFilter
                   ? "bg-primary text-primary-foreground"
-                  : "bg-muted text-muted-foreground hover:text-foreground",
+                  : "bg-muted text-muted-foreground hover:text-foreground"
               )}
             >
               {t("playground.explore.all", "All")}
             </button>
-            {allTypes.map((type) => (
+            {allTypes.map(type => (
               <button
                 key={type}
                 onClick={() => setTypeFilter(typeFilter === type ? null : type)}
@@ -485,7 +482,7 @@ export function ExplorePanel({
                   "text-xs px-2.5 py-1 rounded-full font-medium transition-colors whitespace-nowrap",
                   typeFilter === type
                     ? "ring-1 ring-current " + getTypeColor(type)
-                    : getTypeColor(type) + " hover:opacity-80",
+                    : getTypeColor(type) + " hover:opacity-80"
                 )}
               >
                 {type}
@@ -498,7 +495,7 @@ export function ExplorePanel({
               {showFavoritesOnly
                 ? t(
                     "playground.explore.noFavorites",
-                    "No favorites yet — star a model to save it here",
+                    "No favorites yet — star a model to save it here"
                   )
                 : t("models.noResults", "No models found")}
             </div>
@@ -507,13 +504,13 @@ export function ExplorePanel({
               key={cols}
               style={{
                 height: `${rowVirtualizer.getTotalSize()}px`,
-                position: "relative",
+                position: "relative"
               }}
             >
-              {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+              {rowVirtualizer.getVirtualItems().map(virtualRow => {
                 const rowModels = filteredModels.slice(
                   virtualRow.index * cols,
-                  virtualRow.index * cols + cols,
+                  virtualRow.index * cols + cols
                 );
                 return (
                   <div
@@ -527,10 +524,10 @@ export function ExplorePanel({
                       transform: `translateY(${virtualRow.start}px)`,
                       display: "grid",
                       gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
-                      gap: `${GAP}px`,
+                      gap: `${GAP}px`
                     }}
                   >
-                    {rowModels.map((model) => (
+                    {rowModels.map(model => (
                       <ModelCard
                         key={model.model_id}
                         model={model}

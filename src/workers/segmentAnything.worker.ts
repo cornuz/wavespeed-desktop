@@ -3,7 +3,7 @@ import {
   SamModel,
   AutoProcessor,
   RawImage,
-  Tensor,
+  Tensor
 } from "@huggingface/transformers";
 
 env.allowLocalModels = false;
@@ -74,9 +74,9 @@ async function loadModel(id: number): Promise<void> {
       const totals = Object.values(fileProgress).reduce(
         (acc, f) => ({
           loaded: acc.loaded + f.loaded,
-          total: acc.total + f.total,
+          total: acc.total + f.total
         }),
-        { loaded: 0, total: 0 },
+        { loaded: 0, total: 0 }
       );
       if (totals.total > 0) {
         self.postMessage({
@@ -87,10 +87,10 @@ async function loadModel(id: number): Promise<void> {
             detail: {
               current: totals.loaded,
               total: totals.total,
-              unit: "bytes",
+              unit: "bytes"
             },
-            id,
-          },
+            id
+          }
         });
       }
     }
@@ -102,31 +102,31 @@ async function loadModel(id: number): Promise<void> {
       SamModel.from_pretrained(MODEL_ID, {
         dtype,
         device,
-        progress_callback,
+        progress_callback
       } as Parameters<typeof SamModel.from_pretrained>[1]),
-      AutoProcessor.from_pretrained(MODEL_ID, { progress_callback }),
+      AutoProcessor.from_pretrained(MODEL_ID, { progress_callback })
     ]);
   } catch (e) {
     if (device === "webgpu") {
       const errorMsg = e instanceof Error ? e.message : String(e);
       console.warn(
-        `WebGPU model loading failed, falling back to WASM. Reason: ${errorMsg}`,
+        `WebGPU model loading failed, falling back to WASM. Reason: ${errorMsg}`
       );
       device = "wasm";
       [model, processor] = await Promise.all([
         SamModel.from_pretrained(MODEL_ID, {
           dtype: "fp32",
           device: "wasm",
-          progress_callback,
+          progress_callback
         } as Parameters<typeof SamModel.from_pretrained>[1]),
-        AutoProcessor.from_pretrained(MODEL_ID, { progress_callback }),
+        AutoProcessor.from_pretrained(MODEL_ID, { progress_callback })
       ]);
     } else throw e;
   }
 
   self.postMessage({
     type: "progress",
-    payload: { phase: "download", progress: 100, id },
+    payload: { phase: "download", progress: 100, id }
   });
   self.postMessage({ type: "ready", payload: { id, device } });
 }
@@ -138,28 +138,26 @@ async function segmentImage(id: number, imageDataUrl: string): Promise<void> {
   self.postMessage({ type: "phase", payload: { phase: "process", id } });
   self.postMessage({
     type: "progress",
-    payload: { phase: "process", progress: 0, id },
+    payload: { phase: "process", progress: 0, id }
   });
 
   const image = await RawImage.read(imageDataUrl);
-  imageInputs = await (
-    processor as unknown as (img: RawImage) => Promise<typeof imageInputs>
-  )(image);
+  imageInputs = await ((processor as unknown) as (
+    img: RawImage
+  ) => Promise<typeof imageInputs>)(image);
   self.postMessage({
     type: "progress",
-    payload: { phase: "process", progress: 50, id },
+    payload: { phase: "process", progress: 50, id }
   });
 
-  imageEmbeddings = await (
-    model as unknown as {
-      get_image_embeddings: (
-        i: typeof imageInputs,
-      ) => Promise<Record<string, Tensor>>;
-    }
-  ).get_image_embeddings(imageInputs);
+  imageEmbeddings = await ((model as unknown) as {
+    get_image_embeddings: (
+      i: typeof imageInputs
+    ) => Promise<Record<string, Tensor>>;
+  }).get_image_embeddings(imageInputs);
   self.postMessage({
     type: "progress",
-    payload: { phase: "process", progress: 100, id },
+    payload: { phase: "process", progress: 100, id }
   });
   self.postMessage({ type: "segmented", payload: { id } });
 }
@@ -171,41 +169,37 @@ async function decodeMask(id: number, points: PointPrompt[]): Promise<void> {
 
   const [reshaped, original] = [
     imageInputs.reshaped_input_sizes[0],
-    imageInputs.original_sizes[0],
+    imageInputs.original_sizes[0]
   ];
   const inputPoints = new Tensor(
     "float32",
-    points.flatMap((p) => [p.point[0] * reshaped[1], p.point[1] * reshaped[0]]),
-    [1, 1, points.length, 2],
+    points.flatMap(p => [p.point[0] * reshaped[1], p.point[1] * reshaped[0]]),
+    [1, 1, points.length, 2]
   );
   const inputLabels = new Tensor(
     "int64",
-    points.map((p) => BigInt(p.label)),
-    [1, 1, points.length],
+    points.map(p => BigInt(p.label)),
+    [1, 1, points.length]
   );
 
-  const outputs = await (
-    model as unknown as (
-      i: Record<string, Tensor>,
-    ) => Promise<{ pred_masks: Tensor; iou_scores: Tensor }>
-  )({
+  const outputs = await ((model as unknown) as (
+    i: Record<string, Tensor>
+  ) => Promise<{ pred_masks: Tensor; iou_scores: Tensor }>)({
     ...imageEmbeddings,
     input_points: inputPoints,
-    input_labels: inputLabels,
+    input_labels: inputLabels
   });
 
-  const masks = await (
-    processor as unknown as {
-      post_process_masks: (
-        m: Tensor,
-        o: [number, number][],
-        r: [number, number][],
-      ) => Promise<Tensor[][]>;
-    }
-  ).post_process_masks(
+  const masks = await ((processor as unknown) as {
+    post_process_masks: (
+      m: Tensor,
+      o: [number, number][],
+      r: [number, number][]
+    ) => Promise<Tensor[][]>;
+  }).post_process_masks(
     outputs.pred_masks,
     imageInputs.original_sizes,
-    imageInputs.reshaped_input_sizes,
+    imageInputs.reshaped_input_sizes
   );
 
   const maskBuffer = (masks[0][0].data as Uint8Array).buffer.slice(0);
@@ -220,10 +214,10 @@ async function decodeMask(id: number, points: PointPrompt[]): Promise<void> {
         width: original[1],
         height: original[0],
         scores: scoresBuffer,
-        id,
-      },
+        id
+      }
     },
-    { transfer: [maskBuffer, scoresBuffer] },
+    { transfer: [maskBuffer, scoresBuffer] }
   );
 }
 
@@ -256,7 +250,7 @@ self.onmessage = async (e: MessageEvent) => {
   } catch (error) {
     self.postMessage({
       type: "error",
-      payload: { message: (error as Error).message, id },
+      payload: { message: (error as Error).message, id }
     });
   }
 };

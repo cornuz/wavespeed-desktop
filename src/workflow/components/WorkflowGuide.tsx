@@ -31,7 +31,7 @@ export function useWorkflowGuide() {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    persistentStorage.get<string>(GUIDE_COMPLETED_KEY).then((v) => {
+    persistentStorage.get<string>(GUIDE_COMPLETED_KEY).then(v => {
       if (v !== "1") setOpen(true);
     });
   }, []);
@@ -70,47 +70,47 @@ function buildSteps(actions: {
     {
       key: "welcome",
       target: null,
-      side: "bottom",
+      side: "bottom"
     },
     {
       key: "nodePaletteBtn",
       target: '[data-guide="node-palette-btn"]',
       side: "right",
-      prepare: actions.closeNodePalette,
+      prepare: actions.closeNodePalette
     },
     {
       key: "nodePalette",
       target: '[data-guide="node-palette"]',
       side: "right",
-      prepare: actions.openNodePalette,
+      prepare: actions.openNodePalette
     },
     {
       key: "aiTask",
       target: '[data-guide="node-palette"]',
       side: "right",
-      showAIFeatures: true,
+      showAIFeatures: true
     },
     {
       key: "canvas",
       target: '[data-guide="canvas"]',
       side: "top",
-      prepare: actions.closeNodePalette,
+      prepare: actions.closeNodePalette
     },
     {
       key: "canvasTools",
       target: '[data-guide="canvas-tools"]',
-      side: "left",
+      side: "left"
     },
     {
       key: "run",
       target: '[data-guide="run-controls"]',
-      side: "bottom",
+      side: "bottom"
     },
     {
       key: "moreMenu",
       target: '[data-guide="toolbar-more"]',
-      side: "right",
-    },
+      side: "right"
+    }
   ];
 }
 
@@ -154,7 +154,7 @@ function buildOverlayPath(
   vw: number,
   vh: number,
   cutout: Rect | null,
-  radius: number,
+  radius: number
 ): string {
   // Outer rect (clockwise)
   const outer = `M0,0 H${vw} V${vh} H0 Z`;
@@ -174,7 +174,7 @@ function buildOverlayPath(
     `A${r},${r} 0 0 1 ${x},${y + h - r}`,
     `V${y + r}`,
     `A${r},${r} 0 0 1 ${x + r},${y}`,
-    "Z",
+    "Z"
   ].join(" ");
 
   return `${outer} ${inner}`;
@@ -195,14 +195,14 @@ function computePopoverPos(
   targetRect: Rect | null,
   side: PopoverSide,
   vw: number,
-  vh: number,
+  vh: number
 ): PopoverPos {
   // No target → center of screen
   if (!targetRect) {
     return {
       top: Math.max(40, (vh - POPOVER_EST_HEIGHT) / 2),
       left: (vw - POPOVER_WIDTH) / 2,
-      actualSide: "bottom",
+      actualSide: "bottom"
     };
   }
 
@@ -243,7 +243,7 @@ function computePopoverPos(
       x: left,
       y: top,
       w: POPOVER_WIDTH,
-      h: POPOVER_EST_HEIGHT,
+      h: POPOVER_EST_HEIGHT
     };
     if (!rectsOverlap(popRect, padded) || s === tryOrder[tryOrder.length - 1]) {
       return { top, left, actualSide: s };
@@ -272,14 +272,14 @@ interface WorkflowGuideProps {
 export function WorkflowGuide({
   open,
   onClose,
-  onStepChange,
+  onStepChange
 }: WorkflowGuideProps) {
   const { t } = useTranslation();
   const [step, setStep] = useState(0);
   const [targetRect, setTargetRect] = useState<Rect | null>(null);
   const [viewportSize, setViewportSize] = useState({
     w: window.innerWidth,
-    h: window.innerHeight,
+    h: window.innerHeight
   });
 
   const steps = useMemo(
@@ -287,7 +287,7 @@ export function WorkflowGuide({
       buildSteps({
         openNodePalette: () => {
           const btn = document.querySelector(
-            '[data-guide="node-palette-btn"]',
+            '[data-guide="node-palette-btn"]'
           ) as HTMLElement | null;
           // If palette is not visible, click the button to open it
           const palette = document.querySelector('[data-guide="node-palette"]');
@@ -297,12 +297,12 @@ export function WorkflowGuide({
           // If palette is visible, we want it closed for this step
           const palette = document.querySelector('[data-guide="node-palette"]');
           const btn = document.querySelector(
-            '[data-guide="node-palette-btn"]',
+            '[data-guide="node-palette-btn"]'
           ) as HTMLElement | null;
           if (palette && btn) btn.click();
-        },
+        }
       }),
-    [],
+    []
   );
 
   const total = steps.length;
@@ -346,12 +346,12 @@ export function WorkflowGuide({
       }
       if (e.key === "ArrowRight" || e.key === "Enter") {
         e.preventDefault();
-        if (step < total - 1) setStep((s) => s + 1);
+        if (step < total - 1) setStep(s => s + 1);
         else onClose();
       }
       if (e.key === "ArrowLeft") {
         e.preventDefault();
-        if (step > 0) setStep((s) => s - 1);
+        if (step > 0) setStep(s => s - 1);
       }
     };
     window.addEventListener("keydown", handler);
@@ -361,7 +361,7 @@ export function WorkflowGuide({
   // When opening: start at step 0 (welcome) only if welcome was never shown; otherwise start at step 1 so welcome appears only once
   useEffect(() => {
     if (!open) return;
-    persistentStorage.get<string>(GUIDE_WELCOME_SHOWN_KEY).then((v) => {
+    persistentStorage.get<string>(GUIDE_WELCOME_SHOWN_KEY).then(v => {
       setStep(v === "1" ? 1 : 0);
     });
   }, [open]);
@@ -409,9 +409,9 @@ export function WorkflowGuide({
           fillRule="evenodd"
           style={{
             transition: "d 0.3s ease-in-out",
-            pointerEvents: "auto",
+            pointerEvents: "auto"
           }}
-          onClick={(e) => e.stopPropagation()}
+          onClick={e => e.stopPropagation()}
         />
         {/* Highlight border around cutout for dark mode visibility */}
         {cutout && cutout.w > 0 && cutout.h > 0 && (
@@ -427,7 +427,7 @@ export function WorkflowGuide({
             strokeWidth={2}
             style={{
               transition:
-                "x 0.3s ease-in-out, y 0.3s ease-in-out, width 0.3s ease-in-out, height 0.3s ease-in-out",
+                "x 0.3s ease-in-out, y 0.3s ease-in-out, width 0.3s ease-in-out, height 0.3s ease-in-out"
             }}
           />
         )}
@@ -437,7 +437,7 @@ export function WorkflowGuide({
       <div
         className="absolute inset-0"
         style={{ pointerEvents: "auto" }}
-        onClick={(e) => {
+        onClick={e => {
           // Only close if clicking the dark overlay area, not the cutout
           if (!cutout) return;
           const { clientX: mx, clientY: my } = e;
@@ -459,7 +459,7 @@ export function WorkflowGuide({
           width: POPOVER_WIDTH,
           maxHeight: `calc(100vh - ${popPos.top + 16}px)`,
           pointerEvents: "auto",
-          transition: "top 0.3s ease-in-out, left 0.3s ease-in-out",
+          transition: "top 0.3s ease-in-out, left 0.3s ease-in-out"
         }}
       >
         {/* Content — scrollable */}
@@ -473,14 +473,12 @@ export function WorkflowGuide({
           {/* AI Task feature highlights */}
           {current.showAIFeatures && (
             <ul className="mt-3 space-y-1.5">
-              {(
-                [
-                  "modelSwitch",
-                  "dynamicParams",
-                  "costEstimate",
-                  "upstream",
-                ] as const
-              ).map((k) => (
+              {([
+                "modelSwitch",
+                "dynamicParams",
+                "costEstimate",
+                "upstream"
+              ] as const).map(k => (
                 <li
                   key={k}
                   className="flex items-start gap-2 text-xs text-muted-foreground"
@@ -505,8 +503,8 @@ export function WorkflowGuide({
                   i === step
                     ? "bg-primary w-4"
                     : i < step
-                      ? "bg-primary/50"
-                      : "bg-muted-foreground/30 hover:bg-muted-foreground/50"
+                    ? "bg-primary/50"
+                    : "bg-muted-foreground/30 hover:bg-muted-foreground/50"
                 }`}
                 aria-label={`Step ${i + 1}`}
               />
@@ -525,7 +523,7 @@ export function WorkflowGuide({
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setStep((s) => s - 1)}
+                onClick={() => setStep(s => s - 1)}
               >
                 {t("workflow.guide.prev", "Back")}
               </Button>
@@ -533,7 +531,7 @@ export function WorkflowGuide({
             <Button
               size="sm"
               onClick={() => {
-                if (step < total - 1) setStep((s) => s + 1);
+                if (step < total - 1) setStep(s => s + 1);
                 else onClose();
               }}
             >

@@ -9,7 +9,7 @@ import {
   AUDIO_FORMATS,
   AUDIO_BITRATES,
   getAudioFormat,
-  formatDuration,
+  formatDuration
 } from "@/lib/ffmpegFormats";
 import { formatBytes } from "@/types/progress";
 import { Button } from "@/components/ui/button";
@@ -19,7 +19,7 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
+  SelectValue
 } from "@/components/ui/select";
 import {
   AlertDialog,
@@ -29,7 +29,7 @@ import {
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
-  AlertDialogTitle,
+  AlertDialogTitle
 } from "@/components/ui/alert-dialog";
 import {
   ArrowLeft,
@@ -37,14 +37,14 @@ import {
   Download,
   Loader2,
   FileAudio,
-  RefreshCw,
+  RefreshCw
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // Phase configuration for audio converter
 const PHASES = [
   { id: "download", labelKey: "freeTools.ffmpeg.loading", weight: 0.1 },
-  { id: "process", labelKey: "freeTools.ffmpeg.converting", weight: 0.9 },
+  { id: "process", labelKey: "freeTools.ffmpeg.converting", weight: 0.9 }
 ];
 
 export function AudioConverterPage() {
@@ -75,11 +75,11 @@ export function AudioConverterPage() {
     updatePhase,
     reset: resetProgress,
     resetAndStart,
-    complete: completeAllPhases,
+    complete: completeAllPhases
   } = useMultiPhaseProgress({ phases: PHASES });
 
   const { convert, hasFailed, retryWorker } = useFFmpegWorker({
-    onPhase: (phase) => {
+    onPhase: phase => {
       if (phase === "download") {
         startPhase("download");
       } else if (phase === "process") {
@@ -90,12 +90,12 @@ export function AudioConverterPage() {
       const phaseId = phase === "download" ? "download" : "process";
       updatePhase(phaseId, progressValue, detail);
     },
-    onError: (err) => {
+    onError: err => {
       console.error("Worker error:", err);
       setError(err);
       setIsProcessing(false);
       resetProgress();
-    },
+    }
   });
 
   const handleRetry = useCallback(() => {
@@ -145,7 +145,7 @@ export function AudioConverterPage() {
         setAudioDuration(audio.duration);
       });
     },
-    [audioUrl, convertedUrl, resetProgress],
+    [audioUrl, convertedUrl, resetProgress]
   );
 
   const handleDrop = useCallback(
@@ -158,7 +158,7 @@ export function AudioConverterPage() {
       const file = e.dataTransfer.files[0];
       if (file) handleFileSelect(file);
     },
-    [handleFileSelect, isProcessing],
+    [handleFileSelect, isProcessing]
   );
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -208,8 +208,8 @@ export function AudioConverterPage() {
         format.ext,
         {
           audioCodec: format.codec,
-          audioBitrate: bitrate,
-        },
+          audioBitrate: bitrate
+        }
       );
 
       // Create blob and URL
@@ -233,7 +233,7 @@ export function AudioConverterPage() {
     const format = getAudioFormat(outputFormat);
     const filename = audioFile.name.replace(
       /\.[^.]+$/,
-      `.${format?.ext || outputFormat}`,
+      `.${format?.ext || outputFormat}`
     );
 
     const link = document.createElement("a");
@@ -288,7 +288,7 @@ export function AudioConverterPage() {
             "border-2 border-dashed cursor-pointer transition-colors",
             isDragging
               ? "border-primary bg-primary/5"
-              : "border-muted-foreground/25 hover:border-primary/50",
+              : "border-muted-foreground/25 hover:border-primary/50"
           )}
           onClick={() => fileInputRef.current?.click()}
         >
@@ -314,7 +314,7 @@ export function AudioConverterPage() {
         type="file"
         accept="audio/*,.mp3,.m4a,.ogg,.wav,.flac,.aac,.wma"
         className="hidden"
-        onChange={(e) => {
+        onChange={e => {
           const file = e.target.files?.[0];
           if (file) handleFileSelect(file);
           e.target.value = "";
@@ -344,7 +344,7 @@ export function AudioConverterPage() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {AUDIO_FORMATS.map((format) => (
+                {AUDIO_FORMATS.map(format => (
                   <SelectItem key={format.id} value={format.id}>
                     {format.label}
                   </SelectItem>
@@ -364,7 +364,7 @@ export function AudioConverterPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {AUDIO_BITRATES.map((br) => (
+                    {AUDIO_BITRATES.map(br => (
                       <SelectItem key={br.id} value={br.value}>
                         {br.label}
                       </SelectItem>

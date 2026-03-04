@@ -16,7 +16,7 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
+  SelectValue
 } from "@/components/ui/select";
 import {
   AlertDialog,
@@ -26,7 +26,7 @@ import {
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
-  AlertDialogTitle,
+  AlertDialogTitle
 } from "@/components/ui/alert-dialog";
 import {
   ArrowLeft,
@@ -36,7 +36,7 @@ import {
   FileImage,
   X,
   RefreshCw,
-  Trash2,
+  Trash2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -57,7 +57,7 @@ interface ConvertedImage {
 // Phase configuration for image converter
 const PHASES = [
   { id: "download", labelKey: "freeTools.ffmpeg.loading", weight: 0.1 },
-  { id: "process", labelKey: "freeTools.ffmpeg.converting", weight: 0.9 },
+  { id: "process", labelKey: "freeTools.ffmpeg.converting", weight: 0.9 }
 ];
 
 export function ImageConverterPage() {
@@ -85,11 +85,11 @@ export function ImageConverterPage() {
     updatePhase,
     reset: resetProgress,
     resetAndStart,
-    complete: completeAllPhases,
+    complete: completeAllPhases
   } = useMultiPhaseProgress({ phases: PHASES });
 
   const { convert, hasFailed, retryWorker } = useFFmpegWorker({
-    onPhase: (phase) => {
+    onPhase: phase => {
       if (phase === "download") {
         startPhase("download");
       } else if (phase === "process") {
@@ -104,15 +104,15 @@ export function ImageConverterPage() {
       updatePhase(
         phaseId,
         phaseId === "process" ? batchProgress : progressValue,
-        detail,
+        detail
       );
     },
-    onError: (err) => {
+    onError: err => {
       console.error("Worker error:", err);
       setError(err);
       setIsProcessing(false);
       resetProgress();
-    },
+    }
   });
 
   const handleRetry = useCallback(() => {
@@ -140,20 +140,22 @@ export function ImageConverterPage() {
       setError(null);
       const newImages: ImageFile[] = [];
 
-      Array.from(files).forEach((file) => {
+      Array.from(files).forEach(file => {
         if (!file.type.startsWith("image/")) return;
 
-        const id = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        const id = `${Date.now()}-${Math.random()
+          .toString(36)
+          .substr(2, 9)}`;
         const preview = URL.createObjectURL(file);
 
         const img = new Image();
         img.onload = () => {
-          setImages((prev) =>
-            prev.map((item) =>
+          setImages(prev =>
+            prev.map(item =>
               item.id === id
                 ? { ...item, size: { width: img.width, height: img.height } }
-                : item,
-            ),
+                : item
+            )
           );
         };
         img.src = preview;
@@ -161,29 +163,29 @@ export function ImageConverterPage() {
         newImages.push({ id, file, preview, size: null });
       });
 
-      setImages((prev) => [...prev, ...newImages]);
+      setImages(prev => [...prev, ...newImages]);
       setConvertedImages([]);
       resetProgress();
     },
-    [resetProgress],
+    [resetProgress]
   );
 
   const handleRemoveImage = useCallback((id: string) => {
-    setImages((prev) => {
-      const image = prev.find((img) => img.id === id);
+    setImages(prev => {
+      const image = prev.find(img => img.id === id);
       if (image) URL.revokeObjectURL(image.preview);
-      return prev.filter((img) => img.id !== id);
+      return prev.filter(img => img.id !== id);
     });
-    setConvertedImages((prev) => {
-      const converted = prev.find((img) => img.id === id);
+    setConvertedImages(prev => {
+      const converted = prev.find(img => img.id === id);
       if (converted) URL.revokeObjectURL(converted.url);
-      return prev.filter((img) => img.id !== id);
+      return prev.filter(img => img.id !== id);
     });
   }, []);
 
   const handleClearAll = useCallback(() => {
-    images.forEach((img) => URL.revokeObjectURL(img.preview));
-    convertedImages.forEach((img) => URL.revokeObjectURL(img.url));
+    images.forEach(img => URL.revokeObjectURL(img.preview));
+    convertedImages.forEach(img => URL.revokeObjectURL(img.url));
     setImages([]);
     setConvertedImages([]);
     resetProgress();
@@ -200,7 +202,7 @@ export function ImageConverterPage() {
         handleFileSelect(e.dataTransfer.files);
       }
     },
-    [handleFileSelect, isProcessing],
+    [handleFileSelect, isProcessing]
   );
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -253,7 +255,7 @@ export function ImageConverterPage() {
           image.file.name,
           outputFormat,
           format.ext,
-          format.supportsQuality ? { quality } : undefined,
+          format.supportsQuality ? { quality } : undefined
         );
 
         // Create blob and URL
@@ -288,7 +290,7 @@ export function ImageConverterPage() {
     // For multiple files, download each one with a small delay
     for (const converted of convertedImages) {
       handleDownload(converted);
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await new Promise(resolve => setTimeout(resolve, 200));
     }
   };
 
@@ -336,7 +338,7 @@ export function ImageConverterPage() {
             "border-2 border-dashed cursor-pointer transition-colors",
             isDragging
               ? "border-primary bg-primary/5"
-              : "border-muted-foreground/25 hover:border-primary/50",
+              : "border-muted-foreground/25 hover:border-primary/50"
           )}
           onClick={() => fileInputRef.current?.click()}
         >
@@ -363,7 +365,7 @@ export function ImageConverterPage() {
         accept="image/*"
         multiple
         className="hidden"
-        onChange={(e) => {
+        onChange={e => {
           if (e.target.files) handleFileSelect(e.target.files);
           e.target.value = "";
         }}
@@ -392,7 +394,7 @@ export function ImageConverterPage() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {IMAGE_FORMATS.map((format) => (
+                {IMAGE_FORMATS.map(format => (
                   <SelectItem key={format.id} value={format.id}>
                     {format.label}
                   </SelectItem>
@@ -475,8 +477,8 @@ export function ImageConverterPage() {
 
           {/* Image grid */}
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-            {images.map((image) => {
-              const converted = convertedImages.find((c) => c.id === image.id);
+            {images.map(image => {
+              const converted = convertedImages.find(c => c.id === image.id);
               return (
                 <Card key={image.id} className="overflow-hidden group relative">
                   <CardContent className="p-0">

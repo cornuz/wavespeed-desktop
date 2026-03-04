@@ -7,12 +7,12 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
+  DialogFooter
 } from "@/components/ui/dialog";
 import {
   Tooltip,
   TooltipContent,
-  TooltipTrigger,
+  TooltipTrigger
 } from "@/components/ui/tooltip";
 import {
   Paintbrush,
@@ -22,14 +22,14 @@ import {
   Trash2,
   Undo2,
   Redo2,
-  Loader2,
+  Loader2
 } from "lucide-react";
 import {
   floodFill,
   invertMask,
   clearCanvas,
   canvasToBlob,
-  extractVideoFrame,
+  extractVideoFrame
 } from "@/lib/maskUtils";
 
 type Tool = "brush" | "eraser" | "fill";
@@ -47,7 +47,7 @@ export function MaskEditor({
   referenceVideoUrl,
   onComplete,
   onClose,
-  disabled = false,
+  disabled = false
 }: MaskEditorProps) {
   const { t } = useTranslation();
 
@@ -65,10 +65,10 @@ export function MaskEditor({
   const [isLoading, setIsLoading] = useState(true);
   const [canvasSize, setCanvasSize] = useState({ width: 512, height: 512 });
   const [referenceImage, setReferenceImage] = useState<HTMLImageElement | null>(
-    null,
+    null
   );
   const [cursorPos, setCursorPos] = useState<{ x: number; y: number } | null>(
-    null,
+    null
   );
 
   // Last position for smooth line drawing
@@ -111,7 +111,7 @@ export function MaskEditor({
 
           setCanvasSize({
             width: Math.round(width),
-            height: Math.round(height),
+            height: Math.round(height)
           });
           setIsLoading(false);
         };
@@ -150,7 +150,7 @@ export function MaskEditor({
         0,
         0,
         canvasSize.width,
-        canvasSize.height,
+        canvasSize.height
       );
     } else {
       // Checkerboard pattern for transparency indication
@@ -174,7 +174,7 @@ export function MaskEditor({
       0,
       0,
       canvasSize.width,
-      canvasSize.height,
+      canvasSize.height
     );
     setHistory([initialState]);
     setHistoryIndex(0);
@@ -189,10 +189,10 @@ export function MaskEditor({
       0,
       0,
       canvasSize.width,
-      canvasSize.height,
+      canvasSize.height
     );
 
-    setHistory((prev) => {
+    setHistory(prev => {
       // Remove any future history if we're not at the end
       const newHistory = prev.slice(0, historyIndex + 1);
       newHistory.push(imageData);
@@ -204,7 +204,7 @@ export function MaskEditor({
       }
       return newHistory;
     });
-    setHistoryIndex((prev) => Math.min(prev + 1, 49));
+    setHistoryIndex(prev => Math.min(prev + 1, 49));
   }, [historyIndex, canvasSize]);
 
   // Undo
@@ -242,7 +242,7 @@ export function MaskEditor({
 
     return {
       x: (clientX - rect.left) * scaleX,
-      y: (clientY - rect.top) * scaleY,
+      y: (clientY - rect.top) * scaleY
     };
   }, []);
 
@@ -254,7 +254,7 @@ export function MaskEditor({
     const rect = canvas.getBoundingClientRect();
     return {
       x: clientX - rect.left,
-      y: clientY - rect.top,
+      y: clientY - rect.top
     };
   }, []);
 
@@ -283,7 +283,7 @@ export function MaskEditor({
         maskCtx.fill();
       }
     },
-    [tool, brushSize],
+    [tool, brushSize]
   );
 
   // Shared pointer-down logic
@@ -300,7 +300,10 @@ export function MaskEditor({
 
         saveHistorySnapshot();
         const fillColor: [number, number, number, number] = [
-          255, 255, 255, 255,
+          255,
+          255,
+          255,
+          255
         ];
         floodFill(maskCtx, coords.x, coords.y, fillColor);
         saveHistorySnapshot();
@@ -311,7 +314,7 @@ export function MaskEditor({
       lastPosRef.current = coords;
       drawAt(coords.x, coords.y);
     },
-    [disabled, tool, getCanvasCoords, drawAt, saveHistorySnapshot],
+    [disabled, tool, getCanvasCoords, drawAt, saveHistorySnapshot]
   );
 
   // Shared pointer-move logic
@@ -331,7 +334,7 @@ export function MaskEditor({
       drawAt(coords.x, coords.y, lastPos?.x, lastPos?.y);
       lastPosRef.current = coords;
     },
-    [isDrawing, tool, getCanvasCoords, getDisplayCoords, drawAt],
+    [isDrawing, tool, getCanvasCoords, getDisplayCoords, drawAt]
   );
 
   // Shared pointer-up logic
@@ -348,14 +351,14 @@ export function MaskEditor({
     (e: React.MouseEvent<HTMLCanvasElement>) => {
       handlePointerDown(e.clientX, e.clientY);
     },
-    [handlePointerDown],
+    [handlePointerDown]
   );
 
   const handleMouseMove = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>) => {
       handlePointerMove(e.clientX, e.clientY);
     },
-    [handlePointerMove],
+    [handlePointerMove]
   );
 
   const handleMouseUp = useCallback(() => {
@@ -375,7 +378,7 @@ export function MaskEditor({
       const touch = e.touches[0];
       handlePointerDown(touch.clientX, touch.clientY);
     },
-    [handlePointerDown],
+    [handlePointerDown]
   );
 
   const handleTouchMove = useCallback(
@@ -385,7 +388,7 @@ export function MaskEditor({
       const touch = e.touches[0];
       handlePointerMove(touch.clientX, touch.clientY);
     },
-    [handlePointerMove],
+    [handlePointerMove]
   );
 
   const handleTouchEnd = useCallback(
@@ -393,7 +396,7 @@ export function MaskEditor({
       e.preventDefault();
       handlePointerUp();
     },
-    [handlePointerUp],
+    [handlePointerUp]
   );
 
   // Clear all (reset to black)
@@ -451,7 +454,7 @@ export function MaskEditor({
   const canRedo = historyIndex < history.length - 1;
 
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
+    <Dialog open onOpenChange={open => !open && onClose()}>
       <DialogContent className="max-w-4xl p-0 gap-0 max-h-[100dvh] md:max-h-[90vh] flex flex-col overflow-hidden">
         <DialogHeader className="shrink-0 p-4 pb-2">
           <DialogTitle>{t("playground.capture.maskEditor.title")}</DialogTitle>
@@ -472,7 +475,7 @@ export function MaskEditor({
               style={{
                 maxWidth: canvasSize.width,
                 width: "100%",
-                aspectRatio: `${canvasSize.width} / ${canvasSize.height}`,
+                aspectRatio: `${canvasSize.width} / ${canvasSize.height}`
               }}
             >
               {/* Background canvas (reference image) */}
@@ -485,7 +488,7 @@ export function MaskEditor({
                   referenceImage
                     ? undefined
                     : {
-                        filter: "brightness(1.2) contrast(1.02) saturate(1.05)",
+                        filter: "brightness(1.2) contrast(1.02) saturate(1.05)"
                       }
                 }
               />
@@ -523,7 +526,7 @@ export function MaskEditor({
                     boxShadow:
                       tool === "eraser"
                         ? "0 0 0 1px rgba(255, 255, 255, 0.5)"
-                        : "0 0 0 1px rgba(0, 0, 0, 0.5)",
+                        : "0 0 0 1px rgba(0, 0, 0, 0.5)"
                   }}
                 />
               )}

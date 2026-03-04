@@ -80,14 +80,14 @@ export class SDGenerator {
       clipOnCpu,
       vaeTiling,
       onProgress,
-      onLog,
+      onLog
     } = options;
 
     // Validate binary exists
     if (!existsSync(binaryPath)) {
       return {
         success: false,
-        error: `Binary not found at: ${binaryPath}`,
+        error: `Binary not found at: ${binaryPath}`
       };
     }
 
@@ -121,7 +121,7 @@ export class SDGenerator {
       outputPath,
       "-v", // Verbose
       "--offload-to-cpu", // Offload to CPU when needed
-      "--diffusion-fa", // Use Flash Attention
+      "--diffusion-fa" // Use Flash Attention
     ];
 
     if (clipOnCpu) {
@@ -169,7 +169,7 @@ export class SDGenerator {
     // Spawn child process
     const childProcess = spawn(binaryPath, args, {
       cwd: outputDir,
-      env: { ...process.env, LD_LIBRARY_PATH: ldLibraryPath },
+      env: { ...process.env, LD_LIBRARY_PATH: ldLibraryPath }
     });
 
     // Track active process for cancellation
@@ -179,7 +179,7 @@ export class SDGenerator {
     let stdoutData = "";
 
     // Listen to stdout and send logs + parse progress
-    childProcess.stdout.on("data", (data) => {
+    childProcess.stdout.on("data", data => {
       const log = data.toString();
       stdoutData += log;
 
@@ -187,7 +187,7 @@ export class SDGenerator {
       if (onLog) {
         onLog({
           type: "stdout",
-          message: log,
+          message: log
         });
       }
 
@@ -201,14 +201,14 @@ export class SDGenerator {
           detail: {
             current: progressInfo.current,
             total: progressInfo.total,
-            unit: "steps",
-          },
+            unit: "steps"
+          }
         });
       }
     });
 
     // Listen to stderr and send logs + parse progress
-    childProcess.stderr.on("data", (data) => {
+    childProcess.stderr.on("data", data => {
       const log = data.toString();
       stderrData += log;
 
@@ -216,7 +216,7 @@ export class SDGenerator {
       if (onLog) {
         onLog({
           type: "stderr",
-          message: log,
+          message: log
         });
       }
 
@@ -230,14 +230,14 @@ export class SDGenerator {
           detail: {
             current: progressInfo.current,
             total: progressInfo.total,
-            unit: "steps",
-          },
+            unit: "steps"
+          }
         });
       }
     });
 
     // Wait for process to end
-    return new Promise((resolve) => {
+    return new Promise(resolve => {
       childProcess.on("close", (code, signal) => {
         this.activeProcess = null;
         const wasCancelled =
@@ -247,7 +247,7 @@ export class SDGenerator {
         if (wasCancelled) {
           resolve({
             success: false,
-            error: "Cancelled",
+            error: "Cancelled"
           });
           return;
         }
@@ -257,18 +257,16 @@ export class SDGenerator {
           if (onProgress) {
             onProgress({
               phase: "generate",
-              progress: 100,
+              progress: 100
             });
           }
           resolve({
             success: true,
-            outputPath: outputPath,
+            outputPath: outputPath
           });
         } else {
           // Extract error information
-          const errorLines = stderrData
-            .split("\n")
-            .filter((line) => line.trim());
+          const errorLines = stderrData.split("\n").filter(line => line.trim());
           const errorMsg =
             errorLines.length > 0
               ? errorLines[errorLines.length - 1]
@@ -277,17 +275,17 @@ export class SDGenerator {
           console.error("[SDGenerator] Generation failed:", errorMsg);
           resolve({
             success: false,
-            error: errorMsg,
+            error: errorMsg
           });
         }
       });
 
-      childProcess.on("error", (err) => {
+      childProcess.on("error", err => {
         this.activeProcess = null;
         console.error("[SDGenerator] Process error:", err.message);
         resolve({
           success: false,
-          error: err.message,
+          error: err.message
         });
       });
     });
@@ -301,7 +299,9 @@ export class SDGenerator {
    * - "sampling: 18/20"
    * - "|==================================================| 12/12 - 7.28s/it"
    */
-  private parseProgress(log: string): {
+  private parseProgress(
+    log: string
+  ): {
     current: number;
     total: number;
     progress: number;

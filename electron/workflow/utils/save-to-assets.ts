@@ -12,7 +12,7 @@ import {
   statSync,
   createWriteStream,
   readFileSync,
-  writeFileSync,
+  writeFileSync
 } from "fs";
 import { join, extname } from "path";
 import https from "https";
@@ -49,7 +49,7 @@ function loadSettings(): { autoSaveAssets: boolean; assetsDirectory: string } {
       const data = JSON.parse(readFileSync(settingsPath, "utf-8"));
       return {
         autoSaveAssets: data.autoSaveAssets ?? true,
-        assetsDirectory: data.assetsDirectory || defaultAssetsDirectory,
+        assetsDirectory: data.assetsDirectory || defaultAssetsDirectory
       };
     }
   } catch {
@@ -79,7 +79,12 @@ function saveAssetsMetadata(metadata: AssetMetadata[]): void {
 }
 
 function generateId(): string {
-  return Date.now().toString(36) + Math.random().toString(36).substring(2, 8);
+  return (
+    Date.now().toString(36) +
+    Math.random()
+      .toString(36)
+      .substring(2, 8)
+  );
 }
 
 function getSubDir(type: "image" | "video" | "audio"): string {
@@ -114,7 +119,7 @@ function guessExt(url: string): string {
 
 /** Download a remote URL to a local file path. Returns true on success. */
 function downloadToFile(url: string, destPath: string): Promise<boolean> {
-  return new Promise((resolve) => {
+  return new Promise(resolve => {
     const proto = url.startsWith("https") ? https : http;
     const file = createWriteStream(destPath);
     const handleResponse = (response: http.IncomingMessage) => {
@@ -154,7 +159,7 @@ export interface SaveToAssetsOptions {
  * Notifies all renderer windows so the assets list refreshes.
  */
 export async function saveWorkflowResultToAssets(
-  options: SaveToAssetsOptions,
+  options: SaveToAssetsOptions
 ): Promise<void> {
   const settings = loadSettings();
   if (!settings.autoSaveAssets) return;
@@ -165,7 +170,7 @@ export async function saveWorkflowResultToAssets(
   // Check for duplicate by executionId + resultIndex
   const existing = loadAssetsMetadata();
   const isDuplicate = existing.some(
-    (a) => a.executionId === options.executionId && a.source === "workflow",
+    a => a.executionId === options.executionId && a.source === "workflow"
   );
   if (isDuplicate) return;
 
@@ -191,7 +196,7 @@ export async function saveWorkflowResultToAssets(
   if (/^local-asset:\/\//i.test(options.url)) {
     try {
       const localPath = decodeURIComponent(
-        options.url.replace(/^local-asset:\/\//i, ""),
+        options.url.replace(/^local-asset:\/\//i, "")
       );
       if (existsSync(localPath)) {
         copyFileSync(localPath, filePath);
@@ -231,7 +236,7 @@ export async function saveWorkflowResultToAssets(
     workflowId: options.workflowId,
     workflowName: options.workflowName,
     nodeId: options.nodeId,
-    executionId: options.executionId,
+    executionId: options.executionId
   };
 
   // Append to metadata file

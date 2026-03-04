@@ -9,7 +9,7 @@ const AUTO_DISMISS_MS = 30_000;
 export function UpdateBanner() {
   const { t } = useTranslation();
   const [downloadedVersion, setDownloadedVersion] = useState<string | null>(
-    null,
+    null
   );
   const [dismissed, setDismissed] = useState(false);
   const dismissedVersionRef = useRef<string | null>(null);
@@ -18,7 +18,7 @@ export function UpdateBanner() {
   useEffect(() => {
     if (!window.electronAPI?.onUpdateStatus) return;
 
-    const unsubscribe = window.electronAPI.onUpdateStatus((status) => {
+    const unsubscribe = window.electronAPI.onUpdateStatus(status => {
       if (status.status === "downloaded" && status.version) {
         // Don't re-show if user already dismissed this version
         if (dismissedVersionRef.current === status.version) return;
@@ -67,7 +67,7 @@ export function UpdateBanner() {
         "transition-all duration-500 ease-in-out",
         visible
           ? "translate-y-0 opacity-100"
-          : "-translate-y-full opacity-0 pointer-events-none",
+          : "-translate-y-full opacity-0 pointer-events-none"
       )}
     >
       <span>

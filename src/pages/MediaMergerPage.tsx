@@ -18,7 +18,7 @@ import {
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
-  AlertDialogTitle,
+  AlertDialogTitle
 } from "@/components/ui/alert-dialog";
 import {
   ArrowLeft,
@@ -33,7 +33,7 @@ import {
   Video,
   Trash2,
   ChevronUp,
-  ChevronDown,
+  ChevronDown
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -49,7 +49,7 @@ interface MediaItem {
 const PHASES = [
   { id: "download", labelKey: "freeTools.ffmpeg.loading", weight: 0.1 },
   { id: "transcode", labelKey: "freeTools.ffmpeg.transcoding", weight: 0.7 },
-  { id: "merge", labelKey: "freeTools.ffmpeg.merging", weight: 0.2 },
+  { id: "merge", labelKey: "freeTools.ffmpeg.merging", weight: 0.2 }
 ];
 
 export function MediaMergerPage() {
@@ -75,11 +75,11 @@ export function MediaMergerPage() {
     updatePhase,
     reset: resetProgress,
     resetAndStart,
-    complete: completeAllPhases,
+    complete: completeAllPhases
   } = useMultiPhaseProgress({ phases: PHASES });
 
   const { merge, hasFailed, retryWorker } = useFFmpegWorker({
-    onPhase: (phase) => {
+    onPhase: phase => {
       if (phase === "download" || phase === "transcode" || phase === "merge") {
         startPhase(phase);
       }
@@ -89,12 +89,12 @@ export function MediaMergerPage() {
         updatePhase(phase, progressValue, detail);
       }
     },
-    onError: (err) => {
+    onError: err => {
       console.error("Worker error:", err);
       setError(err);
       setIsProcessing(false);
       resetProgress();
-    },
+    }
   });
 
   const handleRetry = useCallback(() => {
@@ -123,7 +123,7 @@ export function MediaMergerPage() {
       const newItems: MediaItem[] = [];
       const firstType = mediaItems.length > 0 ? mediaItems[0].type : null;
 
-      Array.from(files).forEach((file) => {
+      Array.from(files).forEach(file => {
         const type = getMediaType(file);
         if (type !== "video" && type !== "audio") return;
 
@@ -131,7 +131,9 @@ export function MediaMergerPage() {
         if (firstType && type !== firstType) return;
         if (newItems.length > 0 && type !== newItems[0].type) return;
 
-        const id = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        const id = `${Date.now()}-${Math.random()
+          .toString(36)
+          .substr(2, 9)}`;
         const preview = type === "video" ? URL.createObjectURL(file) : null;
 
         const item: MediaItem = { id, file, type, duration: null, preview };
@@ -139,37 +141,37 @@ export function MediaMergerPage() {
 
         // Get duration
         const media = document.createElement(
-          type === "video" ? "video" : "audio",
+          type === "video" ? "video" : "audio"
         );
         media.addEventListener("loadedmetadata", () => {
-          setMediaItems((prev) =>
-            prev.map((m) =>
-              m.id === id ? { ...m, duration: media.duration } : m,
-            ),
+          setMediaItems(prev =>
+            prev.map(m =>
+              m.id === id ? { ...m, duration: media.duration } : m
+            )
           );
         });
         media.src = URL.createObjectURL(file);
       });
 
-      setMediaItems((prev) => [...prev, ...newItems]);
+      setMediaItems(prev => [...prev, ...newItems]);
       setMergedUrl(null);
       setMergedBlob(null);
       resetProgress();
     },
-    [mediaItems, resetProgress],
+    [mediaItems, resetProgress]
   );
 
   const handleRemoveItem = useCallback((id: string) => {
-    setMediaItems((prev) => {
-      const item = prev.find((m) => m.id === id);
+    setMediaItems(prev => {
+      const item = prev.find(m => m.id === id);
       if (item?.preview) URL.revokeObjectURL(item.preview);
-      return prev.filter((m) => m.id !== id);
+      return prev.filter(m => m.id !== id);
     });
   }, []);
 
   const handleMoveItem = useCallback((id: string, direction: "up" | "down") => {
-    setMediaItems((prev) => {
-      const index = prev.findIndex((m) => m.id === id);
+    setMediaItems(prev => {
+      const index = prev.findIndex(m => m.id === id);
       if (index === -1) return prev;
       if (direction === "up" && index === 0) return prev;
       if (direction === "down" && index === prev.length - 1) return prev;
@@ -178,14 +180,14 @@ export function MediaMergerPage() {
       const swapIndex = direction === "up" ? index - 1 : index + 1;
       [newItems[index], newItems[swapIndex]] = [
         newItems[swapIndex],
-        newItems[index],
+        newItems[index]
       ];
       return newItems;
     });
   }, []);
 
   const handleClearAll = useCallback(() => {
-    mediaItems.forEach((item) => {
+    mediaItems.forEach(item => {
       if (item.preview) URL.revokeObjectURL(item.preview);
     });
     if (mergedUrl) URL.revokeObjectURL(mergedUrl);
@@ -206,7 +208,7 @@ export function MediaMergerPage() {
         handleFilesSelect(e.dataTransfer.files);
       }
     },
-    [handleFilesSelect, isProcessing],
+    [handleFilesSelect, isProcessing]
   );
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -291,7 +293,7 @@ export function MediaMergerPage() {
 
   const totalDuration = mediaItems.reduce(
     (sum, item) => sum + (item.duration || 0),
-    0,
+    0
   );
   const mediaType = mediaItems.length > 0 ? mediaItems[0].type : null;
 
@@ -337,7 +339,7 @@ export function MediaMergerPage() {
             "border-2 border-dashed cursor-pointer transition-colors",
             isDragging
               ? "border-primary bg-primary/5"
-              : "border-muted-foreground/25 hover:border-primary/50",
+              : "border-muted-foreground/25 hover:border-primary/50"
           )}
           onClick={() => fileInputRef.current?.click()}
         >
@@ -364,7 +366,7 @@ export function MediaMergerPage() {
         accept="video/*,audio/*,.mp4,.webm,.mov,.avi,.mkv,.mp3,.m4a,.ogg,.wav,.flac"
         multiple
         className="hidden"
-        onChange={(e) => {
+        onChange={e => {
           if (e.target.files) handleFilesSelect(e.target.files);
           e.target.value = "";
         }}

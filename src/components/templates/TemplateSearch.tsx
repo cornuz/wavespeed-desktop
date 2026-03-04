@@ -13,7 +13,7 @@ interface TemplateSearchProps {
 export function TemplateSearch({
   value,
   onChange,
-  placeholder,
+  placeholder
 }: TemplateSearchProps) {
   const { t } = useTranslation();
   const [localValue, setLocalValue] = useState(value);
@@ -42,7 +42,7 @@ export function TemplateSearch({
       <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
       <Input
         value={localValue}
-        onChange={(e) => setLocalValue(e.target.value)}
+        onChange={e => setLocalValue(e.target.value)}
         placeholder={placeholder || t("templates.searchPlaceholder")}
         className="pl-10 pr-10"
       />

@@ -11,8 +11,8 @@ const Slider = React.forwardRef<
   const thumbCount = Array.isArray(value)
     ? value.length
     : Array.isArray(defaultValue)
-      ? defaultValue.length
-      : 1;
+    ? defaultValue.length
+    : 1;
 
   return (
     <SliderPrimitive.Root

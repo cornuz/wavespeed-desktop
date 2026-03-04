@@ -12,7 +12,7 @@ export const LAMA_INPUT_SIZE = 512;
  */
 export function addReflectPadding(
   canvas: HTMLCanvasElement,
-  padding: { top: number; right: number; bottom: number; left: number },
+  padding: { top: number; right: number; bottom: number; left: number }
 ): HTMLCanvasElement {
   const { top, right, bottom, left } = padding;
   const newWidth = canvas.width + left + right;
@@ -51,7 +51,7 @@ export function addReflectPadding(
       0,
       0,
       canvas.width,
-      bottom,
+      bottom
     );
     ctx.restore();
   }
@@ -79,7 +79,7 @@ export function addReflectPadding(
       0,
       0,
       right,
-      canvas.height,
+      canvas.height
     );
     ctx.restore();
   }
@@ -92,7 +92,7 @@ export function addReflectPadding(
  */
 export function addMaskReflectPadding(
   canvas: HTMLCanvasElement,
-  padding: { top: number; right: number; bottom: number; left: number },
+  padding: { top: number; right: number; bottom: number; left: number }
 ): HTMLCanvasElement {
   const { top, right, bottom, left } = padding;
   const newWidth = canvas.width + left + right;
@@ -140,7 +140,7 @@ export function addMaskReflectPadding(
           left + minX,
           top + maxY + 1,
           maxX - minX + 1,
-          bottom + (canvas.height - maxY - 1),
+          bottom + (canvas.height - maxY - 1)
         );
       }
       if (left > 0) {
@@ -151,7 +151,7 @@ export function addMaskReflectPadding(
           left + maxX + 1,
           top + minY,
           right + (canvas.width - maxX - 1),
-          maxY - minY + 1,
+          maxY - minY + 1
         );
       }
     }
@@ -167,7 +167,7 @@ export function addMaskReflectPadding(
  */
 export function getMaskBoundingBox(
   canvas: HTMLCanvasElement,
-  minSize = LAMA_INPUT_SIZE,
+  minSize = LAMA_INPUT_SIZE
 ): { x: number; y: number; width: number; height: number } | null {
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
   if (!ctx) return null;
@@ -220,12 +220,12 @@ export function getMaskBoundingBox(
   if (x + cropSize < maxX + 1)
     x = Math.min(
       canvasWidth - cropSize,
-      maxX + 1 - cropSize + Math.floor((cropSize - maskWidth) / 2),
+      maxX + 1 - cropSize + Math.floor((cropSize - maskWidth) / 2)
     );
   if (y + cropSize < maxY + 1)
     y = Math.min(
       canvasHeight - cropSize,
-      maxY + 1 - cropSize + Math.floor((cropSize - maskHeight) / 2),
+      maxY + 1 - cropSize + Math.floor((cropSize - maskHeight) / 2)
     );
 
   // Final clamp to canvas bounds
@@ -247,7 +247,7 @@ export function cropCanvas(
   x: number,
   y: number,
   width: number,
-  height: number,
+  height: number
 ): HTMLCanvasElement {
   const cropped = document.createElement("canvas");
   cropped.width = width;
@@ -268,7 +268,7 @@ export function pasteWithBlending(
   maskCanvas: HTMLCanvasElement,
   x: number,
   y: number,
-  blendEdge = 8,
+  blendEdge = 8
 ): void {
   const targetCtx = targetCanvas.getContext("2d", { willReadFrequently: true });
   const sourceCtx = sourceCanvas.getContext("2d", { willReadFrequently: true });
@@ -314,15 +314,15 @@ export function pasteWithBlending(
         // Blend source and target
         targetData.data[i] = Math.round(
           targetData.data[i] * (1 - blendFactor) +
-            sourceData.data[i] * blendFactor,
+            sourceData.data[i] * blendFactor
         );
         targetData.data[i + 1] = Math.round(
           targetData.data[i + 1] * (1 - blendFactor) +
-            sourceData.data[i + 1] * blendFactor,
+            sourceData.data[i + 1] * blendFactor
         );
         targetData.data[i + 2] = Math.round(
           targetData.data[i + 2] * (1 - blendFactor) +
-            sourceData.data[i + 2] * blendFactor,
+            sourceData.data[i + 2] * blendFactor
         );
       }
     }
@@ -358,7 +358,7 @@ export function canvasToFloat32Array(canvas: HTMLCanvasElement): Float32Array {
  * Non-transparent pixels (alpha > 0) become 1 (area to inpaint), transparent become 0
  */
 export function maskCanvasToFloat32Array(
-  canvas: HTMLCanvasElement,
+  canvas: HTMLCanvasElement
 ): Float32Array {
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
   if (!ctx) throw new Error("Failed to get canvas context");
@@ -384,7 +384,7 @@ export function tensorToCanvas(
   tensor: Float32Array,
   width: number,
   height: number,
-  normalized = true,
+  normalized = true
 ): HTMLCanvasElement {
   const canvas = document.createElement("canvas");
   canvas.width = width;
@@ -401,19 +401,19 @@ export function tensorToCanvas(
       // 0-1 range -> multiply by 255
       data[i * 4] = Math.round(Math.max(0, Math.min(1, tensor[i])) * 255); // R
       data[i * 4 + 1] = Math.round(
-        Math.max(0, Math.min(1, tensor[width * height + i])) * 255,
+        Math.max(0, Math.min(1, tensor[width * height + i])) * 255
       ); // G
       data[i * 4 + 2] = Math.round(
-        Math.max(0, Math.min(1, tensor[2 * width * height + i])) * 255,
+        Math.max(0, Math.min(1, tensor[2 * width * height + i])) * 255
       ); // B
     } else {
       // 0-255 range -> clamp directly
       data[i * 4] = Math.round(Math.max(0, Math.min(255, tensor[i]))); // R
       data[i * 4 + 1] = Math.round(
-        Math.max(0, Math.min(255, tensor[width * height + i])),
+        Math.max(0, Math.min(255, tensor[width * height + i]))
       ); // G
       data[i * 4 + 2] = Math.round(
-        Math.max(0, Math.min(255, tensor[2 * width * height + i])),
+        Math.max(0, Math.min(255, tensor[2 * width * height + i]))
       ); // B
     }
     data[i * 4 + 3] = 255; // A
@@ -429,7 +429,7 @@ export function tensorToCanvas(
 export function resizeCanvas(
   sourceCanvas: HTMLCanvasElement,
   targetWidth: number,
-  targetHeight: number,
+  targetHeight: number
 ): HTMLCanvasElement {
   const canvas = document.createElement("canvas");
   canvas.width = targetWidth;
@@ -445,7 +445,7 @@ export function resizeCanvas(
  * Resize canvas to LaMa model input size (512x512)
  */
 export function resizeToModelInput(
-  sourceCanvas: HTMLCanvasElement,
+  sourceCanvas: HTMLCanvasElement
 ): HTMLCanvasElement {
   return resizeCanvas(sourceCanvas, LAMA_INPUT_SIZE, LAMA_INPUT_SIZE);
 }
@@ -456,7 +456,7 @@ export function resizeToModelInput(
 export function resizeFromModelOutput(
   resultCanvas: HTMLCanvasElement,
   originalWidth: number,
-  originalHeight: number,
+  originalHeight: number
 ): HTMLCanvasElement {
   return resizeCanvas(resultCanvas, originalWidth, originalHeight);
 }
@@ -494,11 +494,11 @@ export async function blobToCanvas(blob: Blob): Promise<HTMLCanvasElement> {
 export function canvasToBlob(
   canvas: HTMLCanvasElement,
   type = "image/png",
-  quality = 1,
+  quality = 1
 ): Promise<Blob> {
   return new Promise((resolve, reject) => {
     canvas.toBlob(
-      (blob) => {
+      blob => {
         if (blob) {
           resolve(blob);
         } else {
@@ -506,7 +506,7 @@ export function canvasToBlob(
         }
       },
       type,
-      quality,
+      quality
     );
   });
 }
@@ -518,7 +518,7 @@ export function canvasToBlob(
 export function applyMaskedResult(
   originalCanvas: HTMLCanvasElement,
   resultCanvas: HTMLCanvasElement,
-  maskCanvas: HTMLCanvasElement,
+  maskCanvas: HTMLCanvasElement
 ): HTMLCanvasElement {
   const width = originalCanvas.width;
   const height = originalCanvas.height;
@@ -546,15 +546,15 @@ export function applyMaskedResult(
     // Blend based on mask value
     outputData.data[i * 4] = Math.round(
       originalData.data[i * 4] * (1 - maskValue) +
-        resultData.data[i * 4] * maskValue,
+        resultData.data[i * 4] * maskValue
     );
     outputData.data[i * 4 + 1] = Math.round(
       originalData.data[i * 4 + 1] * (1 - maskValue) +
-        resultData.data[i * 4 + 1] * maskValue,
+        resultData.data[i * 4 + 1] * maskValue
     );
     outputData.data[i * 4 + 2] = Math.round(
       originalData.data[i * 4 + 2] * (1 - maskValue) +
-        resultData.data[i * 4 + 2] * maskValue,
+        resultData.data[i * 4 + 2] * maskValue
     );
     outputData.data[i * 4 + 3] = 255;
   }

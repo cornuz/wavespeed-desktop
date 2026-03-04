@@ -124,12 +124,12 @@ export interface ElectronAPI {
   clearAllData: () => Promise<boolean>;
   downloadFile: (
     url: string,
-    defaultFilename: string,
+    defaultFilename: string
   ) => Promise<DownloadResult>;
   saveFileSilent: (
     url: string,
     dir: string,
-    fileName: string,
+    fileName: string
   ) => Promise<DownloadResult>;
   openExternal: (url: string) => Promise<void>;
 
@@ -156,7 +156,7 @@ export interface ElectronAPI {
     url: string,
     type: string,
     fileName: string,
-    subDir: string,
+    subDir: string
   ) => Promise<SaveAssetResult>;
   deleteAsset: (filePath: string) => Promise<DeleteAssetResult>;
   deleteAssetsBulk: (filePaths: string[]) => Promise<DeleteAssetsBulkResult>;
@@ -200,16 +200,16 @@ export interface ElectronAPI {
     error?: string;
   }>;
   sdDeleteAuxiliaryModel: (
-    type: "llm" | "vae",
+    type: "llm" | "vae"
   ) => Promise<{ success: boolean; error?: string }>;
   sdGenerateImage: (
-    params: SDGenerationParams,
+    params: SDGenerationParams
   ) => Promise<{ success: boolean; outputPath?: string; error?: string }>;
   sdCancelGeneration: () => Promise<{ success: boolean; error?: string }>;
   sdSaveModelFromCache: (
     filename: string,
     data: Uint8Array,
-    type: "model" | "llm" | "vae",
+    type: "model" | "llm" | "vae"
   ) => Promise<{ success: boolean; filePath?: string; error?: string }>;
   sdListModels: () => Promise<{
     success: boolean;
@@ -217,7 +217,7 @@ export interface ElectronAPI {
     error?: string;
   }>;
   sdDeleteModel: (
-    modelPath: string,
+    modelPath: string
   ) => Promise<{ success: boolean; error?: string }>;
   sdGetBinaryPath: () => Promise<{
     success: boolean;
@@ -239,35 +239,35 @@ export interface ElectronAPI {
   }>;
   onSdProgress: (callback: (data: SDProgressData) => void) => () => void;
   onSdLog: (
-    callback: (data: { type: "stdout" | "stderr"; message: string }) => void,
+    callback: (data: { type: "stdout" | "stderr"; message: string }) => void
   ) => () => void;
   onSdDownloadProgress: (
-    callback: (data: SDProgressData) => void,
+    callback: (data: SDProgressData) => void
   ) => () => void;
   onSdBinaryDownloadProgress: (
-    callback: (data: SDProgressData) => void,
+    callback: (data: SDProgressData) => void
   ) => () => void;
   onSdLlmDownloadProgress: (
-    callback: (data: SDProgressData) => void,
+    callback: (data: SDProgressData) => void
   ) => () => void;
   onSdVaeDownloadProgress: (
-    callback: (data: SDProgressData) => void,
+    callback: (data: SDProgressData) => void
   ) => () => void;
 
   // File operations for chunked downloads
   fileGetSize: (
-    filePath: string,
+    filePath: string
   ) => Promise<{ success: boolean; size?: number; error?: string }>;
   fileAppendChunk: (
     filePath: string,
-    chunk: ArrayBuffer,
+    chunk: ArrayBuffer
   ) => Promise<{ success: boolean; error?: string }>;
   fileRename: (
     oldPath: string,
-    newPath: string,
+    newPath: string
   ) => Promise<{ success: boolean; error?: string }>;
   fileDelete: (
-    filePath: string,
+    filePath: string
   ) => Promise<{ success: boolean; error?: string }>;
 
   // SD download path helpers for chunked downloads
@@ -277,7 +277,7 @@ export interface ElectronAPI {
     error?: string;
   }>;
   sdGetAuxiliaryModelDownloadPath: (
-    type: "llm" | "vae",
+    type: "llm" | "vae"
   ) => Promise<{ success: boolean; path?: string; error?: string }>;
   sdGetModelsDir: () => Promise<{
     success: boolean;
@@ -286,7 +286,7 @@ export interface ElectronAPI {
   }>;
   sdExtractBinary: (
     zipPath: string,
-    destPath: string,
+    destPath: string
   ) => Promise<{ success: boolean; path?: string; error?: string }>;
 
   // Persistent key-value state (survives app restarts)
@@ -303,7 +303,7 @@ export interface WorkflowAPI {
   on: (channel: string, callback: (...args: unknown[]) => void) => void;
   removeListener: (
     channel: string,
-    callback: (...args: unknown[]) => void,
+    callback: (...args: unknown[]) => void
   ) => void;
 }
 

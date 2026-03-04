@@ -7,7 +7,7 @@ export interface Settings {
 }
 
 const DEFAULT_SETTINGS: Settings = {
-  downloadTimeout: 3600, // 60 minutes
+  downloadTimeout: 3600 // 60 minutes
 };
 
 function getStoredSettings(): Settings {
@@ -46,7 +46,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   initSettings: () => {
     const settings = getStoredSettings();
     set({ settings });
-  },
+  }
 }));
 
 // Helper to get download timeout in milliseconds (for workers)

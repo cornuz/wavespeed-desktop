@@ -3,7 +3,7 @@ export {
   getDatabase,
   persistDatabase,
   closeDatabase,
-  transaction,
+  transaction
 } from "./connection";
 export * from "./workflow.repo";
 export * from "./node.repo";

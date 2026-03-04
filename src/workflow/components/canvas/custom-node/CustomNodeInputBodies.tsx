@@ -18,7 +18,7 @@ import { FormField } from "@/components/playground/FormField";
 export function MediaUploadBody({
   params,
   onBatchChange,
-  onPreview,
+  onPreview
 }: {
   params: Record<string, unknown>;
   onBatchChange: (updates: Record<string, unknown>) => void;
@@ -38,7 +38,11 @@ export function MediaUploadBody({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const detectMediaType = (name: string): string => {
-    const ext = name.split(".").pop()?.toLowerCase() ?? "";
+    const ext =
+      name
+        .split(".")
+        .pop()
+        ?.toLowerCase() ?? "";
     if (["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg"].includes(ext))
       return "image";
     if (["mp4", "mov", "webm", "avi", "mkv"].includes(ext)) return "video";
@@ -56,7 +60,7 @@ export function MediaUploadBody({
     onBatchChange({
       uploadedUrl: blobUrl,
       fileName: file.name,
-      mediaType: localMediaType,
+      mediaType: localMediaType
     });
     try {
       const url = await apiClient.uploadFile(file);
@@ -65,7 +69,7 @@ export function MediaUploadBody({
       onBatchChange({
         uploadedUrl: url,
         fileName: file.name,
-        mediaType: localMediaType,
+        mediaType: localMediaType
       });
       setUploadState("success");
       setTimeout(() => setUploadState("idle"), 2000);
@@ -75,7 +79,7 @@ export function MediaUploadBody({
       setUploadError(
         err instanceof Error
           ? err.message
-          : t("workflow.mediaUpload.uploadFailed", "Upload failed"),
+          : t("workflow.mediaUpload.uploadFailed", "Upload failed")
       );
     }
   };
@@ -98,11 +102,15 @@ export function MediaUploadBody({
       setUploadState("error");
       return;
     }
-    const ext = url.split("/").pop()?.split("?")[0] ?? "file";
+    const ext =
+      url
+        .split("/")
+        .pop()
+        ?.split("?")[0] ?? "file";
     onBatchChange({
       uploadedUrl: url,
       fileName: ext,
-      mediaType: detectMediaType(ext),
+      mediaType: detectMediaType(ext)
     });
     setUrlInput("");
     setShowUrlInput(false);
@@ -127,7 +135,7 @@ export function MediaUploadBody({
 
     const clearBtn = (
       <button
-        onClick={(e) => {
+        onClick={e => {
           e.stopPropagation();
           handleClear();
         }}
@@ -158,7 +166,7 @@ export function MediaUploadBody({
               <img
                 src={uploadedUrl}
                 alt={fileName}
-                onClick={(e) => {
+                onClick={e => {
                   e.stopPropagation();
                   onPreview(uploadedUrl);
                 }}
@@ -172,7 +180,7 @@ export function MediaUploadBody({
                 src={uploadedUrl}
                 controls
                 className="max-w-full max-h-[120px] rounded-lg border border-[hsl(var(--border))]"
-                onClick={(e) => e.stopPropagation()}
+                onClick={e => e.stopPropagation()}
               />
               {clearBtn}
             </div>
@@ -182,7 +190,7 @@ export function MediaUploadBody({
                 src={uploadedUrl}
                 controls
                 className="w-full"
-                onClick={(e) => e.stopPropagation()}
+                onClick={e => e.stopPropagation()}
               />
               {clearBtn}
             </div>
@@ -221,25 +229,25 @@ export function MediaUploadBody({
   }
 
   return (
-    <div className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+    <div className="px-3 py-2" onClick={e => e.stopPropagation()}>
       <input
         ref={fileInputRef}
         type="file"
         accept="image/*,video/*,audio/*"
         className="hidden"
-        onChange={(e) => {
+        onChange={e => {
           const f = e.target.files?.[0];
           if (f) handleFile(f);
           if (fileInputRef.current) fileInputRef.current.value = "";
         }}
       />
       <div
-        onDragOver={(e) => {
+        onDragOver={e => {
           e.preventDefault();
           e.stopPropagation();
           setDragOver(true);
         }}
-        onDragLeave={(e) => {
+        onDragLeave={e => {
           e.preventDefault();
           e.stopPropagation();
           setDragOver(false);
@@ -249,8 +257,14 @@ export function MediaUploadBody({
           if (uploadState !== "uploading") fileInputRef.current?.click();
         }}
         className={`relative rounded-lg border-2 border-dashed p-4 text-center transition-colors cursor-pointer
-          ${dragOver ? "border-blue-500 bg-blue-500/10" : "border-[hsl(var(--border))] hover:border-blue-500/50"}
-          ${uploadState === "uploading" ? "opacity-60 pointer-events-none" : ""}`}
+          ${
+            dragOver
+              ? "border-blue-500 bg-blue-500/10"
+              : "border-[hsl(var(--border))] hover:border-blue-500/50"
+          }
+          ${
+            uploadState === "uploading" ? "opacity-60 pointer-events-none" : ""
+          }`}
       >
         {uploadState === "uploading" ? (
           <div className="py-2">
@@ -265,27 +279,27 @@ export function MediaUploadBody({
             <div className="text-xs text-muted-foreground mb-2">
               {t(
                 "workflow.mediaUpload.dropOrBrowse",
-                "Drop file here or click to browse",
+                "Drop file here or click to browse"
               )}
             </div>
             <div className="flex gap-1.5 justify-center">
               <label
                 className="px-3 py-1 rounded-md text-[11px] font-medium bg-blue-500/15 text-blue-400 hover:bg-blue-500/25 cursor-pointer transition-colors"
-                onClick={(e) => e.stopPropagation()}
+                onClick={e => e.stopPropagation()}
               >
                 {t("workflow.mediaUpload.browse", "Browse")}
                 <input
                   type="file"
                   accept="image/*,video/*,audio/*"
                   className="hidden"
-                  onChange={(e) => {
+                  onChange={e => {
                     const f = e.target.files?.[0];
                     if (f) handleFile(f);
                   }}
                 />
               </label>
               <button
-                onClick={(e) => {
+                onClick={e => {
                   e.stopPropagation();
                   setShowUrlInput(!showUrlInput);
                 }}
@@ -302,15 +316,15 @@ export function MediaUploadBody({
           <CompInput
             type="text"
             value={urlInput}
-            onChange={(e) => setUrlInput(e.target.value)}
-            onKeyDown={(e) => {
+            onChange={e => setUrlInput(e.target.value)}
+            onKeyDown={e => {
               const composing =
                 e.nativeEvent.isComposing || e.key === "Process";
               if (!composing && e.key === "Enter") handleUrlSubmit();
             }}
             placeholder={t(
               "workflow.mediaUpload.urlPlaceholder",
-              "https://...",
+              "https://..."
             )}
             autoFocus
             className="flex-1 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-2 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-blue-500/50"
@@ -357,7 +371,7 @@ function loadSnippets(): PromptSnippet[] {
 
 export function TextInputBody({
   params,
-  onParamChange,
+  onParamChange
 }: {
   params: Record<string, unknown>;
   onParamChange: (updates: Record<string, unknown>) => void;
@@ -375,7 +389,7 @@ export function TextInputBody({
   const optimizerSettings =
     (params.__optimizerSettings as Record<string, unknown> | undefined) ?? {};
   const optimizeOnRun = Boolean(
-    optimizerSettings.optimizeOnRun ?? optimizerSettings.autoOptimize ?? false,
+    optimizerSettings.optimizeOnRun ?? optimizerSettings.autoOptimize ?? false
   );
   const manualOptimizedLocked =
     typeof optimizerSettings.lastManualOptimizedText === "string" &&
@@ -419,7 +433,7 @@ export function TextInputBody({
     if (!saveName.trim() || !text.trim()) return;
     const updated = [
       { id: `snp-${Date.now()}`, name: saveName.trim(), text },
-      ...snippets,
+      ...snippets
     ];
     setSnippets(updated);
     localStorage.setItem(SNIPPETS_KEY, JSON.stringify(updated));
@@ -435,7 +449,7 @@ export function TextInputBody({
 
   const doDelete = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    const updated = snippets.filter((s) => s.id !== id);
+    const updated = snippets.filter(s => s.id !== id);
     setSnippets(updated);
     localStorage.setItem(SNIPPETS_KEY, JSON.stringify(updated));
   };
@@ -453,7 +467,7 @@ export function TextInputBody({
       } = optimizerSettings;
       const optimized = await apiClient.optimizePrompt({
         ...settingsForApi,
-        text,
+        text
       });
       const { autoOptimize: _legacy2, ...rest } = optimizerSettings;
       onParamChange({
@@ -461,14 +475,14 @@ export function TextInputBody({
         __optimizerSettings: {
           ...rest,
           optimizeOnRun,
-          lastManualOptimizedText: optimized,
-        },
+          lastManualOptimizedText: optimized
+        }
       });
     } catch (err) {
       setOptimizeError(
         err instanceof Error
           ? err.message
-          : t("workflow.textInput.optimizeFailed", "Optimize failed"),
+          : t("workflow.textInput.optimizeFailed", "Optimize failed")
       );
     } finally {
       setIsOptimizing(false);
@@ -476,7 +490,7 @@ export function TextInputBody({
   };
 
   return (
-    <div className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+    <div className="px-3 py-2" onClick={e => e.stopPropagation()}>
       <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-2 mb-2">
         <div className="flex items-center gap-0.5 mb-1.5">
           <div className="relative" ref={snippetRef}>
@@ -487,7 +501,11 @@ export function TextInputBody({
               }}
               title={t("workflow.textInput.promptLibrary", "Prompt Library")}
               className={`flex items-center justify-center w-6 h-6 rounded-md transition-colors
-              ${snippetOpen ? "bg-blue-500/20 text-blue-400" : "hover:bg-[hsl(var(--accent))] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"}`}
+              ${
+                snippetOpen
+                  ? "bg-blue-500/20 text-blue-400"
+                  : "hover:bg-[hsl(var(--accent))] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
+              }`}
             >
               <svg
                 width="13"
@@ -506,7 +524,7 @@ export function TextInputBody({
             {snippetOpen && (
               <div
                 className="absolute top-7 left-0 z-[100] w-52 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--popover))] text-[hsl(var(--popover-foreground))] shadow-xl"
-                onClick={(e) => e.stopPropagation()}
+                onClick={e => e.stopPropagation()}
               >
                 {!showSaveInput ? (
                   <button
@@ -524,8 +542,8 @@ export function TextInputBody({
                     <CompInput
                       type="text"
                       value={saveName}
-                      onChange={(e) => setSaveName(e.target.value)}
-                      onKeyDown={(e) => {
+                      onChange={e => setSaveName(e.target.value)}
+                      onKeyDown={e => {
                         const composing =
                           e.nativeEvent.isComposing || e.key === "Process";
                         if (!composing && e.key === "Enter") doSave();
@@ -533,7 +551,7 @@ export function TextInputBody({
                       }}
                       placeholder={t(
                         "workflow.textInput.namePlaceholder",
-                        "Name...",
+                        "Name..."
                       )}
                       autoFocus
                       className="flex-1 rounded border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-2 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-blue-500/50"
@@ -551,7 +569,7 @@ export function TextInputBody({
                   <div className="mx-2 h-px bg-[hsl(var(--border))]" />
                 )}
                 <div className="max-h-[180px] overflow-y-auto py-0.5">
-                  {snippets.map((s) => (
+                  {snippets.map(s => (
                     <div
                       key={s.id}
                       className="flex items-center gap-1 px-3 py-1.5 hover:bg-[hsl(var(--accent))] transition-colors cursor-pointer group"
@@ -564,7 +582,7 @@ export function TextInputBody({
                         {s.name}
                       </span>
                       <button
-                        onClick={(e) => doDelete(e, s.id)}
+                        onClick={e => doDelete(e, s.id)}
                         className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-300 transition-all text-[11px] px-0.5"
                       >
                         ✕
@@ -576,7 +594,7 @@ export function TextInputBody({
                   <div className="px-3 py-3 text-[10px] text-[hsl(var(--muted-foreground))] text-center">
                     {t(
                       "workflow.textInput.noSavedSnippets",
-                      "No saved snippets",
+                      "No saved snippets"
                     )}
                   </div>
                 )}
@@ -591,7 +609,7 @@ export function TextInputBody({
               className="inline-flex h-6 items-center gap-1 rounded-md border border-blue-500/45 bg-blue-500/15 px-2.5 text-[10px] font-semibold text-blue-600 dark:text-blue-200 shadow-sm transition-all hover:bg-blue-500/25 hover:shadow-blue-500/20 disabled:cursor-not-allowed disabled:opacity-30 disabled:border-[hsl(var(--border))] disabled:bg-[hsl(var(--muted))] disabled:text-[hsl(var(--muted-foreground))] disabled:shadow-none"
               title={t(
                 "workflow.textInput.optimizeNowTitle",
-                "Optimize text now",
+                "Optimize text now"
               )}
             >
               {isOptimizing ? (
@@ -636,14 +654,22 @@ export function TextInputBody({
             <button
               type="button"
               onClick={toggleOptimizeOnRun}
-              className={`inline-flex h-6 items-center gap-1.5 rounded-md border px-2.5 text-[10px] font-semibold transition-all ${optimizeOnRun ? "border-emerald-500/55 bg-emerald-500/15 text-emerald-600 dark:text-emerald-200 shadow-sm" : "border-[hsl(var(--border))] bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"}`}
+              className={`inline-flex h-6 items-center gap-1.5 rounded-md border px-2.5 text-[10px] font-semibold transition-all ${
+                optimizeOnRun
+                  ? "border-emerald-500/55 bg-emerald-500/15 text-emerald-600 dark:text-emerald-200 shadow-sm"
+                  : "border-[hsl(var(--border))] bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
+              }`}
               title={t(
                 "workflow.textInput.autoOnRunTitle",
-                "Only optimize when Run is clicked",
+                "Only optimize when Run is clicked"
               )}
             >
               <span
-                className={`inline-block h-1.5 w-1.5 rounded-full ${optimizeOnRun ? "bg-emerald-500 dark:bg-emerald-300" : "bg-[hsl(var(--muted-foreground))]/70"}`}
+                className={`inline-block h-1.5 w-1.5 rounded-full ${
+                  optimizeOnRun
+                    ? "bg-emerald-500 dark:bg-emerald-300"
+                    : "bg-[hsl(var(--muted-foreground))]/70"
+                }`}
               />
               {t("workflow.textInput.autoOnRun", "Optimize On Run")}
             </button>
@@ -658,14 +684,14 @@ export function TextInputBody({
             <span className="text-[10px] font-medium text-emerald-300">
               {t(
                 "workflow.textInput.optimizeOnRunEnabled",
-                "Enabled: Optimize On Run",
+                "Enabled: Optimize On Run"
               )}
             </span>
           ) : (
             <span className="text-[10px] font-medium text-[hsl(var(--muted-foreground))]">
               {t(
                 "workflow.textInput.optimizeOffHint",
-                "Default: no optimization (run with original text)",
+                "Default: no optimization (run with original text)"
               )}
             </span>
           )}
@@ -674,7 +700,7 @@ export function TextInputBody({
           <div className="mb-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[10px] text-amber-300">
             {t(
               "workflow.textInput.manualOptimizedHint",
-              "Manually optimized. Auto-on-run will be skipped until text changes.",
+              "Manually optimized. Auto-on-run will be skipped until text changes."
             )}
           </div>
         )}
@@ -687,16 +713,16 @@ export function TextInputBody({
 
       <WorkflowPromptOptimizer
         currentPrompt={text}
-        onOptimized={(optimized) => onParamChange({ text: optimized })}
+        onOptimized={optimized => onParamChange({ text: optimized })}
         quickSettings={optimizerSettings}
-        onQuickSettingsChange={(settings) =>
+        onQuickSettingsChange={settings =>
           onParamChange({ __optimizerSettings: settings })
         }
         optimizeOnRun={optimizeOnRun}
-        onOptimizeOnRunChange={(enabled) => {
+        onOptimizeOnRunChange={enabled => {
           const { autoOptimize: _legacy, ...rest } = optimizerSettings;
           onParamChange({
-            __optimizerSettings: { ...rest, optimizeOnRun: enabled },
+            __optimizerSettings: { ...rest, optimizeOnRun: enabled }
           });
         }}
         showRunToggle={false}
@@ -714,13 +740,15 @@ export function TextInputBody({
           required: false,
           placeholder: t(
             "workflow.textInput.enterTextOrPrompt",
-            "Enter text or prompt...",
-          ),
+            "Enter text or prompt..."
+          )
         }}
         value={text}
-        onChange={(v) => {
-          const { lastManualOptimizedText: _manual, ...rest } =
-            optimizerSettings;
+        onChange={v => {
+          const {
+            lastManualOptimizedText: _manual,
+            ...rest
+          } = optimizerSettings;
           onParamChange({ text: v, __optimizerSettings: rest });
         }}
         formValues={params}

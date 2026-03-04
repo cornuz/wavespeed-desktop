@@ -14,13 +14,13 @@ export function ModelsPage() {
 
   const handleSelectModel = useCallback(
     (modelId: string) => {
-      const model = models.find((m) => m.model_id === modelId);
+      const model = models.find(m => m.model_id === modelId);
       if (model) {
         createTab(model);
         navigate(`/playground/${encodeURIComponent(modelId)}`);
       }
     },
-    [models, createTab, navigate],
+    [models, createTab, navigate]
   );
 
   return (

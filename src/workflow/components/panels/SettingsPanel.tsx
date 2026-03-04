@@ -7,11 +7,11 @@ import { useModelsStore } from "@/stores/modelsStore";
 import { Button } from "@/components/ui/button";
 
 export function SettingsPanel() {
-  const models = useModelsStore((s) => s.models);
-  const isLoading = useModelsStore((s) => s.isLoading);
-  const error = useModelsStore((s) => s.error);
-  const hasFetched = useModelsStore((s) => s.hasFetched);
-  const fetchModels = useModelsStore((s) => s.fetchModels);
+  const models = useModelsStore(s => s.models);
+  const isLoading = useModelsStore(s => s.isLoading);
+  const error = useModelsStore(s => s.error);
+  const hasFetched = useModelsStore(s => s.hasFetched);
+  const fetchModels = useModelsStore(s => s.fetchModels);
 
   const handleRefreshModels = async () => {
     try {

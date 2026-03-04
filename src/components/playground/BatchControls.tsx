@@ -7,7 +7,7 @@ import { Slider } from "@/components/ui/slider";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuTrigger,
+  DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 import { Play, Loader2, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -19,6 +19,7 @@ interface BatchControlsProps {
   onRun: () => void;
   runLabel: string;
   runningLabel: string;
+  price?: string;
 }
 
 export function BatchControls({
@@ -28,6 +29,7 @@ export function BatchControls({
   onRun,
   runLabel,
   runningLabel,
+  price
 }: BatchControlsProps) {
   const { t } = useTranslation();
   const { getActiveTab, setBatchConfig } = usePlaygroundStore();
@@ -59,7 +61,7 @@ export function BatchControls({
       <Button
         className={cn(
           "flex-1 h-9 text-sm bg-blue-600 hover:bg-blue-700 text-white transition-colors",
-          "rounded-r-none border-r border-r-white/20 shadow-none",
+          "rounded-r-none border-r border-r-white/20 shadow-none"
         )}
         onClick={onRun}
         disabled={disabled || isRunning || isUploading}
@@ -74,9 +76,9 @@ export function BatchControls({
           <>
             <Play className="mr-2 h-4 w-4" />
             {displayLabel}
-            <kbd className="ml-auto text-[10px] font-normal opacity-60 tracking-wide">
-              {navigator.platform?.includes("Mac") ? "⌘" : "Ctrl"}↵
-            </kbd>
+            {price && (
+              <span className="ml-1.5 text-xs opacity-70">${price}</span>
+            )}
           </>
         )}
       </Button>
@@ -87,7 +89,7 @@ export function BatchControls({
           <Button
             className={cn(
               "bg-blue-600 hover:bg-blue-700 text-white transition-colors",
-              "rounded-l-none px-1.5 h-9 shadow-none",
+              "rounded-l-none px-1.5 h-9 shadow-none"
             )}
             disabled={disabled || isRunning || isUploading}
           >
@@ -108,7 +110,7 @@ export function BatchControls({
             <div
               className={cn(
                 "grid transition-[grid-template-rows] duration-200 ease-out",
-                enabled ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+                enabled ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
               )}
             >
               <div className="overflow-hidden">

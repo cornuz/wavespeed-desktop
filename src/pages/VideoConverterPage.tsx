@@ -9,7 +9,7 @@ import {
   VIDEO_FORMATS,
   QUALITY_PRESETS,
   RESOLUTION_PRESETS,
-  getVideoFormat,
+  getVideoFormat
 } from "@/lib/ffmpegFormats";
 import { formatBytes } from "@/types/progress";
 import { Button } from "@/components/ui/button";
@@ -19,7 +19,7 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
+  SelectValue
 } from "@/components/ui/select";
 import {
   AlertDialog,
@@ -29,7 +29,7 @@ import {
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
-  AlertDialogTitle,
+  AlertDialogTitle
 } from "@/components/ui/alert-dialog";
 import {
   ArrowLeft,
@@ -37,14 +37,14 @@ import {
   Download,
   Loader2,
   FileVideo,
-  RefreshCw,
+  RefreshCw
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // Phase configuration for video converter
 const PHASES = [
   { id: "download", labelKey: "freeTools.ffmpeg.loading", weight: 0.1 },
-  { id: "process", labelKey: "freeTools.ffmpeg.converting", weight: 0.9 },
+  { id: "process", labelKey: "freeTools.ffmpeg.converting", weight: 0.9 }
 ];
 
 export function VideoConverterPage() {
@@ -80,11 +80,11 @@ export function VideoConverterPage() {
     updatePhase,
     reset: resetProgress,
     resetAndStart,
-    complete: completeAllPhases,
+    complete: completeAllPhases
   } = useMultiPhaseProgress({ phases: PHASES });
 
   const { convert, hasFailed, retryWorker } = useFFmpegWorker({
-    onPhase: (phase) => {
+    onPhase: phase => {
       if (phase === "download") {
         startPhase("download");
       } else if (phase === "process") {
@@ -95,12 +95,12 @@ export function VideoConverterPage() {
       const phaseId = phase === "download" ? "download" : "process";
       updatePhase(phaseId, progressValue, detail);
     },
-    onError: (err) => {
+    onError: err => {
       console.error("Worker error:", err);
       setError(err);
       setIsProcessing(false);
       resetProgress();
-    },
+    }
   });
 
   const handleRetry = useCallback(() => {
@@ -150,12 +150,12 @@ export function VideoConverterPage() {
         setVideoInfo({
           duration: video.duration,
           width: video.videoWidth,
-          height: video.videoHeight,
+          height: video.videoHeight
         });
       });
       video.src = url;
     },
-    [videoUrl, convertedUrl, resetProgress],
+    [videoUrl, convertedUrl, resetProgress]
   );
 
   const handleDrop = useCallback(
@@ -168,7 +168,7 @@ export function VideoConverterPage() {
       const file = e.dataTransfer.files[0];
       if (file) handleFileSelect(file);
     },
-    [handleFileSelect, isProcessing],
+    [handleFileSelect, isProcessing]
   );
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -206,10 +206,8 @@ export function VideoConverterPage() {
     const format = getVideoFormat(outputFormat);
     if (!format) return;
 
-    const qualityPreset = QUALITY_PRESETS.find((q) => q.id === quality);
-    const resolutionPreset = RESOLUTION_PRESETS.find(
-      (r) => r.id === resolution,
-    );
+    const qualityPreset = QUALITY_PRESETS.find(q => q.id === quality);
+    const resolutionPreset = RESOLUTION_PRESETS.find(r => r.id === resolution);
 
     try {
       // Read file as ArrayBuffer
@@ -225,8 +223,8 @@ export function VideoConverterPage() {
           videoCodec: format.codec,
           videoBitrate: qualityPreset?.videoBitrate,
           audioBitrate: qualityPreset?.audioBitrate,
-          resolution: resolutionPreset?.value,
-        },
+          resolution: resolutionPreset?.value
+        }
       );
 
       // Create blob and URL
@@ -250,7 +248,7 @@ export function VideoConverterPage() {
     const format = getVideoFormat(outputFormat);
     const filename = videoFile.name.replace(
       /\.[^.]+$/,
-      `.${format?.ext || "mp4"}`,
+      `.${format?.ext || "mp4"}`
     );
 
     const link = document.createElement("a");
@@ -303,7 +301,7 @@ export function VideoConverterPage() {
             "border-2 border-dashed cursor-pointer transition-colors",
             isDragging
               ? "border-primary bg-primary/5"
-              : "border-muted-foreground/25 hover:border-primary/50",
+              : "border-muted-foreground/25 hover:border-primary/50"
           )}
           onClick={() => fileInputRef.current?.click()}
         >
@@ -329,7 +327,7 @@ export function VideoConverterPage() {
         type="file"
         accept="video/*,.mp4,.webm,.mov,.avi,.mkv,.m4v,.wmv,.flv"
         className="hidden"
-        onChange={(e) => {
+        onChange={e => {
           const file = e.target.files?.[0];
           if (file) handleFileSelect(file);
           e.target.value = "";
@@ -359,7 +357,7 @@ export function VideoConverterPage() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {VIDEO_FORMATS.map((format) => (
+                {VIDEO_FORMATS.map(format => (
                   <SelectItem key={format.id} value={format.id}>
                     {format.label}
                   </SelectItem>
@@ -376,7 +374,7 @@ export function VideoConverterPage() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {QUALITY_PRESETS.map((preset) => (
+                {QUALITY_PRESETS.map(preset => (
                   <SelectItem key={preset.id} value={preset.id}>
                     {preset.label}
                   </SelectItem>
@@ -393,7 +391,7 @@ export function VideoConverterPage() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {RESOLUTION_PRESETS.map((preset) => (
+                {RESOLUTION_PRESETS.map(preset => (
                   <SelectItem key={preset.id} value={preset.id}>
                     {preset.label}
                   </SelectItem>
@@ -504,15 +502,14 @@ export function VideoConverterPage() {
                       <div className="text-xs mt-2 space-y-1 text-center">
                         <div>
                           {
-                            VIDEO_FORMATS.find((f) => f.id === outputFormat)
+                            VIDEO_FORMATS.find(f => f.id === outputFormat)
                               ?.label
                           }
                         </div>
                         <div>
-                          {QUALITY_PRESETS.find((q) => q.id === quality)?.label}{" "}
-                          •{" "}
+                          {QUALITY_PRESETS.find(q => q.id === quality)?.label} •{" "}
                           {
-                            RESOLUTION_PRESETS.find((r) => r.id === resolution)
+                            RESOLUTION_PRESETS.find(r => r.id === resolution)
                               ?.label
                           }
                         </div>

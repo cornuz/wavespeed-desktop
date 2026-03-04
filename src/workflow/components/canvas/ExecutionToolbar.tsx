@@ -10,12 +10,16 @@ import { useUIStore } from "../../stores/ui.store";
 import { costIpc } from "../../ipc/ipc-client";
 
 export function ExecutionToolbar() {
-  const workflowId = useWorkflowStore((s) => s.workflowId);
-  const nodes = useWorkflowStore((s) => s.nodes);
-  const edges = useWorkflowStore((s) => s.edges);
-  const selectedNodeId = useUIStore((s) => s.selectedNodeId);
-  const { runAllInBrowser, runNode, cancelNode, activeExecutions } =
-    useExecutionStore();
+  const workflowId = useWorkflowStore(s => s.workflowId);
+  const nodes = useWorkflowStore(s => s.nodes);
+  const edges = useWorkflowStore(s => s.edges);
+  const selectedNodeId = useUIStore(s => s.selectedNodeId);
+  const {
+    runAllInBrowser,
+    runNode,
+    cancelNode,
+    activeExecutions
+  } = useExecutionStore();
   const isRunning = activeExecutions.size > 0;
 
   const [dailySpend, setDailySpend] = useState<number>(0);
@@ -29,7 +33,7 @@ export function ExecutionToolbar() {
       .catch(() => {});
     costIpc
       .getBudget()
-      .then((b) => setDailyLimit(b.dailyLimit))
+      .then(b => setDailyLimit(b.dailyLimit))
       .catch(() => {});
   }, [workflowId]);
 
@@ -47,8 +51,8 @@ export function ExecutionToolbar() {
     spendPercent > 80
       ? "text-red-400"
       : spendPercent > 50
-        ? "text-orange-400"
-        : "text-green-400";
+      ? "text-orange-400"
+      : "text-green-400";
 
   return (
     <div className="flex items-center gap-2 px-4 py-1.5 border-b border-border bg-card">
@@ -57,22 +61,22 @@ export function ExecutionToolbar() {
         size="sm"
         disabled={nodes.length === 0}
         onClick={() => {
-          const browserNodes = nodes.map((n) => ({
+          const browserNodes = nodes.map(n => ({
             id: n.id,
             data: {
               nodeType: n.data?.nodeType ?? "",
               params: {
                 ...(n.data?.params ?? {}),
-                __meta: { modelInputSchema: n.data?.modelInputSchema ?? [] },
+                __meta: { modelInputSchema: n.data?.modelInputSchema ?? [] }
               },
-              label: n.data?.label,
-            },
+              label: n.data?.label
+            }
           }));
-          const browserEdges = edges.map((e) => ({
+          const browserEdges = edges.map(e => ({
             source: e.source,
             target: e.target,
             sourceHandle: e.sourceHandle ?? undefined,
-            targetHandle: e.targetHandle ?? undefined,
+            targetHandle: e.targetHandle ?? undefined
           }));
           runAllInBrowser(browserNodes, browserEdges);
         }}

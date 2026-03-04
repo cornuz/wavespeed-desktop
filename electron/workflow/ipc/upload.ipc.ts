@@ -9,7 +9,7 @@ export function registerUploadIpc(): void {
     "upload:file",
     async (
       _event,
-      args: { fileData: ArrayBuffer; filename: string },
+      args: { fileData: ArrayBuffer; filename: string }
     ): Promise<string> => {
       const ws = getWaveSpeedClient();
       const buffer = Buffer.from(args.fileData);
@@ -17,6 +17,6 @@ export function registerUploadIpc(): void {
       const file = new File([blob], args.filename);
       const url = await ws.uploadFile(file, args.filename);
       return url;
-    },
+    }
   );
 }

@@ -12,7 +12,7 @@ import {
   runVideoEnhancer,
   runFaceSwapper,
   runImageEraser,
-  runSegmentAnything,
+  runSegmentAnything
 } from "../lib/free-tool-runner";
 
 function getApi() {
@@ -43,7 +43,7 @@ export function useFreeToolListener(): void {
           const outputData = await runImageEnhancer(
             inputUrl,
             params as { model?: string; scale?: string },
-            onProgress,
+            onProgress
           );
           await freeToolIpc.complete({
             requestId,
@@ -51,7 +51,7 @@ export function useFreeToolListener(): void {
             nodeId,
             outputData,
             outputExt: "png",
-            outputPrefix: "image_enhancer",
+            outputPrefix: "image_enhancer"
           });
         } else if (nodeType === "free-tool/background-remover") {
           const inputUrl = inputs.input;
@@ -59,7 +59,7 @@ export function useFreeToolListener(): void {
           const outputData = await runBackgroundRemover(
             inputUrl,
             params as { model?: string },
-            onProgress,
+            onProgress
           );
           await freeToolIpc.complete({
             requestId,
@@ -67,7 +67,7 @@ export function useFreeToolListener(): void {
             nodeId,
             outputData,
             outputExt: "png",
-            outputPrefix: "background_remover",
+            outputPrefix: "background_remover"
           });
         } else if (nodeType === "free-tool/face-enhancer") {
           const inputUrl = inputs.input;
@@ -75,7 +75,7 @@ export function useFreeToolListener(): void {
           const outputData = await runFaceEnhancer(
             inputUrl,
             params,
-            onProgress,
+            onProgress
           );
           await freeToolIpc.complete({
             requestId,
@@ -83,7 +83,7 @@ export function useFreeToolListener(): void {
             nodeId,
             outputData,
             outputExt: "png",
-            outputPrefix: "face_enhancer",
+            outputPrefix: "face_enhancer"
           });
         } else if (nodeType === "free-tool/video-enhancer") {
           const inputUrl = inputs.input;
@@ -91,7 +91,7 @@ export function useFreeToolListener(): void {
           const outputData = await runVideoEnhancer(
             inputUrl,
             params as { model?: string; scale?: string },
-            onProgress,
+            onProgress
           );
           await freeToolIpc.complete({
             requestId,
@@ -99,7 +99,7 @@ export function useFreeToolListener(): void {
             nodeId,
             outputData,
             outputExt: "webm",
-            outputPrefix: "video_enhancer",
+            outputPrefix: "video_enhancer"
           });
         } else if (nodeType === "free-tool/face-swapper") {
           const sourceUrl = inputs.source;
@@ -110,7 +110,7 @@ export function useFreeToolListener(): void {
             sourceUrl,
             targetUrl,
             params,
-            onProgress,
+            onProgress
           );
           await freeToolIpc.complete({
             requestId,
@@ -118,7 +118,7 @@ export function useFreeToolListener(): void {
             nodeId,
             outputData,
             outputExt: "png",
-            outputPrefix: "face_swapper",
+            outputPrefix: "face_swapper"
           });
         } else if (nodeType === "free-tool/image-eraser") {
           const imageUrl = inputs.input;
@@ -128,7 +128,7 @@ export function useFreeToolListener(): void {
             imageUrl,
             maskUrl,
             params,
-            onProgress,
+            onProgress
           );
           await freeToolIpc.complete({
             requestId,
@@ -136,7 +136,7 @@ export function useFreeToolListener(): void {
             nodeId,
             outputData,
             outputExt: "png",
-            outputPrefix: "image_eraser",
+            outputPrefix: "image_eraser"
           });
         } else if (nodeType === "free-tool/segment-anything") {
           const inputUrl = inputs.input;
@@ -150,7 +150,7 @@ export function useFreeToolListener(): void {
               __previewMask?: string;
               invertMask?: boolean;
             },
-            onProgress,
+            onProgress
           );
           await freeToolIpc.complete({
             requestId,
@@ -158,18 +158,18 @@ export function useFreeToolListener(): void {
             nodeId,
             outputData,
             outputExt: "png",
-            outputPrefix: "segment_mask",
+            outputPrefix: "segment_mask"
           });
         } else {
           await freeToolIpc.error({
             requestId,
-            error: `Unsupported free-tool node type: ${nodeType}`,
+            error: `Unsupported free-tool node type: ${nodeType}`
           });
         }
       } catch (err) {
         await freeToolIpc.error({
           requestId,
-          error: err instanceof Error ? err.message : String(err),
+          error: err instanceof Error ? err.message : String(err)
         });
       }
     };

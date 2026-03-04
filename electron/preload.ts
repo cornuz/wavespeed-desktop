@@ -91,13 +91,13 @@ const electronAPI = {
   clearAllData: (): Promise<boolean> => ipcRenderer.invoke("clear-all-data"),
   downloadFile: (
     url: string,
-    defaultFilename: string,
+    defaultFilename: string
   ): Promise<DownloadResult> =>
     ipcRenderer.invoke("download-file", url, defaultFilename),
   saveFileSilent: (
     url: string,
     dir: string,
-    fileName: string,
+    fileName: string
   ): Promise<DownloadResult> =>
     ipcRenderer.invoke("save-file-silent", url, dir, fileName),
   openExternal: (url: string): Promise<void> =>
@@ -143,7 +143,7 @@ const electronAPI = {
     url: string,
     type: string,
     fileName: string,
-    subDir: string,
+    subDir: string
   ): Promise<SaveAssetResult> =>
     ipcRenderer.invoke("save-asset", url, type, fileName, subDir),
   deleteAsset: (filePath: string): Promise<DeleteAssetResult> =>
@@ -206,7 +206,7 @@ const electronAPI = {
     error?: string;
   }> => ipcRenderer.invoke("sd-list-auxiliary-models"),
   sdDeleteAuxiliaryModel: (
-    type: "llm" | "vae",
+    type: "llm" | "vae"
   ): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke("sd-delete-auxiliary-model", type),
   sdGenerateImage: (params: {
@@ -230,7 +230,7 @@ const electronAPI = {
   sdSaveModelFromCache: (
     filename: string,
     data: Uint8Array,
-    type: "model" | "llm" | "vae",
+    type: "model" | "llm" | "vae"
   ): Promise<{ success: boolean; filePath?: string; error?: string }> =>
     ipcRenderer.invoke("sd-save-model-from-cache", filename, data, type),
   sdListModels: (): Promise<{
@@ -244,7 +244,7 @@ const electronAPI = {
     error?: string;
   }> => ipcRenderer.invoke("sd-list-models"),
   sdDeleteModel: (
-    modelPath: string,
+    modelPath: string
   ): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke("sd-delete-model", modelPath),
   sdDeleteBinary: (): Promise<{ success: boolean; error?: string }> =>
@@ -256,7 +256,7 @@ const electronAPI = {
       phase: string;
       progress: number;
       detail?: unknown;
-    }) => void,
+    }) => void
   ): (() => void) => {
     const handler = (_: unknown, data: unknown) =>
       callback(data as { phase: string; progress: number; detail?: unknown });
@@ -264,7 +264,7 @@ const electronAPI = {
     return () => ipcRenderer.removeListener("sd-progress", handler);
   },
   onSdLog: (
-    callback: (data: { type: "stdout" | "stderr"; message: string }) => void,
+    callback: (data: { type: "stdout" | "stderr"; message: string }) => void
   ): (() => void) => {
     const handler = (_: unknown, data: unknown) =>
       callback(data as { type: "stdout" | "stderr"; message: string });
@@ -276,7 +276,7 @@ const electronAPI = {
       phase: string;
       progress: number;
       detail?: unknown;
-    }) => void,
+    }) => void
   ): (() => void) => {
     const handler = (_: unknown, data: unknown) =>
       callback(data as { phase: string; progress: number; detail?: unknown });
@@ -288,7 +288,7 @@ const electronAPI = {
       phase: string;
       progress: number;
       detail?: unknown;
-    }) => void,
+    }) => void
   ): (() => void) => {
     const handler = (_: unknown, data: unknown) =>
       callback(data as { phase: string; progress: number; detail?: unknown });
@@ -301,7 +301,7 @@ const electronAPI = {
       phase: string;
       progress: number;
       detail?: unknown;
-    }) => void,
+    }) => void
   ): (() => void) => {
     const handler = (_: unknown, data: unknown) =>
       callback(data as { phase: string; progress: number; detail?: unknown });
@@ -314,7 +314,7 @@ const electronAPI = {
       phase: string;
       progress: number;
       detail?: unknown;
-    }) => void,
+    }) => void
   ): (() => void) => {
     const handler = (_: unknown, data: unknown) =>
       callback(data as { phase: string; progress: number; detail?: unknown });
@@ -325,21 +325,21 @@ const electronAPI = {
 
   // File operations for chunked downloads
   fileGetSize: (
-    filePath: string,
+    filePath: string
   ): Promise<{ success: boolean; size?: number; error?: string }> =>
     ipcRenderer.invoke("file-get-size", filePath),
   fileAppendChunk: (
     filePath: string,
-    chunk: ArrayBuffer,
+    chunk: ArrayBuffer
   ): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke("file-append-chunk", filePath, chunk),
   fileRename: (
     oldPath: string,
-    newPath: string,
+    newPath: string
   ): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke("file-rename", oldPath, newPath),
   fileDelete: (
-    filePath: string,
+    filePath: string
   ): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke("file-delete", filePath),
 
@@ -350,7 +350,7 @@ const electronAPI = {
     error?: string;
   }> => ipcRenderer.invoke("sd-get-binary-download-path"),
   sdGetAuxiliaryModelDownloadPath: (
-    type: "llm" | "vae",
+    type: "llm" | "vae"
   ): Promise<{ success: boolean; path?: string; error?: string }> =>
     ipcRenderer.invoke("sd-get-auxiliary-model-download-path", type),
   sdGetModelsDir: (): Promise<{
@@ -360,7 +360,7 @@ const electronAPI = {
   }> => ipcRenderer.invoke("sd-get-models-dir"),
   sdExtractBinary: (
     zipPath: string,
-    destPath: string,
+    destPath: string
   ): Promise<{ success: boolean; path?: string; error?: string }> =>
     ipcRenderer.invoke("sd-extract-binary", zipPath, destPath),
 
@@ -377,7 +377,7 @@ const electronAPI = {
     const handler = (_: unknown, asset: unknown) => callback(asset);
     ipcRenderer.on("assets:new-asset", handler);
     return () => ipcRenderer.removeListener("assets:new-asset", handler);
-  },
+  }
 };
 
 // ─── Workflow API (isolated namespace to avoid collision with electronAPI) ────
@@ -394,11 +394,11 @@ const workflowAPI = {
   },
   removeListener: (
     channel: string,
-    _callback: (...args: unknown[]) => void,
+    _callback: (...args: unknown[]) => void
   ): void => {
     // Best-effort removal — remove all listeners for this channel
     ipcRenderer.removeAllListeners(channel);
-  },
+  }
 };
 
 if (process.contextIsolated) {

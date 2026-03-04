@@ -16,7 +16,7 @@ import {
   registerExecutionIpc,
   emitNodeStatus,
   emitProgress,
-  emitEdgeStatus,
+  emitEdgeStatus
 } from "./ipc/execution.ipc";
 import { registerWorkflowIpc } from "./ipc/workflow.ipc";
 import { registerHistoryIpc, setMarkDownstreamStale } from "./ipc/history.ipc";
@@ -50,7 +50,7 @@ export async function initWorkflowModule(): Promise<void> {
       fileStorage.registerWorkflowName(wf.id, wf.name);
     }
     console.log(
-      `[Workflow] Registered ${workflows.length} workflow name mappings`,
+      `[Workflow] Registered ${workflows.length} workflow name mappings`
     );
   } catch (err) {
     console.error("[Workflow] Failed to load workflow names:", err);
@@ -73,15 +73,15 @@ export async function initWorkflowModule(): Promise<void> {
     {
       onNodeStatus: emitNodeStatus,
       onProgress: emitProgress,
-      onEdgeStatus: emitEdgeStatus,
-    },
+      onEdgeStatus: emitEdgeStatus
+    }
   );
 
   // 5. Wire up singletons
   setExecutionEngine(engine);
   setCostDeps(costService, nodeRegistry);
   setMarkDownstreamStale((workflowId, nodeId) =>
-    engine.markDownstreamStale(workflowId, nodeId),
+    engine.markDownstreamStale(workflowId, nodeId)
   );
 
   // 6. Register all IPC handlers
