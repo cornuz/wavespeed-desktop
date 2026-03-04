@@ -77,6 +77,8 @@ function App() {
         <Route path="free-tools" element={<FreeToolsPage />} />
         {/* Workflow page - persistent rendered */}
         <Route path="workflow" element={<PersistentPagePlaceholder />} />
+        {/* Storyboard page - persistent rendered */}
+        <Route path="storyboard" element={<PersistentPagePlaceholder />} />
         {/* Free tools pages are rendered persistently in Layout */}
         <Route
           path="free-tools/video-enhancer"

@@ -1374,7 +1374,7 @@
       },
       "run": {
         "title": "Workflow ausführen",
-        "desc": "Klicken Sie auf „Run", um die gesamte Pipeline zu starten:\n• Legen Sie eine Ausführungsanzahl fest (×1 bis ×99) für Stapelverarbeitung\n• Jederzeit mit der Stopp-Schaltfläche abbrechen\n• Klicken Sie auf das Uhr-Symbol, um den Ausführungsmonitor für Echtzeit-Fortschritt zu öffnen\n• Jeder Knoten zeigt seinen Status: Warteschlange → Läuft → Fertig"
+        "desc": "Klicken Sie auf \u201ERun\u201C, um die gesamte Pipeline zu starten:\n• Legen Sie eine Ausführungsanzahl fest (×1 bis ×99) für Stapelverarbeitung\n• Jederzeit mit der Stopp-Schaltfläche abbrechen\n• Klicken Sie auf das Uhr-Symbol, um den Ausführungsmonitor für Echtzeit-Fortschritt zu öffnen\n• Jeder Knoten zeigt seinen Status: Warteschlange → Läuft → Fertig"
       },
       "moreMenu": {
         "title": "Speichern, Import & Export",

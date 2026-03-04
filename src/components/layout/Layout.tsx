@@ -45,6 +45,7 @@ import { FaceSwapperPage } from "@/pages/FaceSwapperPage";
 import { HistoryPage } from "@/pages/HistoryPage";
 import { AssetsPage } from "@/pages/AssetsPage";
 import { WorkflowPage } from "@/workflow/WorkflowPage";
+import { StoryboardPage } from "@/storyboard/StoryboardPage";
 import { useFreeToolListener } from "@/workflow/hooks/useFreeToolListener";
 
 const isElectron = navigator.userAgent.toLowerCase().includes("electron");
@@ -125,6 +126,7 @@ export function Layout() {
       "/free-tools/media-merger",
       "/z-image",
       "/workflow",
+      "/storyboard",
     ];
     if (persistentPaths.includes(location.pathname)) {
       // Track for lazy mounting
@@ -426,6 +428,7 @@ export function Layout() {
                         "/free-tools/media-merger",
                         "/z-image",
                         "/workflow",
+                        "/storyboard",
                       ].includes(location.pathname)
                         ? "hidden"
                         : "h-full overflow-auto"
@@ -636,6 +639,18 @@ export function Layout() {
                       }
                     >
                       <WorkflowPage key={pageKeys["/workflow"] || 0} />
+                    </div>
+                  )}
+                  {/* Persistent Storyboard page */}
+                  {visitedPages.has("/storyboard") && (
+                    <div
+                      className={
+                        location.pathname === "/storyboard"
+                          ? "h-full overflow-hidden"
+                          : "hidden"
+                      }
+                    >
+                      <StoryboardPage key={pageKeys["/storyboard"] || 0} />
                     </div>
                   )}
                 </>

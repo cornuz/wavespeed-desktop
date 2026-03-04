@@ -23,6 +23,7 @@ import {
   GitBranch,
   Layers,
   X,
+  Clapperboard,
 } from "lucide-react";
 
 interface NavItem {
@@ -116,6 +117,12 @@ export function Sidebar({
       titleKey: "nav.workflow",
       href: "/workflow",
       icon: GitBranch,
+      matchPrefix: true,
+    },
+    {
+      titleKey: "nav.storyboard",
+      href: "/storyboard",
+      icon: Clapperboard,
       matchPrefix: true,
     },
     {
@@ -245,7 +252,7 @@ export function Sidebar({
               {group.items.map((item) => {
                 const active = isActive(item);
                 const showTooltip = collapsed && !isMobileOpen && tooltipReady;
-                const isNewFeature = item.href === "/workflow";
+                const isNewFeature = item.href === "/workflow" || item.href === "/storyboard";
                 return (
                   <Tooltip
                     key={item.href}
