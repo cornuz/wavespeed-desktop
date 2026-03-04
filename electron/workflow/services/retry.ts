@@ -10,11 +10,14 @@ export interface RetryConfig {
 const DEFAULT_CONFIG: RetryConfig = {
   maxRetries: 3,
   baseDelayMs: 1000,
-  skipClientErrors: true
+  skipClientErrors: true,
 };
 
 export class ApiError extends Error {
-  constructor(message: string, public statusCode: number) {
+  constructor(
+    message: string,
+    public statusCode: number,
+  ) {
     super(message);
     this.name = "ApiError";
   }
@@ -22,7 +25,7 @@ export class ApiError extends Error {
 
 export async function withRetry<T>(
   fn: () => Promise<T>,
-  config: Partial<RetryConfig> = {}
+  config: Partial<RetryConfig> = {},
 ): Promise<{ result: T; attempts: number; delays: number[] }> {
   const cfg = { ...DEFAULT_CONFIG, ...config };
   let attempts = 0;
@@ -45,7 +48,7 @@ export async function withRetry<T>(
       if (attempts >= cfg.maxRetries) throw error;
       const delay = cfg.baseDelayMs * Math.pow(2, attempts - 1);
       delays.push(delay);
-      await new Promise(resolve => setTimeout(resolve, delay));
+      await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }
 }

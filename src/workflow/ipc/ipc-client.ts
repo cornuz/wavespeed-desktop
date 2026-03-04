@@ -15,9 +15,7 @@ import type {
   ApiKeyConfig,
 } from "@/workflow/types/ipc";
 import type { Workflow } from "@/workflow/types/workflow";
-import type {
-  NodeExecutionRecord,
-} from "@/workflow/types/execution";
+import type { NodeExecutionRecord } from "@/workflow/types/execution";
 import type {
   NodeTypeDefinition,
   WaveSpeedModel,

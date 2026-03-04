@@ -5,7 +5,7 @@ import { apiClient } from "@/api/client";
 import { cn } from "@/lib/utils";
 import {
   getSingleImageFromValues,
-  getSingleVideoFromValues
+  getSingleVideoFromValues,
 } from "@/lib/schemaToForm";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,7 +22,7 @@ import {
   Camera,
   Video,
   Mic,
-  Brush
+  Brush,
 } from "lucide-react";
 import { CameraCapture } from "./CameraCapture";
 import { VideoRecorder } from "./VideoRecorder";
@@ -56,7 +56,7 @@ export function FileUpload({
   isMaskField = false,
   formValues,
   onUploadingChange,
-  onUploadFile
+  onUploadFile,
 }: FileUploadProps) {
   const { t } = useTranslation();
   const [isUploading, setIsUploading] = useState(false);
@@ -122,10 +122,10 @@ export function FileUpload({
         const extension = blob.type.includes("video")
           ? "webm"
           : blob.type.includes("audio")
-          ? "webm"
-          : blob.type.includes("png")
-          ? "png"
-          : "jpg";
+            ? "webm"
+            : blob.type.includes("png")
+              ? "png"
+              : "jpg";
         const filename = `capture_${Date.now()}.${extension}`;
         const file = new File([blob], filename, { type: blob.type });
 
@@ -134,7 +134,7 @@ export function FileUpload({
           : await apiClient.uploadFile(
               file,
               abortControllerRef.current.signal,
-              p => setUploadProgress(p)
+              (p) => setUploadProgress(p),
             );
 
         if (multiple) {
@@ -155,7 +155,7 @@ export function FileUpload({
         onUploadingChange?.(false);
       }
     },
-    [multiple, urls, onChange, onUploadingChange, onUploadFile]
+    [multiple, urls, onChange, onUploadingChange, onUploadFile],
   );
 
   const onDrop = useCallback(
@@ -173,14 +173,14 @@ export function FileUpload({
       try {
         const uploadPromises = acceptedFiles
           .slice(0, maxFiles - urls.length)
-          .map(async file => {
+          .map(async (file) => {
             try {
               const url = onUploadFile
                 ? await onUploadFile(file)
                 : await apiClient.uploadFile(
                     file,
                     abortControllerRef.current?.signal,
-                    p => setUploadProgress(p)
+                    (p) => setUploadProgress(p),
                   );
               return { url, name: file.name, type: file.type };
             } catch (err) {
@@ -193,7 +193,7 @@ export function FileUpload({
           });
 
         const results = await Promise.all(uploadPromises);
-        const newUrls = results.map(r => r.url);
+        const newUrls = results.map((r) => r.url);
 
         if (multiple) {
           onChange([...urls, ...newUrls]);
@@ -220,8 +220,8 @@ export function FileUpload({
       multiple,
       onChange,
       onUploadingChange,
-      onUploadFile
-    ]
+      onUploadFile,
+    ],
   );
 
   // Parse accept string into react-dropzone format
@@ -236,7 +236,7 @@ export function FileUpload({
       "application/x-zip-compressed": [".zip"],
       "image/*": [".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg"],
       "video/*": [".mp4", ".webm", ".mov", ".avi", ".mkv"],
-      "audio/*": [".mp3", ".wav", ".ogg", ".m4a", ".webm", ".flac"]
+      "audio/*": [".mp3", ".wav", ".ogg", ".m4a", ".webm", ".flac"],
     };
 
     for (const type of accept.split(",")) {
@@ -265,7 +265,7 @@ export function FileUpload({
         result["application/x-zip-compressed"] = [".zip"];
       }
       // For other extensions, add to application/octet-stream as fallback
-      const otherExts = extensions.filter(e => e !== ".zip");
+      const otherExts = extensions.filter((e) => e !== ".zip");
       if (otherExts.length > 0) {
         result["application/octet-stream"] = otherExts;
       }
@@ -279,7 +279,7 @@ export function FileUpload({
     accept: dropzoneAccept,
     multiple: multiple && urls.length < maxFiles,
     disabled: disabled || isUploading || (!multiple && urls.length >= 1),
-    maxFiles: maxFiles - urls.length
+    maxFiles: maxFiles - urls.length,
   });
 
   const removeFile = (index: number) => {
@@ -316,7 +316,7 @@ export function FileUpload({
       nextUrls.splice(toIndex, 0, moved);
       onChange(multiple ? nextUrls : nextUrls[0] || "");
     },
-    [urls, onChange, multiple]
+    [urls, onChange, multiple],
   );
 
   return (
@@ -334,13 +334,13 @@ export function FileUpload({
               ? decodeURIComponent(url)
               : url;
             const hasImageExtDecoded = decodedUrl.match(
-              /\.(jpg|jpeg|png|gif|webp|bmp|svg|avif)(\?.*)?$/i
+              /\.(jpg|jpeg|png|gif|webp|bmp|svg|avif)(\?.*)?$/i,
             );
             const hasVideoExtDecoded = decodedUrl.match(
-              /\.(mp4|webm|mov|avi|mkv)(\?.*)?$/i
+              /\.(mp4|webm|mov|avi|mkv)(\?.*)?$/i,
             );
             const hasAudioExtDecoded = decodedUrl.match(
-              /\.(mp3|wav|ogg|flac|aac|m4a)(\?.*)?$/i
+              /\.(mp3|wav|ogg|flac|aac|m4a)(\?.*)?$/i,
             );
             const acceptAll = accept === "*/*";
             // Fallback: if accept type matches but URL has no recognized extension, trust accept
@@ -348,35 +348,35 @@ export function FileUpload({
               hasImageExt || hasImageExtDecoded
                 ? true
                 : hasVideoExt ||
-                  hasVideoExtDecoded ||
-                  hasAudioExt ||
-                  hasAudioExtDecoded
-                ? false
-                : acceptAll
-                ? false
-                : accept.includes("image");
+                    hasVideoExtDecoded ||
+                    hasAudioExt ||
+                    hasAudioExtDecoded
+                  ? false
+                  : acceptAll
+                    ? false
+                    : accept.includes("image");
             const isVideo =
               hasVideoExt || hasVideoExtDecoded
                 ? true
                 : hasImageExt ||
-                  hasImageExtDecoded ||
-                  hasAudioExt ||
-                  hasAudioExtDecoded
-                ? false
-                : acceptAll
-                ? false
-                : accept.includes("video");
+                    hasImageExtDecoded ||
+                    hasAudioExt ||
+                    hasAudioExtDecoded
+                  ? false
+                  : acceptAll
+                    ? false
+                    : accept.includes("video");
             const isAudio =
               hasAudioExt || hasAudioExtDecoded
                 ? true
                 : hasImageExt ||
-                  hasImageExtDecoded ||
-                  hasVideoExt ||
-                  hasVideoExtDecoded
-                ? false
-                : acceptAll
-                ? false
-                : accept.includes("audio");
+                    hasImageExtDecoded ||
+                    hasVideoExt ||
+                    hasVideoExtDecoded
+                  ? false
+                  : acceptAll
+                    ? false
+                    : accept.includes("audio");
 
             const handlePreview = () => {
               setPreviewUrl(url);
@@ -390,16 +390,16 @@ export function FileUpload({
                 key={index}
                 className={cn(
                   "relative group rounded-lg border bg-muted/50 overflow-hidden h-28 w-28 flex-shrink-0 cursor-pointer transition-all duration-200 hover:shadow-lg hover:shadow-primary/10 hover:border-primary/30 hover:scale-[1.03]",
-                  draggingIndex === index && "opacity-60 scale-95"
+                  draggingIndex === index && "opacity-60 scale-95",
                 )}
                 draggable={multiple && !disabled}
-                onDragStart={e => {
+                onDragStart={(e) => {
                   if (!multiple || disabled) return;
                   e.dataTransfer.effectAllowed = "move";
                   e.dataTransfer.setData("text/plain", String(index));
                   setDraggingIndex(index);
                 }}
-                onDragOver={e => {
+                onDragOver={(e) => {
                   if (!multiple || disabled) return;
                   e.preventDefault();
                   e.dataTransfer.dropEffect = "move";
@@ -407,7 +407,7 @@ export function FileUpload({
                   moveUrl(draggingIndex, index);
                   setDraggingIndex(index);
                 }}
-                onDrop={e => {
+                onDrop={(e) => {
                   if (!multiple || disabled) return;
                   e.preventDefault();
                   setDraggingIndex(null);
@@ -427,8 +427,8 @@ export function FileUpload({
                     className="w-full h-full object-cover"
                     muted
                     playsInline
-                    onMouseEnter={e => e.currentTarget.play()}
-                    onMouseLeave={e => {
+                    onMouseEnter={(e) => e.currentTarget.play()}
+                    onMouseLeave={(e) => {
                       e.currentTarget.pause();
                       e.currentTarget.currentTime = 0;
                     }}
@@ -446,7 +446,7 @@ export function FileUpload({
                   variant="destructive"
                   size="icon"
                   className="absolute top-0.5 right-0.5 h-5 w-5 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity"
-                  onClick={e => {
+                  onClick={(e) => {
                     e.stopPropagation();
                     removeFile(index);
                   }}
@@ -514,7 +514,7 @@ export function FileUpload({
                   disabled && "opacity-50 cursor-not-allowed",
                   !disabled &&
                     !isDragActive &&
-                    "hover:border-primary/50 hover:bg-muted/30 hover:shadow-sm"
+                    "hover:border-primary/50 hover:bg-muted/30 hover:shadow-sm",
                 )}
               >
                 <input {...getInputProps()} />
@@ -532,7 +532,7 @@ export function FileUpload({
                         type="button"
                         variant="ghost"
                         size="sm"
-                        onClick={e => {
+                        onClick={(e) => {
                           e.stopPropagation();
                           handleCancelUpload();
                         }}
@@ -628,8 +628,8 @@ export function FileUpload({
                 type="url"
                 placeholder={t("playground.capture.enterUrl")}
                 value={urlInput}
-                onChange={e => setUrlInput(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && handleAddUrl()}
+                onChange={(e) => setUrlInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleAddUrl()}
                 disabled={disabled}
                 className="flex-1 h-8 text-xs"
               />
@@ -655,7 +655,7 @@ export function FileUpload({
       {/* Preview Dialog */}
       <Dialog
         open={!!previewUrl}
-        onOpenChange={open => !open && setPreviewUrl(null)}
+        onOpenChange={(open) => !open && setPreviewUrl(null)}
       >
         <DialogContent className="max-w-4xl p-0 overflow-hidden">
           {previewType === "image" && previewUrl && (

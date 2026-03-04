@@ -70,7 +70,7 @@ function fzfMatch(query: string, text: string): MatchResult | null {
 function findBestMatch(
   query: string,
   text: string,
-  originalText: string
+  originalText: string,
 ): MatchResult | null {
   const n = query.length;
   const m = text.length;
@@ -188,19 +188,14 @@ function findBestMatch(
  * Parse FZF extended search syntax
  * Supports: space-separated AND terms, ^prefix, suffix$, 'exact, !negation
  */
-function parseQuery(
-  query: string
-): Array<{
+function parseQuery(query: string): Array<{
   term: string;
   type: "fuzzy" | "exact" | "prefix" | "suffix";
   negate: boolean;
 }> {
-  const terms = query
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
+  const terms = query.trim().split(/\s+/).filter(Boolean);
   return terms
-    .map(term => {
+    .map((term) => {
       let negate = false;
       let type: "fuzzy" | "exact" | "prefix" | "suffix" = "fuzzy";
       let cleanTerm = term;
@@ -229,7 +224,7 @@ function parseQuery(
 
       return { term: cleanTerm, type, negate };
     })
-    .filter(t => t.term.length > 0);
+    .filter((t) => t.term.length > 0);
 }
 
 /**
@@ -238,7 +233,7 @@ function parseQuery(
 function matchTerm(
   term: string,
   type: "fuzzy" | "exact" | "prefix" | "suffix",
-  text: string
+  text: string,
 ): MatchResult | null {
   const caseSensitive = isCaseSensitive(term);
   const t = caseSensitive ? text : text.toLowerCase();
@@ -294,16 +289,16 @@ export function fuzzyScore(query: string, text: string): number {
 export function fuzzySearch<T>(
   items: T[],
   query: string,
-  getSearchableText: (item: T) => string[]
+  getSearchableText: (item: T) => string[],
 ): FuzzyResult<T>[] {
   const trimmedQuery = query.trim();
   if (!trimmedQuery) {
-    return items.map(item => ({ item, score: 0 }));
+    return items.map((item) => ({ item, score: 0 }));
   }
 
   const parsedTerms = parseQuery(trimmedQuery);
   if (parsedTerms.length === 0) {
-    return items.map(item => ({ item, score: 0 }));
+    return items.map((item) => ({ item, score: 0 }));
   }
 
   const results: FuzzyResult<T>[] = [];
@@ -376,7 +371,7 @@ export function fuzzyMatch(query: string, text: string): boolean {
  */
 export function highlightMatches(
   text: string,
-  matches: Array<[number, number]>
+  matches: Array<[number, number]>,
 ): Array<{ text: string; highlight: boolean }> {
   if (!matches || matches.length === 0) {
     return [{ text, highlight: false }];
@@ -391,7 +386,7 @@ export function highlightMatches(
     } else {
       merged[merged.length - 1][1] = Math.max(
         merged[merged.length - 1][1],
-        end
+        end,
       );
     }
   }

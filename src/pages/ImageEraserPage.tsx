@@ -15,7 +15,7 @@ import {
   cropCanvas,
   pasteWithBlending,
   addReflectPadding,
-  addMaskReflectPadding
+  addMaskReflectPadding,
 } from "@/lib/lamaUtils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -23,14 +23,14 @@ import { Slider } from "@/components/ui/slider";
 import {
   Tooltip,
   TooltipContent,
-  TooltipTrigger
+  TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue
+  SelectValue,
 } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import {
@@ -41,7 +41,7 @@ import {
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
-  AlertDialogTitle
+  AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
   ArrowLeft,
@@ -57,7 +57,7 @@ import {
   ZoomIn,
   ZoomOut,
   Maximize2,
-  RefreshCw
+  RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -67,7 +67,7 @@ type Tool = "brush" | "eraser";
 const PHASES = [
   { id: "download", labelKey: "freeTools.progress.downloading", weight: 0.1 },
   { id: "loading", labelKey: "freeTools.progress.loading", weight: 0.1 },
-  { id: "process", labelKey: "freeTools.progress.processing", weight: 0.8 }
+  { id: "process", labelKey: "freeTools.progress.processing", weight: 0.8 },
 ];
 
 export function ImageEraserPage() {
@@ -96,7 +96,7 @@ export function ImageEraserPage() {
   } | null>(null);
   const [containerSize, setContainerSize] = useState({
     width: 800,
-    height: 600
+    height: 600,
   });
   const [tool, setTool] = useState<Tool>("brush");
   const [brushSize, setBrushSize] = useState(30);
@@ -107,10 +107,10 @@ export function ImageEraserPage() {
   const [imageHistory, setImageHistory] = useState<ImageData[]>([]);
   const [imageHistoryIndex, setImageHistoryIndex] = useState(-1);
   const [cursorPos, setCursorPos] = useState<{ x: number; y: number } | null>(
-    null
+    null,
   );
   const [downloadFormat, setDownloadFormat] = useState<"png" | "jpeg" | "webp">(
-    "jpeg"
+    "jpeg",
   );
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [showBackWarning, setShowBackWarning] = useState(false);
@@ -123,45 +123,40 @@ export function ImageEraserPage() {
     updatePhase,
     reset: resetProgress,
     resetAndStart,
-    complete: completeAllPhases
+    complete: completeAllPhases,
   } = useMultiPhaseProgress({ phases: PHASES });
 
   const [error, setError] = useState<string | null>(null);
 
-  const {
-    initModel,
-    removeObjects,
-    dispose,
-    hasFailed,
-    retryWorker
-  } = useImageEraserWorker({
-    onPhase: phase => {
-      if (phase === "download") {
-        startPhase("download");
-      } else if (phase === "loading") {
-        startPhase("loading");
-      } else if (phase === "process") {
-        startPhase("process");
-      }
-    },
-    onProgress: (phase, progressValue, detail) => {
-      const phaseId =
-        phase === "download"
-          ? "download"
-          : phase === "loading"
-          ? "loading"
-          : "process";
-      updatePhase(phaseId, progressValue, detail);
-    },
-    onReady: () => {
-      setError(null);
-    },
-    onError: err => {
-      console.error("Worker error:", err);
-      setError(err);
-      setIsProcessing(false);
-    }
-  });
+  const { initModel, removeObjects, dispose, hasFailed, retryWorker } =
+    useImageEraserWorker({
+      onPhase: (phase) => {
+        if (phase === "download") {
+          startPhase("download");
+        } else if (phase === "loading") {
+          startPhase("loading");
+        } else if (phase === "process") {
+          startPhase("process");
+        }
+      },
+      onProgress: (phase, progressValue, detail) => {
+        const phaseId =
+          phase === "download"
+            ? "download"
+            : phase === "loading"
+              ? "loading"
+              : "process";
+        updatePhase(phaseId, progressValue, detail);
+      },
+      onReady: () => {
+        setError(null);
+      },
+      onError: (err) => {
+        console.error("Worker error:", err);
+        setError(err);
+        setIsProcessing(false);
+      },
+    });
 
   const handleRetry = useCallback(() => {
     setError(null);
@@ -260,7 +255,7 @@ export function ImageEraserPage() {
       0,
       0,
       originalSize.width,
-      originalSize.height
+      originalSize.height,
     );
     setMaskHistory([initialMaskState]);
     setMaskHistoryIndex(0);
@@ -273,7 +268,7 @@ export function ImageEraserPage() {
     // Small delay to ensure image is drawn to canvas
     const timer = setTimeout(() => {
       const imageCtx = imageCanvasRef.current?.getContext("2d", {
-        willReadFrequently: true
+        willReadFrequently: true,
       });
       if (!imageCtx) return;
 
@@ -281,7 +276,7 @@ export function ImageEraserPage() {
         0,
         0,
         originalSize.width,
-        originalSize.height
+        originalSize.height,
       );
       setImageHistory([initialImageState]);
       setImageHistoryIndex(0);
@@ -300,10 +295,10 @@ export function ImageEraserPage() {
       0,
       0,
       maskCanvas.width,
-      maskCanvas.height
+      maskCanvas.height,
     );
 
-    setMaskHistory(prev => {
+    setMaskHistory((prev) => {
       const newHistory = prev.slice(0, maskHistoryIndex + 1);
       newHistory.push(imageData);
       if (newHistory.length > 50) {
@@ -312,14 +307,14 @@ export function ImageEraserPage() {
       }
       return newHistory;
     });
-    setMaskHistoryIndex(prev => Math.min(prev + 1, 49));
+    setMaskHistoryIndex((prev) => Math.min(prev + 1, 49));
   }, [maskHistoryIndex]);
 
   // Save image history snapshot (for object removal undo/redo)
   const saveImageSnapshot = useCallback(() => {
     const imageCanvas = imageCanvasRef.current;
     const imageCtx = imageCanvas?.getContext("2d", {
-      willReadFrequently: true
+      willReadFrequently: true,
     });
     if (!imageCtx || !imageCanvas) return;
 
@@ -327,10 +322,10 @@ export function ImageEraserPage() {
       0,
       0,
       imageCanvas.width,
-      imageCanvas.height
+      imageCanvas.height,
     );
 
-    setImageHistory(prev => {
+    setImageHistory((prev) => {
       const newHistory = prev.slice(0, imageHistoryIndex + 1);
       newHistory.push(imageData);
       if (newHistory.length > 20) {
@@ -340,7 +335,7 @@ export function ImageEraserPage() {
       }
       return newHistory;
     });
-    setImageHistoryIndex(prev => Math.min(prev + 1, 19));
+    setImageHistoryIndex((prev) => Math.min(prev + 1, 19));
   }, [imageHistoryIndex]);
 
   // Undo mask drawing
@@ -349,7 +344,7 @@ export function ImageEraserPage() {
 
     const newIndex = maskHistoryIndex - 1;
     const maskCtx = maskCanvasRef.current?.getContext("2d", {
-      willReadFrequently: true
+      willReadFrequently: true,
     });
     if (!maskCtx || !maskHistory[newIndex]) return;
 
@@ -363,7 +358,7 @@ export function ImageEraserPage() {
 
     const newIndex = maskHistoryIndex + 1;
     const maskCtx = maskCanvasRef.current?.getContext("2d", {
-      willReadFrequently: true
+      willReadFrequently: true,
     });
     if (!maskCtx || !maskHistory[newIndex]) return;
 
@@ -377,7 +372,7 @@ export function ImageEraserPage() {
 
     const newIndex = imageHistoryIndex - 1;
     const imageCtx = imageCanvasRef.current?.getContext("2d", {
-      willReadFrequently: true
+      willReadFrequently: true,
     });
     if (!imageCtx || !imageHistory[newIndex]) return;
 
@@ -397,7 +392,7 @@ export function ImageEraserPage() {
 
     const newIndex = imageHistoryIndex + 1;
     const imageCtx = imageCanvasRef.current?.getContext("2d", {
-      willReadFrequently: true
+      willReadFrequently: true,
     });
     if (!imageCtx || !imageHistory[newIndex]) return;
 
@@ -423,11 +418,11 @@ export function ImageEraserPage() {
 
   // Zoom controls
   const zoomIn = useCallback(() => {
-    setZoom(prev => Math.min(prev + 0.25, 3));
+    setZoom((prev) => Math.min(prev + 0.25, 3));
   }, []);
 
   const zoomOut = useCallback(() => {
-    setZoom(prev => Math.max(prev - 0.25, 0.5));
+    setZoom((prev) => Math.max(prev - 0.25, 0.5));
   }, []);
 
   const resetZoom = useCallback(() => {
@@ -446,10 +441,10 @@ export function ImageEraserPage() {
 
       return {
         x: (e.clientX - rect.left) * scaleX,
-        y: (e.clientY - rect.top) * scaleY
+        y: (e.clientY - rect.top) * scaleY,
       };
     },
-    []
+    [],
   );
 
   // Get display coordinates for cursor overlay (adjusted for zoom)
@@ -462,10 +457,10 @@ export function ImageEraserPage() {
       // Divide by zoom because cursor is inside the scaled container
       return {
         x: (e.clientX - rect.left) / zoom,
-        y: (e.clientY - rect.top) / zoom
+        y: (e.clientY - rect.top) / zoom,
       };
     },
-    [zoom]
+    [zoom],
   );
 
   // Draw at position
@@ -473,7 +468,7 @@ export function ImageEraserPage() {
     (x: number, y: number, lastX?: number, lastY?: number) => {
       const maskCanvas = maskCanvasRef.current;
       const maskCtx = maskCanvas?.getContext("2d", {
-        willReadFrequently: true
+        willReadFrequently: true,
       });
       if (!maskCtx || !maskCanvas) return;
 
@@ -511,7 +506,7 @@ export function ImageEraserPage() {
       // Reset composite operation
       maskCtx.globalCompositeOperation = "source-over";
     },
-    [tool, brushSize, canvasSize.width]
+    [tool, brushSize, canvasSize.width],
   );
 
   // Mouse event handlers for drawing
@@ -526,7 +521,7 @@ export function ImageEraserPage() {
       lastPosRef.current = coords;
       drawAt(coords.x, coords.y);
     },
-    [isProcessing, getCanvasCoords, drawAt]
+    [isProcessing, getCanvasCoords, drawAt],
   );
 
   const handleMouseMove = useCallback(
@@ -545,7 +540,7 @@ export function ImageEraserPage() {
       drawAt(coords.x, coords.y, lastPos?.x, lastPos?.y);
       lastPosRef.current = coords;
     },
-    [isDrawing, getCanvasCoords, getDisplayCoords, drawAt]
+    [isDrawing, getCanvasCoords, getDisplayCoords, drawAt],
   );
 
   const handleMouseUp = useCallback(() => {
@@ -571,7 +566,7 @@ export function ImageEraserPage() {
 
       setError(null);
       const reader = new FileReader();
-      reader.onload = e => {
+      reader.onload = (e) => {
         const dataUrl = e.target?.result as string;
         setOriginalImage(dataUrl);
         setResultImage(null);
@@ -589,7 +584,7 @@ export function ImageEraserPage() {
       };
       reader.readAsDataURL(file);
     },
-    [resetProgress]
+    [resetProgress],
   );
 
   const handleDrop = useCallback(
@@ -602,7 +597,7 @@ export function ImageEraserPage() {
       const file = e.dataTransfer.files[0];
       if (file) handleFileSelect(file);
     },
-    [handleFileSelect, isProcessing]
+    [handleFileSelect, isProcessing],
   );
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -653,14 +648,14 @@ export function ImageEraserPage() {
         bbox.x,
         bbox.y,
         bbox.width,
-        bbox.height
+        bbox.height,
       );
       const croppedMask = cropCanvas(
         maskCanvas,
         bbox.x,
         bbox.y,
         bbox.width,
-        bbox.height
+        bbox.height,
       );
 
       // Add reflect padding at image edges to prevent seams
@@ -675,7 +670,7 @@ export function ImageEraserPage() {
         right:
           originalSize && bbox.x + bbox.width >= originalSize.width
             ? padAmount
-            : 0
+            : 0,
       };
       const hasPadding =
         padding.top > 0 ||
@@ -700,7 +695,7 @@ export function ImageEraserPage() {
         imageData,
         maskData,
         processImage.width,
-        processImage.height
+        processImage.height,
       );
 
       // Convert result back to canvas (DeepFillv2 outputs normalized 0-1)
@@ -708,7 +703,7 @@ export function ImageEraserPage() {
         result.data,
         result.width,
         result.height,
-        true
+        true,
       );
 
       // Crop away padding if it was added
@@ -718,7 +713,7 @@ export function ImageEraserPage() {
           padding.left,
           padding.top,
           bbox.width,
-          bbox.height
+          bbox.height,
         );
       }
 
@@ -729,7 +724,7 @@ export function ImageEraserPage() {
         croppedMask,
         bbox.x,
         bbox.y,
-        12
+        12,
       );
 
       // Save the new image state to history (for undo/redo of removals)
@@ -759,7 +754,7 @@ export function ImageEraserPage() {
           0,
           0,
           maskCanvas.width,
-          maskCanvas.height
+          maskCanvas.height,
         );
         setMaskHistory([initialState]);
         setMaskHistoryIndex(0);
@@ -824,7 +819,7 @@ export function ImageEraserPage() {
     maskHistoryIndex,
     maskHistory.length,
     imageHistoryIndex,
-    imageHistory.length
+    imageHistory.length,
   ]);
 
   // Cleanup on unmount
@@ -884,7 +879,7 @@ export function ImageEraserPage() {
             "border-2 border-dashed cursor-pointer transition-colors",
             isDragging
               ? "border-primary bg-primary/5"
-              : "border-muted-foreground/25 hover:border-primary/50"
+              : "border-muted-foreground/25 hover:border-primary/50",
           )}
           onClick={() => fileInputRef.current?.click()}
         >
@@ -907,7 +902,7 @@ export function ImageEraserPage() {
         type="file"
         accept="image/*"
         className="hidden"
-        onChange={e => {
+        onChange={(e) => {
           const file = e.target.files?.[0];
           if (file) handleFileSelect(file);
         }}
@@ -1187,7 +1182,7 @@ export function ImageEraserPage() {
                     <>
                       <Select
                         value={downloadFormat}
-                        onValueChange={v =>
+                        onValueChange={(v) =>
                           setDownloadFormat(v as "png" | "jpeg" | "webp")
                         }
                       >
@@ -1216,7 +1211,7 @@ export function ImageEraserPage() {
                 ref={containerRef}
                 className="relative flex items-center justify-center bg-muted rounded-lg overflow-auto"
                 style={{
-                  minHeight: Math.max(400, canvasSize.height * zoom + 16)
+                  minHeight: Math.max(400, canvasSize.height * zoom + 16),
                 }}
               >
                 <div
@@ -1225,7 +1220,7 @@ export function ImageEraserPage() {
                     width: canvasSize.width,
                     height: canvasSize.height,
                     transform: `scale(${zoom})`,
-                    transformOrigin: "center center"
+                    transformOrigin: "center center",
                   }}
                 >
                   {/* Background image canvas - buffer at original res, displayed at canvasSize */}
@@ -1235,7 +1230,7 @@ export function ImageEraserPage() {
                     style={{
                       width: canvasSize.width,
                       height: canvasSize.height,
-                      objectFit: "contain"
+                      objectFit: "contain",
                     }}
                     onClick={() => resultImage && setPreviewImage(resultImage)}
                   />
@@ -1245,12 +1240,12 @@ export function ImageEraserPage() {
                     ref={maskCanvasRef}
                     className={cn(
                       "absolute inset-0 cursor-none",
-                      isProcessing && "pointer-events-none"
+                      isProcessing && "pointer-events-none",
                     )}
                     style={{
                       width: canvasSize.width,
                       height: canvasSize.height,
-                      opacity: 0.5
+                      opacity: 0.5,
                     }}
                     onMouseDown={handleMouseDown}
                     onMouseMove={handleMouseMove}
@@ -1282,7 +1277,7 @@ export function ImageEraserPage() {
                         boxShadow:
                           tool === "eraser"
                             ? "0 0 0 1px rgba(255, 255, 255, 0.5)"
-                            : "0 0 0 1px rgba(0, 0, 0, 0.5)"
+                            : "0 0 0 1px rgba(0, 0, 0, 0.5)",
                       }}
                     />
                   )}

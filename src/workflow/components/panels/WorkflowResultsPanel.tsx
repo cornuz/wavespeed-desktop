@@ -20,14 +20,14 @@ function useOrderedResultNodes(): Array<{
   status: string;
   urls: string[];
 }> {
-  const nodes = useWorkflowStore(s => s.nodes);
-  const edges = useWorkflowStore(s => s.edges);
-  const lastResults = useExecutionStore(s => s.lastResults);
-  const nodeStatuses = useExecutionStore(s => s.nodeStatuses);
-  const runSessions = useExecutionStore(s => s.runSessions);
+  const nodes = useWorkflowStore((s) => s.nodes);
+  const edges = useWorkflowStore((s) => s.edges);
+  const lastResults = useExecutionStore((s) => s.lastResults);
+  const nodeStatuses = useExecutionStore((s) => s.nodeStatuses);
+  const runSessions = useExecutionStore((s) => s.runSessions);
 
   return useMemo(() => {
-    const nodeIds = nodes.map(n => n.id);
+    const nodeIds = nodes.map((n) => n.id);
     const idToDisplayLabel: Record<string, string> = {};
     for (const n of nodes) {
       const rawTitle = (n.data?.label as string)?.trim();
@@ -51,21 +51,21 @@ function useOrderedResultNodes(): Array<{
     if (latestSession?.nodeIds?.length) {
       orderedIds = [...latestSession.nodeIds].reverse();
     } else {
-      const simpleEdges = edges.map(e => ({
+      const simpleEdges = edges.map((e) => ({
         sourceNodeId: e.source,
-        targetNodeId: e.target
+        targetNodeId: e.target,
       }));
       const levels = topologicalLevels(nodeIds, simpleEdges);
       const execOrder = levels.flat();
       orderedIds = [...execOrder].reverse();
     }
 
-    const withResults = orderedIds.filter(id => {
+    const withResults = orderedIds.filter((id) => {
       const arr = lastResults[id];
       return Array.isArray(arr) && arr.length > 0 && arr[0].urls?.length;
     });
 
-    return withResults.map(nodeId => {
+    return withResults.map((nodeId) => {
       const arr = lastResults[nodeId] ?? [];
       const latest = arr[0];
       const urls = latest?.urls ?? [];
@@ -74,7 +74,7 @@ function useOrderedResultNodes(): Array<{
         nodeId,
         label: idToDisplayLabel[nodeId] ?? nodeId.slice(0, 8),
         status,
-        urls
+        urls,
       };
     });
   }, [nodes, edges, lastResults, nodeStatuses, runSessions]);
@@ -82,15 +82,15 @@ function useOrderedResultNodes(): Array<{
 
 export function WorkflowResultsPanel() {
   const { t } = useTranslation();
-  const width = useUIStore(s => s.workflowResultsPanelWidth);
+  const width = useUIStore((s) => s.workflowResultsPanelWidth);
   const setWorkflowResultsPanelWidth = useUIStore(
-    s => s.setWorkflowResultsPanelWidth
+    (s) => s.setWorkflowResultsPanelWidth,
   );
   const toggleWorkflowResultsPanel = useUIStore(
-    s => s.toggleWorkflowResultsPanel
+    (s) => s.toggleWorkflowResultsPanel,
   );
-  const selectNode = useUIStore(s => s.selectNode);
-  const openPreview = useUIStore(s => s.openPreview);
+  const selectNode = useUIStore((s) => s.selectNode);
+  const openPreview = useUIStore((s) => s.openPreview);
   const ordered = useOrderedResultNodes();
   const [dragging, setDragging] = useState(false);
 
@@ -111,7 +111,7 @@ export function WorkflowResultsPanel() {
       document.addEventListener("mousemove", onMove);
       document.addEventListener("mouseup", onUp);
     },
-    [width, setWorkflowResultsPanelWidth]
+    [width, setWorkflowResultsPanelWidth],
   );
 
   return (
@@ -149,7 +149,7 @@ export function WorkflowResultsPanel() {
             <p className="text-muted-foreground text-sm py-6 text-center px-2">
               {t(
                 "workflow.noResultsYet",
-                "No results yet. Run the workflow to see outputs here."
+                "No results yet. Run the workflow to see outputs here.",
               )}
             </p>
           )}
@@ -172,19 +172,19 @@ export function WorkflowResultsPanel() {
                       status === "running"
                         ? "bg-blue-500/20 text-blue-400"
                         : status === "confirmed"
-                        ? "bg-green-500/20 text-green-400"
-                        : status === "error"
-                        ? "bg-red-500/20 text-red-400"
-                        : "bg-muted text-muted-foreground"
+                          ? "bg-green-500/20 text-green-400"
+                          : status === "error"
+                            ? "bg-red-500/20 text-red-400"
+                            : "bg-muted text-muted-foreground"
                     }`}
                 >
                   {status === "running"
                     ? t("workflow.running", "Running")
                     : status === "confirmed"
-                    ? t("workflow.done", "Done")
-                    : status === "error"
-                    ? t("workflow.error", "Error")
-                    : t("workflow.idle", "Idle")}
+                      ? t("workflow.done", "Done")
+                      : status === "error"
+                        ? t("workflow.error", "Error")
+                        : t("workflow.idle", "Idle")}
                 </span>
               </button>
               {urls.length > 0 && (
@@ -196,7 +196,7 @@ export function WorkflowResultsPanel() {
                         <button
                           key={ui}
                           type="button"
-                          onClick={e => {
+                          onClick={(e) => {
                             e.stopPropagation();
                             openPreview(url, urls);
                           }}
@@ -215,7 +215,7 @@ export function WorkflowResultsPanel() {
                         <button
                           key={ui}
                           type="button"
-                          onClick={e => {
+                          onClick={(e) => {
                             e.stopPropagation();
                             openPreview(url);
                           }}
@@ -259,7 +259,7 @@ export function WorkflowResultsPanel() {
                       <button
                         key={ui}
                         type="button"
-                        onClick={e => {
+                        onClick={(e) => {
                           e.stopPropagation();
                           openPreview(url);
                         }}
@@ -267,10 +267,7 @@ export function WorkflowResultsPanel() {
                       >
                         {url.startsWith("data:")
                           ? "Data"
-                          : url
-                              .split("/")
-                              .pop()
-                              ?.split("?")[0] || "File"}
+                          : url.split("/").pop()?.split("?")[0] || "File"}
                       </button>
                     );
                   })}

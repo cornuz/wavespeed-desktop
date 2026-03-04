@@ -1,6 +1,6 @@
 const CDN_BASE_URLS = [
   "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm",
-  "https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm"
+  "https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm",
 ];
 
 interface FFmpegCore {
@@ -105,7 +105,7 @@ interface InfoPayload {
 }
 
 async function ensureLoaded(
-  onProgress?: (progress: number) => void
+  onProgress?: (progress: number) => void,
 ): Promise<FFmpegCore> {
   if (isLoaded && ffmpegCore) return ffmpegCore;
 
@@ -128,13 +128,13 @@ async function ensureLoaded(
     // when @ffmpeg/core is the single-thread build (no .worker.js file).
     const coreURL = toBlobURL(coreBuf, "text/javascript");
     const coreFactory = (await import(/* @vite-ignore */ coreURL)).default as (
-      config: Record<string, unknown>
+      config: Record<string, unknown>,
     ) => Promise<FFmpegCore>;
 
     // Pass wasmBinary directly so Emscripten skips its own fetch of the .wasm
     // file (which would fail because import.meta.url is a blob URL).
     ffmpegCore = await coreFactory({
-      wasmBinary: wasmBuf
+      wasmBinary: wasmBuf,
     });
 
     isLoaded = true;
@@ -156,7 +156,7 @@ function buildConvertArgs(
   inputFile: string,
   outputFile: string,
   outputFormat: string,
-  options?: ConvertOptions
+  options?: ConvertOptions,
 ): string[] {
   const args: string[] = ["-i", inputFile];
 
@@ -215,10 +215,10 @@ self.onmessage = async (e: MessageEvent) => {
     switch (type) {
       case "load": {
         self.postMessage({ type: "phase", payload: { phase: "download" } });
-        await ensureLoaded(progress => {
+        await ensureLoaded((progress) => {
           self.postMessage({
             type: "progress",
-            payload: { phase: "download", progress }
+            payload: { phase: "download", progress },
           });
         });
         self.postMessage({ type: "loaded" });
@@ -226,21 +226,15 @@ self.onmessage = async (e: MessageEvent) => {
       }
 
       case "convert": {
-        const {
-          file,
-          fileName,
-          outputFormat,
-          outputExt,
-          options,
-          id
-        } = payload as ConvertPayload;
+        const { file, fileName, outputFormat, outputExt, options, id } =
+          payload as ConvertPayload;
         currentOperationId = id;
 
         self.postMessage({ type: "phase", payload: { phase: "download", id } });
-        const ff = await ensureLoaded(progress => {
+        const ff = await ensureLoaded((progress) => {
           self.postMessage({
             type: "progress",
-            payload: { phase: "download", progress, id }
+            payload: { phase: "download", progress, id },
           });
         });
 
@@ -266,18 +260,18 @@ self.onmessage = async (e: MessageEvent) => {
                 ? {
                     current: Math.floor(time / 1000000),
                     total: Math.floor(totalDuration),
-                    unit: "seconds"
+                    unit: "seconds",
                   }
                 : undefined,
-              id
-            }
+              id,
+            },
           });
         });
 
         const outputFile = `output.${outputExt}`;
         runExec(
           ff,
-          buildConvertArgs(safeInput, outputFile, outputFormat, options)
+          buildConvertArgs(safeInput, outputFile, outputFormat, options),
         );
 
         const data = ff.FS.readFile(outputFile) as Uint8Array;
@@ -288,9 +282,9 @@ self.onmessage = async (e: MessageEvent) => {
         self.postMessage(
           {
             type: "result",
-            payload: { data: buffer, filename: outputFile, id }
+            payload: { data: buffer, filename: outputFile, id },
           },
-          { transfer: [buffer] }
+          { transfer: [buffer] },
         );
         currentOperationId = null;
         break;
@@ -302,16 +296,16 @@ self.onmessage = async (e: MessageEvent) => {
           fileNames,
           outputFormat: _outputFormat,
           outputExt,
-          id
+          id,
         } = payload as MergePayload;
         currentOperationId = id;
 
         // Phase 1: Load FFmpeg
         self.postMessage({ type: "phase", payload: { phase: "download", id } });
-        const ff = await ensureLoaded(progress => {
+        const ff = await ensureLoaded((progress) => {
           self.postMessage({
             type: "progress",
-            payload: { phase: "download", progress, id }
+            payload: { phase: "download", progress, id },
           });
         });
 
@@ -322,7 +316,7 @@ self.onmessage = async (e: MessageEvent) => {
           "flac",
           "m4a",
           "aac",
-          "wma"
+          "wma",
         ].includes(outputExt);
         const total = files.length;
 
@@ -337,7 +331,7 @@ self.onmessage = async (e: MessageEvent) => {
         // Phase 2: Transcode each input to uniform intermediate format
         self.postMessage({
           type: "phase",
-          payload: { phase: "transcode", id }
+          payload: { phase: "transcode", id },
         });
 
         const intermediateNames: string[] = [];
@@ -349,8 +343,8 @@ self.onmessage = async (e: MessageEvent) => {
               phase: "transcode",
               progress: fileProgress,
               detail: { current: i + 1, total, unit: "items" },
-              id
-            }
+              id,
+            },
           });
 
           if (isAudioOnly) {
@@ -364,11 +358,11 @@ self.onmessage = async (e: MessageEvent) => {
               "44100",
               "-ac",
               "2",
-              intName
+              intName,
             ]);
             if (ret !== 0) {
               throw new Error(
-                `Failed to transcode input ${i + 1} (${fileNames[i]})`
+                `Failed to transcode input ${i + 1} (${fileNames[i]})`,
               );
             }
             intermediateNames.push(intName);
@@ -394,7 +388,7 @@ self.onmessage = async (e: MessageEvent) => {
                 "-f",
                 "lavfi",
                 "-i",
-                "anullsrc=r=44100:cl=stereo"
+                "anullsrc=r=44100:cl=stereo",
               );
               encodeArgs.push("-shortest");
             }
@@ -415,13 +409,13 @@ self.onmessage = async (e: MessageEvent) => {
               "2",
               "-f",
               "mpegts",
-              intName
+              intName,
             );
 
             const ret = runExec(ff, encodeArgs);
             if (ret !== 0) {
               throw new Error(
-                `Failed to transcode input ${i + 1} (${fileNames[i]})`
+                `Failed to transcode input ${i + 1} (${fileNames[i]})`,
               );
             }
             intermediateNames.push(intName);
@@ -435,15 +429,15 @@ self.onmessage = async (e: MessageEvent) => {
             phase: "transcode",
             progress: 100,
             detail: { current: total, total, unit: "items" },
-            id
-          }
+            id,
+          },
         });
 
         // Phase 3: Concatenate intermediates into final output
         self.postMessage({ type: "phase", payload: { phase: "merge", id } });
 
         const concatContent = intermediateNames
-          .map(name => `file '${name}'`)
+          .map((name) => `file '${name}'`)
           .join("\n");
         ff.FS.writeFile("concat.txt", new TextEncoder().encode(concatContent));
 
@@ -451,7 +445,7 @@ self.onmessage = async (e: MessageEvent) => {
           if (currentOperationId !== id) return;
           self.postMessage({
             type: "progress",
-            payload: { phase: "merge", progress: progress * 100, id }
+            payload: { phase: "merge", progress: progress * 100, id },
           });
         });
 
@@ -464,7 +458,7 @@ self.onmessage = async (e: MessageEvent) => {
             "0",
             "-i",
             "concat.txt",
-            outputFile
+            outputFile,
           ]);
           if (ret !== 0) throw new Error("Failed to merge audio files");
         } else {
@@ -477,7 +471,7 @@ self.onmessage = async (e: MessageEvent) => {
             "concat.txt",
             "-c",
             "copy",
-            outputFile
+            outputFile,
           ]);
           if (ret !== 0) throw new Error("Failed to merge video files");
         }
@@ -491,9 +485,9 @@ self.onmessage = async (e: MessageEvent) => {
         self.postMessage(
           {
             type: "result",
-            payload: { data: buffer, filename: outputFile, id }
+            payload: { data: buffer, filename: outputFile, id },
           },
-          { transfer: [buffer] }
+          { transfer: [buffer] },
         );
         currentOperationId = null;
         break;
@@ -507,15 +501,15 @@ self.onmessage = async (e: MessageEvent) => {
           endTime,
           outputFormat: _outputFormat,
           outputExt,
-          id
+          id,
         } = payload as TrimPayload;
         currentOperationId = id;
 
         self.postMessage({ type: "phase", payload: { phase: "download", id } });
-        const ff = await ensureLoaded(progress => {
+        const ff = await ensureLoaded((progress) => {
           self.postMessage({
             type: "progress",
-            payload: { phase: "download", progress, id }
+            payload: { phase: "download", progress, id },
           });
         });
 
@@ -536,10 +530,10 @@ self.onmessage = async (e: MessageEvent) => {
               detail: {
                 current: Math.floor(progress * duration),
                 total: Math.floor(duration),
-                unit: "seconds"
+                unit: "seconds",
               },
-              id
-            }
+              id,
+            },
           });
         });
 
@@ -553,7 +547,7 @@ self.onmessage = async (e: MessageEvent) => {
           String(duration),
           "-c",
           "copy",
-          outputFile
+          outputFile,
         ]);
 
         const data = ff.FS.readFile(outputFile) as Uint8Array;
@@ -564,9 +558,9 @@ self.onmessage = async (e: MessageEvent) => {
         self.postMessage(
           {
             type: "result",
-            payload: { data: buffer, filename: outputFile, id }
+            payload: { data: buffer, filename: outputFile, id },
           },
-          { transfer: [buffer] }
+          { transfer: [buffer] },
         );
         currentOperationId = null;
         break;
@@ -607,8 +601,8 @@ self.onmessage = async (e: MessageEvent) => {
               : null,
             videoCodec: videoCodecMatch?.[1] || null,
             audioCodec: audioCodecMatch?.[1] || null,
-            id
-          }
+            id,
+          },
         });
         break;
       }

@@ -442,7 +442,8 @@ export async function executeWorkflowInBrowser(
           const existingUrls = options?.existingResults?.get(nodeId);
           if (existingUrls && existingUrls.length > 0) {
             // Preserve full array for multi-output nodes (e.g. concat)
-            const outputValue = existingUrls.length === 1 ? existingUrls[0] : existingUrls;
+            const outputValue =
+              existingUrls.length === 1 ? existingUrls[0] : existingUrls;
             results.set(nodeId, {
               outputUrl: existingUrls[0],
               resultMetadata: {
@@ -462,7 +463,10 @@ export async function executeWorkflowInBrowser(
             if (existingOutput) {
               results.set(nodeId, {
                 outputUrl: existingOutput,
-                resultMetadata: { output: existingOutput, resultUrl: existingOutput },
+                resultMetadata: {
+                  output: existingOutput,
+                  resultUrl: existingOutput,
+                },
               });
             }
           }
@@ -503,7 +507,9 @@ export async function executeWorkflowInBrowser(
             // Ensure all URLs are valid HTTP URLs (upload local-asset:// / blob: to CDN)
             const resolvedParams = await uploadLocalUrls(apiParams, signal);
             callbacks.onProgress(nodeId, 5, `Running ${modelId}...`);
-            const result = await apiClient.run(modelId, resolvedParams, { signal });
+            const result = await apiClient.run(modelId, resolvedParams, {
+              signal,
+            });
             const outputUrl =
               Array.isArray(result.outputs) && result.outputs.length > 0
                 ? String(result.outputs[0])

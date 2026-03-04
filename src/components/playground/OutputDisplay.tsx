@@ -26,11 +26,7 @@ import {
   FolderHeart,
   Sparkles,
 } from "lucide-react";
-import {
-  isImageUrl,
-  isVideoUrl,
-  isAudioUrl,
-} from "@/lib/mediaUtils";
+import { isImageUrl, isVideoUrl, isAudioUrl } from "@/lib/mediaUtils";
 import { AudioPlayer } from "@/components/shared/AudioPlayer";
 import { FlappyBird } from "./FlappyBird";
 import { toast } from "@/hooks/useToast";
@@ -54,9 +50,13 @@ const mobileDownload = async (
   try {
     // Dynamic imports for Capacitor modules (vite-ignore to prevent desktop build errors)
     // @ts-ignore
-    const { CapacitorHttp } = await import(/* @vite-ignore */ "@capacitor/core");
+    const { CapacitorHttp } = await import(
+      /* @vite-ignore */ "@capacitor/core"
+    );
     // @ts-ignore
-    const { Filesystem, Directory } = await import(/* @vite-ignore */ "@capacitor/filesystem");
+    const { Filesystem, Directory } = await import(
+      /* @vite-ignore */ "@capacitor/filesystem"
+    );
 
     // Fetch file using CapacitorHttp (bypasses CORS)
     const response = await CapacitorHttp.get({
@@ -131,8 +131,7 @@ export function OutputDisplay({
   const [gameEndedWithResults, setGameEndedWithResults] = useState(false);
   const prevOutputsLengthRef = useRef(0);
 
-  const { settings, loadSettings, saveAsset } =
-    useAssetsStore();
+  const { settings, loadSettings, saveAsset } = useAssetsStore();
 
   // Build list of media outputs for fullscreen navigation
   const mediaOutputs = useMemo(() => {
@@ -408,7 +407,9 @@ export function OutputDisplay({
     if (isCapacitorNative()) {
       try {
         // @ts-ignore
-        const { Browser } = await import(/* @vite-ignore */ "@capacitor/browser");
+        const { Browser } = await import(
+          /* @vite-ignore */ "@capacitor/browser"
+        );
         await Browser.open({ url });
       } catch {
         window.open(url, "_blank");

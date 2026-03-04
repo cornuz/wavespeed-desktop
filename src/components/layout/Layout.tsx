@@ -10,7 +10,7 @@ import {
   TooltipProvider,
   Tooltip,
   TooltipTrigger,
-  TooltipContent
+  TooltipContent,
 } from "@/components/ui/tooltip";
 import { ToastAction } from "@/components/ui/toast";
 import { toast } from "@/hooks/useToast";
@@ -27,7 +27,7 @@ import {
   Zap,
   ExternalLink,
   Globe,
-  FileText
+  FileText,
 } from "lucide-react";
 import { VideoEnhancerPage } from "@/pages/VideoEnhancerPage";
 import { ImageEnhancerPage } from "@/pages/ImageEnhancerPage";
@@ -78,16 +78,16 @@ export function Layout() {
   const [visitedPages, setVisitedPages] = useState<Set<string>>(new Set());
   // Track the last visited free-tools sub-page for navigation
   const [lastFreeToolsPage, setLastFreeToolsPage] = useState<string | null>(
-    null
+    null,
   );
   // Track keys for each page to force remount when reset
   const [pageKeys, setPageKeys] = useState<Record<string, number>>({});
 
   // Reset a persistent page by changing its key (forces remount)
   const resetPage = useCallback((path: string) => {
-    setPageKeys(prev => ({
+    setPageKeys((prev) => ({
       ...prev,
-      [path]: nextKey()
+      [path]: nextKey(),
     }));
   }, []);
 
@@ -96,7 +96,7 @@ export function Layout() {
     isValidating,
     loadApiKey,
     hasAttemptedLoad,
-    isLoading: isLoadingApiKey
+    isLoading: isLoadingApiKey,
   } = useApiKeyStore();
   const [inputKey, setInputKey] = useState("");
   const [showKey, setShowKey] = useState(false);
@@ -134,12 +134,12 @@ export function Layout() {
       "/free-tools/media-trimmer",
       "/free-tools/media-merger",
       "/z-image",
-      "/workflow"
+      "/workflow",
     ];
     if (persistentPaths.includes(location.pathname)) {
       // Track for lazy mounting
       if (!visitedPages.has(location.pathname)) {
-        setVisitedPages(prev => new Set(prev).add(location.pathname));
+        setVisitedPages((prev) => new Set(prev).add(location.pathname));
       }
       // Track last visited for sidebar navigation (only for free-tools sub-pages)
       if (location.pathname.startsWith("/free-tools/")) {
@@ -162,19 +162,19 @@ export function Layout() {
     "/templates",
     "/assets",
     "/free-tools",
-    "/z-image"
+    "/z-image",
   ];
-  const isPublicPage = publicPaths.some(path =>
+  const isPublicPage = publicPaths.some((path) =>
     path === "/"
       ? location.pathname === "/"
-      : location.pathname === path || location.pathname.startsWith(path + "/")
+      : location.pathname === path || location.pathname.startsWith(path + "/"),
   );
 
   // Listen for update availability on startup
   useEffect(() => {
     if (!window.electronAPI?.onUpdateStatus) return;
 
-    const unsubscribe = window.electronAPI.onUpdateStatus(status => {
+    const unsubscribe = window.electronAPI.onUpdateStatus((status) => {
       if (status.status === "available" && !hasShownUpdateToast.current) {
         hasShownUpdateToast.current = true;
         const version = (status as { version?: string }).version;
@@ -187,7 +187,7 @@ export function Layout() {
             <ToastAction altText="View" onClick={() => navigate("/settings")}>
               View
             </ToastAction>
-          )
+          ),
         });
       }
     });
@@ -217,7 +217,7 @@ export function Layout() {
 
       toast({
         title: t("settings.apiKey.saved"),
-        description: t("settings.apiKey.savedDesc")
+        description: t("settings.apiKey.savedDesc"),
       });
     } catch {
       // Validation failed - clear the temporary key from client
@@ -268,11 +268,11 @@ export function Layout() {
                 id="apiKey"
                 type={showKey ? "text" : "password"}
                 value={inputKey}
-                onChange={e => {
+                onChange={(e) => {
                   setInputKey(e.target.value);
                   setError("");
                 }}
-                onKeyDown={e => e.key === "Enter" && handleSaveApiKey()}
+                onKeyDown={(e) => e.key === "Enter" && handleSaveApiKey()}
                 placeholder={t("settings.apiKey.placeholder")}
                 className="pr-10"
               />
@@ -434,7 +434,7 @@ export function Layout() {
                         "/free-tools/media-trimmer",
                         "/free-tools/media-merger",
                         "/z-image",
-                        "/workflow"
+                        "/workflow",
                       ].includes(location.pathname)
                         ? "hidden"
                         : "h-full overflow-auto"

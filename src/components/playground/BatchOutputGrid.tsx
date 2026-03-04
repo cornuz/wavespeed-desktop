@@ -44,9 +44,13 @@ const mobileDownload = async (
   try {
     // Dynamic imports for Capacitor modules (vite-ignore to prevent desktop build errors)
     // @ts-ignore
-    const { CapacitorHttp } = await import(/* @vite-ignore */ "@capacitor/core");
+    const { CapacitorHttp } = await import(
+      /* @vite-ignore */ "@capacitor/core"
+    );
     // @ts-ignore
-    const { Filesystem, Directory } = await import(/* @vite-ignore */ "@capacitor/filesystem");
+    const { Filesystem, Directory } = await import(
+      /* @vite-ignore */ "@capacitor/filesystem"
+    );
 
     // Fetch file using CapacitorHttp (bypasses CORS)
     const response = await CapacitorHttp.get({

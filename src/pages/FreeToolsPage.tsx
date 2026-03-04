@@ -5,7 +5,7 @@ import {
   CardContent,
   CardDescription,
   CardHeader,
-  CardTitle
+  CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,7 +21,7 @@ import {
   Scissors,
   Combine,
   Sparkles,
-  ArrowLeftRight
+  ArrowLeftRight,
 } from "lucide-react";
 
 // Import tool demo images
@@ -50,7 +50,7 @@ export function FreeToolsPage() {
       descriptionKey: "freeTools.videoEnhancer.description",
       route: "/free-tools/video-enhancer",
       gradient: "from-violet-500/20 via-purple-500/10 to-transparent",
-      image: videoEnhancerImg
+      image: videoEnhancerImg,
     },
     {
       id: "image",
@@ -59,7 +59,7 @@ export function FreeToolsPage() {
       descriptionKey: "freeTools.imageEnhancer.description",
       route: "/free-tools/image-enhancer",
       gradient: "from-cyan-500/20 via-blue-500/10 to-transparent",
-      image: imageEnhancerImg
+      image: imageEnhancerImg,
     },
     {
       id: "face-enhancer",
@@ -68,7 +68,7 @@ export function FreeToolsPage() {
       descriptionKey: "freeTools.faceEnhancer.description",
       route: "/free-tools/face-enhancer",
       gradient: "from-rose-500/20 via-pink-500/10 to-transparent",
-      image: faceEnhancerImg
+      image: faceEnhancerImg,
     },
     {
       id: "face-swapper",
@@ -77,7 +77,7 @@ export function FreeToolsPage() {
       descriptionKey: "freeTools.faceSwapper.description",
       route: "/free-tools/face-swapper",
       gradient: "from-amber-500/20 via-orange-500/10 to-transparent",
-      image: faceSwapperImg
+      image: faceSwapperImg,
     },
     {
       id: "background-remover",
@@ -86,7 +86,7 @@ export function FreeToolsPage() {
       descriptionKey: "freeTools.backgroundRemover.description",
       route: "/free-tools/background-remover",
       gradient: "from-emerald-500/20 via-green-500/10 to-transparent",
-      image: backgroundRemoverImg
+      image: backgroundRemoverImg,
     },
     {
       id: "image-eraser",
@@ -95,7 +95,7 @@ export function FreeToolsPage() {
       descriptionKey: "freeTools.imageEraser.description",
       route: "/free-tools/image-eraser",
       gradient: "from-orange-500/20 via-red-500/10 to-transparent",
-      image: imageEraserImg
+      image: imageEraserImg,
     },
     {
       id: "segment-anything",
@@ -104,7 +104,7 @@ export function FreeToolsPage() {
       descriptionKey: "freeTools.segmentAnything.description",
       route: "/free-tools/segment-anything",
       gradient: "from-pink-500/20 via-rose-500/10 to-transparent",
-      image: SegmentAnythingImg
+      image: SegmentAnythingImg,
     },
     {
       id: "video-converter",
@@ -113,7 +113,7 @@ export function FreeToolsPage() {
       descriptionKey: "freeTools.videoConverter.description",
       route: "/free-tools/video-converter",
       gradient: "from-indigo-500/20 via-blue-500/10 to-transparent",
-      image: videoConverterImg
+      image: videoConverterImg,
     },
     {
       id: "audio-converter",
@@ -122,7 +122,7 @@ export function FreeToolsPage() {
       descriptionKey: "freeTools.audioConverter.description",
       route: "/free-tools/audio-converter",
       gradient: "from-teal-500/20 via-cyan-500/10 to-transparent",
-      image: audioConverterImg
+      image: audioConverterImg,
     },
     {
       id: "image-converter",
@@ -131,7 +131,7 @@ export function FreeToolsPage() {
       descriptionKey: "freeTools.imageConverter.description",
       route: "/free-tools/image-converter",
       gradient: "from-amber-500/20 via-yellow-500/10 to-transparent",
-      image: imageConverterImg
+      image: imageConverterImg,
     },
     {
       id: "media-trimmer",
@@ -140,7 +140,7 @@ export function FreeToolsPage() {
       descriptionKey: "freeTools.mediaTrimmer.description",
       route: "/free-tools/media-trimmer",
       gradient: "from-red-500/20 via-orange-500/10 to-transparent",
-      image: mediaTrimmerImg
+      image: mediaTrimmerImg,
     },
     {
       id: "media-merger",
@@ -149,8 +149,8 @@ export function FreeToolsPage() {
       descriptionKey: "freeTools.mediaMerger.description",
       route: "/free-tools/media-merger",
       gradient: "from-purple-500/20 via-fuchsia-500/10 to-transparent",
-      image: mediaMergerImg
-    }
+      image: mediaMergerImg,
+    },
   ];
 
   return (

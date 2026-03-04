@@ -30,11 +30,13 @@ function applyTheme(theme: Theme) {
 
   // Update Electron title bar overlay colors to match theme
   try {
-    ((window as unknown) as {
-      electronAPI?: {
-        updateTitlebarTheme?: (isDark: boolean) => Promise<void>;
-      };
-    }).electronAPI?.updateTitlebarTheme?.(isDark);
+    (
+      window as unknown as {
+        electronAPI?: {
+          updateTitlebarTheme?: (isDark: boolean) => Promise<void>;
+        };
+      }
+    ).electronAPI?.updateTitlebarTheme?.(isDark);
   } catch {
     /* not in Electron */
   }
@@ -68,5 +70,5 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
       }
     };
     mediaQuery.addEventListener("change", handleChange);
-  }
+  },
 }));

@@ -14,7 +14,7 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue
+  SelectValue,
 } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import {
@@ -25,7 +25,7 @@ import {
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
-  AlertDialogTitle
+  AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
   ArrowLeft,
@@ -34,7 +34,7 @@ import {
   Play,
   Square,
   X,
-  RefreshCw
+  RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -46,10 +46,10 @@ const PHASES = [
   {
     id: "process",
     labelKey: "freeTools.progress.processingFrames",
-    weight: 0.9
+    weight: 0.9,
   },
   { id: "encode", labelKey: "freeTools.progress.encoding", weight: 0.08 },
-  { id: "finalize", labelKey: "freeTools.progress.finalizing", weight: 0.02 }
+  { id: "finalize", labelKey: "freeTools.progress.finalizing", weight: 0.02 },
 ];
 
 export function VideoEnhancerPage() {
@@ -87,30 +87,25 @@ export function VideoEnhancerPage() {
     completePhase,
     reset: resetProgress,
     resetAndStart,
-    complete: completeAllPhases
+    complete: completeAllPhases,
   } = useMultiPhaseProgress({ phases: PHASES });
 
   const [error, setError] = useState<string | null>(null);
 
-  const {
-    loadModel,
-    upscale,
-    dispose,
-    hasFailed,
-    retryWorker
-  } = useUpscalerWorker({
-    onPhase: () => {
-      // Model loading phases ignored - handled by browser caching
-    },
-    onProgress: () => {
-      // Model loading progress ignored - handled by browser caching
-    },
-    onError: err => {
-      console.error("Worker error:", err);
-      setError(err);
-      setIsProcessing(false);
-    }
-  });
+  const { loadModel, upscale, dispose, hasFailed, retryWorker } =
+    useUpscalerWorker({
+      onPhase: () => {
+        // Model loading phases ignored - handled by browser caching
+      },
+      onProgress: () => {
+        // Model loading progress ignored - handled by browser caching
+      },
+      onError: (err) => {
+        console.error("Worker error:", err);
+        setError(err);
+        setIsProcessing(false);
+      },
+    });
 
   const handleRetry = useCallback(() => {
     setError(null);
@@ -139,7 +134,7 @@ export function VideoEnhancerPage() {
   // Check supported video formats
   useEffect(() => {
     const webmSupported = MediaRecorder.isTypeSupported(
-      "video/webm;codecs=vp9"
+      "video/webm;codecs=vp9",
     );
     const mp4Supported =
       MediaRecorder.isTypeSupported("video/mp4;codecs=avc1") ||
@@ -186,7 +181,7 @@ export function VideoEnhancerPage() {
       }, 100);
       // eslint-disable-next-line react-hooks/exhaustive-deps
     },
-    [videoUrl, downloadUrl, resetProgress]
+    [videoUrl, downloadUrl, resetProgress],
   );
 
   const handleDrop = useCallback(
@@ -199,7 +194,7 @@ export function VideoEnhancerPage() {
       const file = e.dataTransfer.files[0];
       if (file) handleFileSelect(file);
     },
-    [handleFileSelect, isProcessing]
+    [handleFileSelect, isProcessing],
   );
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -241,7 +236,7 @@ export function VideoEnhancerPage() {
       const outputCanvas = canvasRef.current;
 
       // Wait for video metadata
-      await new Promise<void>(resolve => {
+      await new Promise<void>((resolve) => {
         if (video.readyState >= 1) {
           resolve();
         } else {
@@ -279,9 +274,9 @@ export function VideoEnhancerPage() {
           codec: "V_VP9",
           width: outputCanvas.width,
           height: outputCanvas.height,
-          frameRate: targetFps
+          frameRate: targetFps,
         },
-        firstTimestampBehavior: "offset"
+        firstTimestampBehavior: "offset",
       });
 
       // Setup encoder
@@ -291,7 +286,7 @@ export function VideoEnhancerPage() {
           encodedFrames++;
           muxer.addVideoChunk(chunk, meta);
         },
-        error: e => console.error("Encoder error:", e)
+        error: (e) => console.error("Encoder error:", e),
       });
 
       encoder.configure({
@@ -299,7 +294,7 @@ export function VideoEnhancerPage() {
         width: outputCanvas.width,
         height: outputCanvas.height,
         bitrate: 8_000_000,
-        framerate: targetFps
+        framerate: targetFps,
       });
 
       console.log("Processing", totalFrames, "frames at", targetFps, "fps");
@@ -314,7 +309,7 @@ export function VideoEnhancerPage() {
 
         // Seek to frame position
         video.currentTime = currentTime;
-        await new Promise<void>(resolve => {
+        await new Promise<void>((resolve) => {
           video.onseeked = () => resolve();
         });
 
@@ -326,7 +321,7 @@ export function VideoEnhancerPage() {
           0,
           0,
           video.videoWidth,
-          video.videoHeight
+          video.videoHeight,
         );
 
         // Upscale with worker
@@ -334,7 +329,7 @@ export function VideoEnhancerPage() {
 
         // Draw upscaled result to output canvas
         const upscaledImg = new Image();
-        await new Promise<void>(resolve => {
+        await new Promise<void>((resolve) => {
           upscaledImg.onload = () => {
             outputCtx.drawImage(upscaledImg, 0, 0);
             resolve();
@@ -353,7 +348,7 @@ export function VideoEnhancerPage() {
         updatePhase("process", frameProgress, {
           current: frameIndex + 1,
           total: totalFrames,
-          unit: "frames"
+          unit: "frames",
         });
 
         if (frameIndex % 30 === 0) {
@@ -386,7 +381,7 @@ export function VideoEnhancerPage() {
         "Final video size:",
         finalBlob.size,
         "bytes, frames:",
-        encodedFrames
+        encodedFrames,
       );
 
       const url = URL.createObjectURL(finalBlob);
@@ -487,7 +482,7 @@ export function VideoEnhancerPage() {
             "border-2 border-dashed cursor-pointer transition-colors",
             isDragging
               ? "border-primary bg-primary/5"
-              : "border-muted-foreground/25 hover:border-primary/50"
+              : "border-muted-foreground/25 hover:border-primary/50",
           )}
           onClick={() => fileInputRef.current?.click()}
           onDrop={handleDrop}
@@ -514,7 +509,7 @@ export function VideoEnhancerPage() {
         type="file"
         accept="video/*"
         className="hidden"
-        onChange={e => {
+        onChange={(e) => {
           const file = e.target.files?.[0];
           if (file) handleFileSelect(file);
         }}
@@ -536,7 +531,7 @@ export function VideoEnhancerPage() {
 
             <Select
               value={model}
-              onValueChange={v => setModel(v as ModelType)}
+              onValueChange={(v) => setModel(v as ModelType)}
               disabled={isProcessing}
             >
               <SelectTrigger className="w-36">
@@ -557,7 +552,7 @@ export function VideoEnhancerPage() {
 
             <Select
               value={scale}
-              onValueChange={v => setScale(v as ScaleType)}
+              onValueChange={(v) => setScale(v as ScaleType)}
               disabled={isProcessing}
             >
               <SelectTrigger className="w-20">
@@ -586,7 +581,7 @@ export function VideoEnhancerPage() {
               <>
                 <Select
                   value={downloadFormat}
-                  onValueChange={v => setDownloadFormat(v as "webm" | "mp4")}
+                  onValueChange={(v) => setDownloadFormat(v as "webm" | "mp4")}
                 >
                   <SelectTrigger className="w-28">
                     <SelectValue />
@@ -669,7 +664,7 @@ export function VideoEnhancerPage() {
                 <div
                   className={cn(
                     "relative aspect-video bg-black rounded-lg overflow-hidden flex items-center justify-center",
-                    downloadUrl && "cursor-pointer"
+                    downloadUrl && "cursor-pointer",
                   )}
                   onClick={() => downloadUrl && setShowPreview(true)}
                 >
@@ -696,7 +691,7 @@ export function VideoEnhancerPage() {
                     className={cn(
                       isProcessing
                         ? "w-full h-full object-contain"
-                        : "absolute -left-[9999px] -top-[9999px]"
+                        : "absolute -left-[9999px] -top-[9999px]",
                     )}
                   />
                 </div>

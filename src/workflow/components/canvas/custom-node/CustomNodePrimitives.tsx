@@ -48,7 +48,7 @@ export function LinkedBadge({
   handleId,
   edges,
   nodes,
-  onDisconnect
+  onDisconnect,
 }: {
   nodeId?: string;
   handleId?: string;
@@ -71,7 +71,7 @@ export function LinkedBadge({
     );
   }
   const edge = edges.find(
-    e => e.target === nodeId && e.targetHandle === handleId
+    (e) => e.target === nodeId && e.targetHandle === handleId,
   );
   if (!edge) {
     return (
@@ -80,7 +80,7 @@ export function LinkedBadge({
       </span>
     );
   }
-  const sourceNode = nodes.find(n => n.id === edge.source);
+  const sourceNode = nodes.find((n) => n.id === edge.source);
   const sourceShortId = edge.source.slice(0, 8);
   const sourceLabel = sourceNode?.data?.label;
   const sourceName = sourceLabel
@@ -91,7 +91,7 @@ export function LinkedBadge({
     <span className="inline-flex items-center gap-1 text-[11px] text-blue-400 italic">
       {onDisconnect ? (
         <button
-          onClick={e => {
+          onClick={(e) => {
             e.stopPropagation();
             onDisconnect();
           }}
@@ -121,7 +121,7 @@ export function ConnectedInputControl({
   edges,
   nodes,
   onPreview,
-  showPreview = true
+  showPreview = true,
 }: {
   nodeId?: string;
   handleId?: string;
@@ -143,18 +143,18 @@ export function ConnectedInputControl({
   onPreview?: (src: string) => void;
   showPreview?: boolean;
 }) {
-  const lastResults = useExecutionStore(s => s.lastResults);
+  const lastResults = useExecutionStore((s) => s.lastResults);
 
   if (!nodeId || !handleId || !edges || !nodes) {
     return <LinkedBadge />;
   }
 
   const edge = edges.find(
-    e => e.target === nodeId && e.targetHandle === handleId
+    (e) => e.target === nodeId && e.targetHandle === handleId,
   );
   if (!edge) return <LinkedBadge />;
 
-  const sourceNode = nodes.find(n => n.id === edge.source);
+  const sourceNode = nodes.find((n) => n.id === edge.source);
   const sourceParams = sourceNode?.data?.params ?? {};
   const latestResultUrls = lastResults[edge.source]?.[0]?.urls ?? [];
 
@@ -166,7 +166,7 @@ export function ConnectedInputControl({
 
   const pickPreviewUrls = (): string[] => {
     // Prefer actual execution results — this is the real output of the source node
-    const mediaUrls = latestResultUrls.filter(u => u && isMediaLike(u));
+    const mediaUrls = latestResultUrls.filter((u) => u && isMediaLike(u));
     if (mediaUrls.length > 0) return mediaUrls;
 
     // Only fall back to source params for input-type nodes (media-upload)
@@ -179,17 +179,18 @@ export function ConnectedInputControl({
   const previewUrls = pickPreviewUrls();
 
   const classifyMedia = (url: string) => {
-    const src = (/^local-asset:\/\//i.test(url)
-      ? (() => {
-          try {
-            return decodeURIComponent(
-              url.replace(/^local-asset:\/\//i, "")
-            ).toLowerCase();
-          } catch {
-            return url.toLowerCase();
-          }
-        })()
-      : url.toLowerCase()
+    const src = (
+      /^local-asset:\/\//i.test(url)
+        ? (() => {
+            try {
+              return decodeURIComponent(
+                url.replace(/^local-asset:\/\//i, ""),
+              ).toLowerCase();
+            } catch {
+              return url.toLowerCase();
+            }
+          })()
+        : url.toLowerCase()
     ).split("?")[0];
     return {
       isImage:
@@ -198,7 +199,7 @@ export function ConnectedInputControl({
       isVideo:
         /^data:video\//i.test(url) || /\.(mp4|webm|mov|avi|mkv)$/.test(src),
       isAudio:
-        /^data:audio\//i.test(url) || /\.(mp3|wav|ogg|flac|aac|m4a)$/.test(src)
+        /^data:audio\//i.test(url) || /\.(mp3|wav|ogg|flac|aac|m4a)$/.test(src),
     };
   };
 
@@ -213,18 +214,20 @@ export function ConnectedInputControl({
       {showPreview && previewUrls.length > 0 && onPreview && (
         <div
           className="mt-1 flex items-center gap-1 flex-wrap"
-          onClick={e => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
         >
           {previewUrls.map((url, i) => {
-            const { isImage: img, isVideo: vid, isAudio: aud } = classifyMedia(
-              url
-            );
+            const {
+              isImage: img,
+              isVideo: vid,
+              isAudio: aud,
+            } = classifyMedia(url);
             if (img)
               return (
                 <button
                   key={i}
                   type="button"
-                  onClick={e => {
+                  onClick={(e) => {
                     e.stopPropagation();
                     onPreview(url);
                   }}
@@ -242,7 +245,7 @@ export function ConnectedInputControl({
                 <button
                   key={i}
                   type="button"
-                  onClick={e => {
+                  onClick={(e) => {
                     e.stopPropagation();
                     onPreview(url);
                   }}
@@ -253,8 +256,8 @@ export function ConnectedInputControl({
                     className="w-full h-full object-cover"
                     muted
                     playsInline
-                    onMouseEnter={e => e.currentTarget.play()}
-                    onMouseLeave={e => {
+                    onMouseEnter={(e) => e.currentTarget.play()}
+                    onMouseLeave={(e) => {
                       e.currentTarget.pause();
                       e.currentTarget.currentTime = 0;
                     }}
@@ -266,7 +269,7 @@ export function ConnectedInputControl({
                 <button
                   key={i}
                   type="button"
-                  onClick={e => {
+                  onClick={(e) => {
                     e.stopPropagation();
                     onPreview(url);
                   }}
@@ -304,7 +307,7 @@ export function ConnectedInputControl({
 
 export function UploadStatusBadge({
   state,
-  error
+  error,
 }: {
   state: string;
   error: string;
@@ -337,7 +340,7 @@ export function UploadStatusBadge({
 
 export function ToggleSwitch({
   checked,
-  onChange
+  onChange,
 }: {
   checked: boolean;
   onChange: (v: unknown) => void;
@@ -345,7 +348,7 @@ export function ToggleSwitch({
   return (
     <button
       type="button"
-      onClick={e => {
+      onClick={(e) => {
         e.stopPropagation();
         onChange(!checked);
       }}
@@ -372,7 +375,7 @@ export function NumberInput({
   max,
   step,
   onChange,
-  placeholder
+  placeholder,
 }: {
   value: number | undefined;
   min?: number;
@@ -396,7 +399,7 @@ export function NumberInput({
   return (
     <div
       className="flex items-center gap-1.5"
-      onClick={e => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
     >
       <input
         type="number"
@@ -404,7 +407,7 @@ export function NumberInput({
         min={min}
         max={max}
         step={step}
-        onChange={e => {
+        onChange={(e) => {
           if (e.target.value === "") {
             onChange(undefined);
             return;
@@ -432,7 +435,7 @@ export function NumberInput({
 export function FileBtn({
   accept,
   onFile,
-  uploading
+  uploading,
 }: {
   accept: string;
   onFile: (f: File) => void;
@@ -445,7 +448,7 @@ export function FileBtn({
           ? "bg-blue-500/25 animate-pulse"
           : "bg-blue-500/15 text-blue-400 hover:bg-blue-500/25"
       }`}
-      onClick={e => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
     >
       {uploading ? (
         <svg
@@ -487,11 +490,11 @@ export function FileBtn({
         accept={accept}
         className="hidden"
         disabled={uploading}
-        onChange={e => {
+        onChange={(e) => {
           const f = e.target.files?.[0];
           if (f) onFile(f);
         }}
-        onClick={e => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
       />
     </label>
   );
@@ -505,7 +508,7 @@ export function Tip({ text }: { text: string }) {
   return (
     <span
       className="relative group cursor-help inline-flex items-center"
-      onClick={e => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
     >
       <svg
         xmlns="http://www.w3.org/2000/svg"
@@ -538,7 +541,7 @@ export function SizeInput({
   value,
   onChange,
   min,
-  max
+  max,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -559,15 +562,18 @@ export function SizeInput({
     "w-[52px] rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-1 py-1 text-[11px] text-center text-[hsl(var(--foreground))] focus:outline-none focus:ring-1 focus:ring-blue-500/50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none";
 
   return (
-    <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+    <div
+      className="flex items-center gap-1"
+      onClick={(e) => e.stopPropagation()}
+    >
       <input
         type="number"
         value={w}
         min={min}
         max={max}
         step={64}
-        onChange={e => onChange(`${clamp(Number(e.target.value))}*${h}`)}
-        onBlur={e => onChange(`${clamp(Number(e.target.value))}*${h}`)}
+        onChange={(e) => onChange(`${clamp(Number(e.target.value))}*${h}`)}
+        onBlur={(e) => onChange(`${clamp(Number(e.target.value))}*${h}`)}
         className={numCls}
         title="Width"
       />
@@ -578,8 +584,8 @@ export function SizeInput({
         min={min}
         max={max}
         step={64}
-        onChange={e => onChange(`${w}*${clamp(Number(e.target.value))}`)}
-        onBlur={e => onChange(`${w}*${clamp(Number(e.target.value))}`)}
+        onChange={(e) => onChange(`${w}*${clamp(Number(e.target.value))}`)}
+        onBlur={(e) => onChange(`${w}*${clamp(Number(e.target.value))}`)}
         className={numCls}
         title="Height"
       />
@@ -598,7 +604,7 @@ export function SizeInput({
 
 export function Inline3DViewer({
   src,
-  onClick
+  onClick,
 }: {
   src: string;
   onClick?: () => void;
@@ -632,7 +638,7 @@ export function Inline3DViewer({
   return (
     <div
       ref={containerRef}
-      onClick={e => {
+      onClick={(e) => {
         e.stopPropagation();
         onClick?.();
       }}

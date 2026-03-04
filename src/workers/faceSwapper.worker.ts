@@ -17,7 +17,7 @@ import {
   erodeMask,
   dilateMask,
   colorMatch,
-  disposeWebGPU
+  disposeWebGPU,
 } from "./webgpuCompute";
 
 // Configure transformers.js
@@ -64,7 +64,7 @@ const MODEL_SIZES = {
   arcface: 174, // ~174MB
   inswapper: 554, // ~554MB (full precision)
   emap: 1, // ~1MB (embedding transformation matrix)
-  gfpgan: 340 // ~340MB
+  gfpgan: 340, // ~340MB
 };
 
 // Model input sizes
@@ -102,7 +102,7 @@ let emapMatrix: Float32Array | null = null;
  * The dispose method exists at runtime but isn't in TypeScript types
  */
 function disposeTensor(tensor: ort.Tensor): void {
-  ((tensor as unknown) as { dispose?: () => void }).dispose?.();
+  (tensor as unknown as { dispose?: () => void }).dispose?.();
 }
 
 // Standard ArcFace destination landmarks for 112x112 aligned face
@@ -112,7 +112,7 @@ const ARCFACE_DST_112 = [
   [73.5318, 51.5014], // right eye
   [56.0252, 71.7366], // nose tip
   [41.5493, 92.3655], // left mouth corner
-  [70.7299, 92.2041] // right mouth corner
+  [70.7299, 92.2041], // right mouth corner
 ];
 
 // Destination landmarks for 128x128 inswapper input
@@ -120,7 +120,7 @@ const ARCFACE_DST_112 = [
 // See: insightface/utils/face_align.py estimate_norm()
 const INSWAPPER_DST_128 = ARCFACE_DST_112.map(([x, y]) => [
   x + 8.0, // Add 8 to x (centers the face in 128x128)
-  y // Y stays the same
+  y, // Y stays the same
 ]);
 
 interface FaceBox {
@@ -168,7 +168,7 @@ async function downloadModel(
   url: string,
   onProgress: (current: number, total: number) => void,
   timeout: number = DEFAULT_TIMEOUT,
-  cacheName: string = CACHE_NAME
+  cacheName: string = CACHE_NAME,
 ): Promise<ArrayBuffer> {
   const cache = await caches.open(cacheName);
   const cachedResponse = await cache.match(url);
@@ -185,7 +185,7 @@ async function downloadModel(
 
   try {
     const response = await fetch(url, {
-      signal: controller.signal
+      signal: controller.signal,
     });
 
     if (!response.ok) {
@@ -207,7 +207,7 @@ async function downloadModel(
       if (controller.signal.aborted) {
         reader.cancel();
         throw new Error(
-          `Model download timed out after ${timeoutSeconds} seconds`
+          `Model download timed out after ${timeoutSeconds} seconds`,
         );
       }
 
@@ -232,8 +232,8 @@ async function downloadModel(
       const cacheResponse = new Response(buffer.buffer, {
         headers: {
           "Content-Type": "application/octet-stream",
-          "Content-Length": buffer.byteLength.toString()
-        }
+          "Content-Length": buffer.byteLength.toString(),
+        },
       });
       await cache.put(url, cacheResponse);
     } catch (e) {
@@ -245,7 +245,7 @@ async function downloadModel(
     clearTimeout(timeoutId);
     if ((error as Error).name === "AbortError") {
       throw new Error(
-        `Model download timed out after ${timeoutSeconds} seconds`
+        `Model download timed out after ${timeoutSeconds} seconds`,
       );
     }
     throw error;
@@ -257,7 +257,7 @@ async function downloadModel(
  */
 async function isModelCached(
   url: string,
-  cacheName: string = CACHE_NAME
+  cacheName: string = CACHE_NAME,
 ): Promise<boolean> {
   const cache = await caches.open(cacheName);
   const cachedResponse = await cache.match(url);
@@ -268,18 +268,18 @@ async function isModelCached(
  * Initialize ONNX session with WebGPU (fallback to WASM)
  */
 async function createSession(
-  modelBuffer: ArrayBuffer
+  modelBuffer: ArrayBuffer,
 ): Promise<ort.InferenceSession> {
   if (useWebGPU) {
     try {
       return await ort.InferenceSession.create(modelBuffer, {
         executionProviders: ["webgpu"],
-        graphOptimizationLevel: "all"
+        graphOptimizationLevel: "all",
       });
     } catch (e) {
       const errorMsg = e instanceof Error ? e.message : String(e);
       console.warn(
-        `WebGPU session creation failed, falling back to WASM. Reason: ${errorMsg}`
+        `WebGPU session creation failed, falling back to WASM. Reason: ${errorMsg}`,
       );
       useWebGPU = false;
     }
@@ -289,7 +289,7 @@ async function createSession(
     executionProviders: ["wasm"],
     graphOptimizationLevel: "all",
     enableCpuMemArena: true,
-    executionMode: "parallel"
+    executionMode: "parallel",
   });
 }
 
@@ -299,7 +299,7 @@ async function createSession(
  */
 function transformEmbedding(
   embedding: Float32Array,
-  emap: Float32Array
+  emap: Float32Array,
 ): Float32Array {
   const result = new Float32Array(512);
 
@@ -331,7 +331,7 @@ function letterboxResize(
   imageData: Float32Array,
   srcW: number,
   srcH: number,
-  targetSize: number
+  targetSize: number,
 ): { data: Float32Array; scale: number; padX: number; padY: number } {
   const scale = Math.min(targetSize / srcW, targetSize / srcH);
   const newW = Math.round(srcW * scale);
@@ -403,7 +403,7 @@ function iou(a: FaceBox, b: FaceBox): number {
  */
 function nmsWithIndices(
   faces: Array<{ box: FaceBox; landmarks: number[][] }>,
-  iouThreshold: number
+  iouThreshold: number,
 ): number[] {
   if (faces.length === 0) return [];
 
@@ -442,7 +442,7 @@ function nmsWithIndices(
 async function detectFacesWithLandmarks(
   imageData: Float32Array,
   width: number,
-  height: number
+  height: number,
 ): Promise<DetectedFace[]> {
   if (!det10gSession) throw new Error("det_10g session not initialized");
 
@@ -450,13 +450,13 @@ async function detectFacesWithLandmarks(
     imageData,
     width,
     height,
-    DET_INPUT_SIZE
+    DET_INPUT_SIZE,
   );
   const inputTensor = new ort.Tensor("float32", data, [
     1,
     3,
     DET_INPUT_SIZE,
-    DET_INPUT_SIZE
+    DET_INPUT_SIZE,
   ]);
 
   // Get input name
@@ -573,7 +573,7 @@ async function detectFacesWithLandmarks(
         const lmY = (lmYInput - padY) / scale;
         landmarks.push([
           Math.max(0, Math.min(lmX, width - 1)),
-          Math.max(0, Math.min(lmY, height - 1))
+          Math.max(0, Math.min(lmY, height - 1)),
         ]);
       }
 
@@ -583,9 +583,9 @@ async function detectFacesWithLandmarks(
           y: clampedY,
           width: clampedW,
           height: clampedH,
-          confidence
+          confidence,
         },
-        landmarks
+        landmarks,
       });
     }
   }
@@ -602,7 +602,7 @@ async function detectFacesWithLandmarks(
   const result: DetectedFace[] = selectedIndices.map((idx, i) => ({
     box: allFaces[idx].box,
     landmarks: allFaces[idx].landmarks,
-    index: i
+    index: i,
   }));
 
   return result;
@@ -628,7 +628,7 @@ function svd2x2(
   a: number,
   b: number,
   c: number,
-  d: number
+  d: number,
 ): {
   U: number[][];
   S: number[];
@@ -654,13 +654,13 @@ function svd2x2(
   return {
     U: [
       [Math.cos(phi), -Math.sin(phi)],
-      [Math.sin(phi), Math.cos(phi)]
+      [Math.sin(phi), Math.cos(phi)],
     ],
     S: [s1, s2],
     V: [
       [Math.cos(theta), Math.sin(theta)],
-      [-Math.sin(theta), Math.cos(theta)]
-    ]
+      [-Math.sin(theta), Math.cos(theta)],
+    ],
   };
 }
 
@@ -671,7 +671,7 @@ function svd2x2(
  */
 function estimateSimilarityTransform(
   srcLandmarks: number[][],
-  dstLandmarks: number[][]
+  dstLandmarks: number[][],
 ): number[] {
   const n = srcLandmarks.length;
 
@@ -680,13 +680,13 @@ function estimateSimilarityTransform(
   const dstCentroid = averagePoints(dstLandmarks);
 
   // 2. Center points
-  const srcCentered = srcLandmarks.map(p => [
+  const srcCentered = srcLandmarks.map((p) => [
     p[0] - srcCentroid[0],
-    p[1] - srcCentroid[1]
+    p[1] - srcCentroid[1],
   ]);
-  const dstCentered = dstLandmarks.map(p => [
+  const dstCentered = dstLandmarks.map((p) => [
     p[0] - dstCentroid[0],
-    p[1] - dstCentroid[1]
+    p[1] - dstCentroid[1],
   ]);
 
   // 3. Compute source variance
@@ -704,7 +704,7 @@ function estimateSimilarityTransform(
       dstCentroid[0] - srcCentroid[0],
       0,
       1,
-      dstCentroid[1] - srcCentroid[1]
+      dstCentroid[1] - srcCentroid[1],
     ];
   }
 
@@ -798,7 +798,7 @@ function warpAffine(
   matrix: number[],
   outputSize: number,
   normalize: boolean = true,
-  toBGR: boolean = false
+  toBGR: boolean = false,
 ): Float32Array {
   const output = new Float32Array(3 * outputSize * outputSize);
   const invMatrix = invertAffineMatrix(matrix);
@@ -867,7 +867,7 @@ async function extractEmbedding(
   imageData: Float32Array,
   imgW: number,
   imgH: number,
-  landmarks: number[][]
+  landmarks: number[][],
 ): Promise<Float32Array> {
   if (!arcfaceSession) throw new Error("ArcFace session not initialized");
 
@@ -882,7 +882,7 @@ async function extractEmbedding(
     matrix,
     ARCFACE_INPUT_SIZE,
     true,
-    true
+    true,
   );
 
   // Run ArcFace - Input: NCHW [1, 3, 112, 112]
@@ -890,7 +890,7 @@ async function extractEmbedding(
     1,
     3,
     ARCFACE_INPUT_SIZE,
-    ARCFACE_INPUT_SIZE
+    ARCFACE_INPUT_SIZE,
   ]);
 
   // Use actual input name from model (may be 'input', 'input.1', 'data', etc.)
@@ -927,14 +927,14 @@ async function swapFace(
   targetW: number,
   targetH: number,
   targetLandmarks: number[][],
-  sourceEmbedding: Float32Array
+  sourceEmbedding: Float32Array,
 ): Promise<{ swapped: Float32Array; matrix: number[] }> {
   if (!inswapperSession) throw new Error("Inswapper session not initialized");
 
   // Compute alignment matrix for target face
   const matrix = estimateSimilarityTransform(
     targetLandmarks,
-    INSWAPPER_DST_128
+    INSWAPPER_DST_128,
   );
 
   // Warp target face to 128x128 - inswapper expects RGB, [0, 1] range
@@ -945,7 +945,7 @@ async function swapFace(
     matrix,
     INSWAPPER_INPUT_SIZE,
     false,
-    false
+    false,
   );
 
   // Run inswapper
@@ -953,17 +953,18 @@ async function swapFace(
     1,
     3,
     INSWAPPER_INPUT_SIZE,
-    INSWAPPER_INPUT_SIZE
+    INSWAPPER_INPUT_SIZE,
   ]);
 
   // Transform embedding using EMAP matrix (required by inswapper)
   const transformedEmbedding = emapMatrix
     ? transformEmbedding(sourceEmbedding, emapMatrix)
     : sourceEmbedding;
-  const embeddingTensor = new ort.Tensor("float32", transformedEmbedding, [
-    1,
-    512
-  ]);
+  const embeddingTensor = new ort.Tensor(
+    "float32",
+    transformedEmbedding,
+    [1, 512],
+  );
 
   // Map inputs based on model input names
   const inputNames = inswapperSession.inputNames;
@@ -1016,7 +1017,7 @@ async function swapFace(
  */
 async function parseSwappedFace(
   alignedFace: Float32Array,
-  faceSize: number
+  faceSize: number,
 ): Promise<Uint8Array> {
   if (!segmenter) throw new Error("Face segmenter not initialized");
 
@@ -1031,7 +1032,7 @@ async function parseSwappedFace(
         // CHW format: channel * H * W + y * W + x
         const srcIdx = c * faceSize * faceSize + y * faceSize + x;
         rgbaData[outIdx + c] = Math.round(
-          Math.max(0, Math.min(1, alignedFace[srcIdx])) * 255
+          Math.max(0, Math.min(1, alignedFace[srcIdx])) * 255,
         );
       }
       rgbaData[outIdx + 3] = 255;
@@ -1093,7 +1094,7 @@ async function parseFaceCrop(
   imgW: number,
   imgH: number,
   faceBox: FaceBox,
-  outputSize: number = GFPGAN_INPUT_SIZE
+  outputSize: number = GFPGAN_INPUT_SIZE,
 ): Promise<Uint8Array> {
   if (!segmenter) throw new Error("Face segmenter not initialized");
 
@@ -1206,7 +1207,7 @@ async function inverseWarpAndBlend(
   swappedFace: Float32Array, // CHW format, [0,1] range
   alignedOriginal: Float32Array, // CHW format, [0,1] range (aligned target face)
   matrix: number[],
-  faceMask: Uint8Array // Face parsing mask in aligned space
+  faceMask: Uint8Array, // Face parsing mask in aligned space
 ): Promise<Float32Array> {
   const faceSize = INSWAPPER_INPUT_SIZE;
 
@@ -1217,7 +1218,7 @@ async function inverseWarpAndBlend(
     [0, 0],
     [faceSize, 0],
     [faceSize, faceSize],
-    [0, faceSize]
+    [0, faceSize],
   ];
   let minX = imgW,
     maxX = 0,
@@ -1278,7 +1279,7 @@ async function inverseWarpAndBlend(
     const colorShift: [number, number, number] = [
       originalMean[0] - swappedMean[0],
       originalMean[1] - swappedMean[1],
-      originalMean[2] - swappedMean[2]
+      originalMean[2] - swappedMean[2],
     ];
 
     // Create color-matched swapped face (auto-fallback to CPU if GPU unavailable)
@@ -1437,7 +1438,7 @@ async function inverseWarpAndBlend(
     faceParsingWarped,
     bw,
     bh,
-    blurSize
+    blurSize,
   );
 
   const faceRegionFloat = new Float32Array(bw * bh);
@@ -1486,7 +1487,7 @@ async function enhanceFaceRegion(
   imgW: number,
   imgH: number,
   faceBox: FaceBox,
-  faceMask: Uint8Array
+  faceMask: Uint8Array,
 ): Promise<Float32Array> {
   if (!gfpganSession) throw new Error("GFPGAN session not initialized");
 
@@ -1554,7 +1555,7 @@ async function enhanceFaceRegion(
     1,
     3,
     GFPGAN_INPUT_SIZE,
-    GFPGAN_INPUT_SIZE
+    GFPGAN_INPUT_SIZE,
   ]);
   const inputName = gfpganSession.inputNames[0];
   const results = await gfpganSession.run({ [inputName]: inputTensor });
@@ -1603,7 +1604,7 @@ async function enhanceFaceRegion(
           x - cropX,
           cropX + cropW - 1 - x,
           y - cropY,
-          cropY + cropH - 1 - y
+          cropY + cropH - 1 - y,
         );
         const edgeFactor = Math.min(1, distToEdge / edgeFeatherSize);
 
@@ -1665,7 +1666,7 @@ async function enhanceFaceRegion(
 async function detectFaces(
   imageData: Float32Array,
   width: number,
-  height: number
+  height: number,
 ): Promise<DetectedFace[]> {
   return await detectFacesWithLandmarks(imageData, width, height);
 }
@@ -1696,12 +1697,12 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           // Enhancement is ON but GFPGAN not loaded - load only GFPGAN
           self.postMessage({
             type: "phase",
-            payload: { phase: "download", id: payload?.id }
+            payload: { phase: "download", id: payload?.id },
           });
 
           const gfpganCached = await isModelCached(
             GFPGAN_MODEL_URL,
-            FACE_ENHANCER_CACHE
+            FACE_ENHANCER_CACHE,
           );
 
           const gfpganBuffer = await downloadModel(
@@ -1716,17 +1717,17 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
                   detail: gfpganCached
                     ? undefined
                     : { current, total, unit: "bytes" },
-                  id: payload?.id
-                }
+                  id: payload?.id,
+                },
               });
             },
             timeout,
-            FACE_ENHANCER_CACHE
+            FACE_ENHANCER_CACHE,
           );
 
           self.postMessage({
             type: "phase",
-            payload: { phase: "loading", id: payload?.id }
+            payload: { phase: "loading", id: payload?.id },
           });
           gfpganSession = await createSession(gfpganBuffer);
 
@@ -1766,7 +1767,7 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         // Download det_10g (detection + landmarks from InsightFace)
         self.postMessage({
           type: "phase",
-          payload: { phase: "download", id: payload?.id }
+          payload: { phase: "download", id: payload?.id },
         });
 
         const det10gBuffer = await downloadModel(
@@ -1785,11 +1786,11 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
                 detail: det10gCached
                   ? undefined
                   : { current, total, unit: "bytes" },
-                id: payload?.id
-              }
+                id: payload?.id,
+              },
             });
           },
-          timeout
+          timeout,
         );
         downloadedSize += MODEL_SIZES.det10g;
 
@@ -1810,11 +1811,11 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
                 detail: arcfaceCached
                   ? undefined
                   : { current, total, unit: "bytes" },
-                id: payload?.id
-              }
+                id: payload?.id,
+              },
             });
           },
-          timeout
+          timeout,
         );
         downloadedSize += MODEL_SIZES.arcface;
 
@@ -1835,11 +1836,11 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
                 detail: inswapperCached
                   ? undefined
                   : { current, total, unit: "bytes" },
-                id: payload?.id
-              }
+                id: payload?.id,
+              },
             });
           },
-          timeout
+          timeout,
         );
         downloadedSize += MODEL_SIZES.inswapper;
 
@@ -1859,11 +1860,11 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
                 detail: emapCached
                   ? undefined
                   : { current, total, unit: "bytes" },
-                id: payload?.id
-              }
+                id: payload?.id,
+              },
             });
           },
-          timeout
+          timeout,
         );
         downloadedSize += MODEL_SIZES.emap;
 
@@ -1886,19 +1887,19 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
                   detail: gfpganCached
                     ? undefined
                     : { current, total, unit: "bytes" },
-                  id: payload?.id
-                }
+                  id: payload?.id,
+                },
               });
             },
             timeout,
-            FACE_ENHANCER_CACHE
+            FACE_ENHANCER_CACHE,
           );
         }
 
         // Create ONNX sessions
         self.postMessage({
           type: "phase",
-          payload: { phase: "loading", id: payload?.id }
+          payload: { phase: "loading", id: payload?.id },
         });
 
         det10gSession = await createSession(det10gBuffer);
@@ -1920,8 +1921,8 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           "Xenova/face-parsing",
           {
             device: useWebGPU ? "webgpu" : "wasm",
-            dtype: "fp32"
-          }
+            dtype: "fp32",
+          },
         );
 
         self.postMessage({ type: "ready", payload: { id: payload?.id } });
@@ -1931,7 +1932,7 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           payload:
             error instanceof Error
               ? error.message
-              : "Failed to initialize models"
+              : "Failed to initialize models",
         });
       }
       break;
@@ -1946,13 +1947,13 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       try {
         self.postMessage({
           type: "phase",
-          payload: { phase: "detect", id: payload.id }
+          payload: { phase: "detect", id: payload.id },
         });
 
         const faces = await detectFaces(
           payload.imageData,
           payload.width,
-          payload.height
+          payload.height,
         );
 
         self.postMessage({
@@ -1960,14 +1961,14 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           payload: {
             faces,
             imageId: payload.imageId,
-            id: payload.id
-          }
+            id: payload.id,
+          },
         });
       } catch (error) {
         self.postMessage({
           type: "error",
           payload:
-            error instanceof Error ? error.message : "Failed to detect faces"
+            error instanceof Error ? error.message : "Failed to detect faces",
         });
       }
       break;
@@ -1988,25 +1989,25 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         // Phase: embed - extract source embedding
         self.postMessage({
           type: "phase",
-          payload: { phase: "embed", id: payload.id }
+          payload: { phase: "embed", id: payload.id },
         });
 
         const sourceEmbedding = await extractEmbedding(
           payload.sourceImage,
           payload.sourceWidth!,
           payload.sourceHeight!,
-          payload.sourceLandmarks
+          payload.sourceLandmarks,
         );
 
         self.postMessage({
           type: "progress",
-          payload: { phase: "embed", progress: 100, id: payload.id }
+          payload: { phase: "embed", progress: 100, id: payload.id },
         });
 
         // Phase: swap - swap each target face
         self.postMessage({
           type: "phase",
-          payload: { phase: "swap", id: payload.id }
+          payload: { phase: "swap", id: payload.id },
         });
 
         // Keep reference to original target image for face parsing and color matching
@@ -2028,14 +2029,14 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             payload.targetWidth!,
             payload.targetHeight!,
             face.landmarks,
-            sourceEmbedding
+            sourceEmbedding,
           );
 
           // Generate face mask from SWAPPED face using face parsing
           // This ensures the mask matches the actual swapped result boundaries
           const swapMask = await parseSwappedFace(
             swapped,
-            INSWAPPER_INPUT_SIZE
+            INSWAPPER_INPUT_SIZE,
           );
 
           // Get aligned original face for difference map calculation (same alignment as swapped)
@@ -2046,7 +2047,7 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             matrix,
             INSWAPPER_INPUT_SIZE,
             false, // No normalization, keep [0,1] range
-            false // RGB, not BGR
+            false, // RGB, not BGR
           );
 
           result = await inverseWarpAndBlend(
@@ -2056,7 +2057,7 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             swapped,
             alignedOriginal,
             matrix,
-            swapMask
+            swapMask,
           );
 
           // Generate mask at GFPGAN size using crop from original target
@@ -2065,7 +2066,7 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             payload.targetWidth!,
             payload.targetHeight!,
             face.box,
-            GFPGAN_INPUT_SIZE
+            GFPGAN_INPUT_SIZE,
           );
 
           swappedFaceData.push({ box: face.box, mask: enhanceMask });
@@ -2075,8 +2076,8 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             payload: {
               phase: "swap",
               progress: ((i + 1) / totalFaces) * 100,
-              id: payload.id
-            }
+              id: payload.id,
+            },
           });
         }
 
@@ -2084,7 +2085,7 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         if (enhancementEnabled && gfpganSession && swappedFaceData.length > 0) {
           self.postMessage({
             type: "phase",
-            payload: { phase: "enhance", id: payload.id }
+            payload: { phase: "enhance", id: payload.id },
           });
 
           for (let i = 0; i < swappedFaceData.length; i++) {
@@ -2094,7 +2095,7 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
               payload.targetWidth!,
               payload.targetHeight!,
               box,
-              mask
+              mask,
             )) as Float32Array<ArrayBuffer>;
 
             self.postMessage({
@@ -2102,8 +2103,8 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
               payload: {
                 phase: "enhance",
                 progress: ((i + 1) / swappedFaceData.length) * 100,
-                id: payload.id
-              }
+                id: payload.id,
+              },
             });
           }
         }
@@ -2116,16 +2117,16 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
               data: result,
               width: payload.targetWidth,
               height: payload.targetHeight,
-              id: payload.id
-            }
+              id: payload.id,
+            },
           },
-          { transfer: [result.buffer] }
+          { transfer: [result.buffer] },
         );
       } catch (error) {
         self.postMessage({
           type: "error",
           payload:
-            error instanceof Error ? error.message : "Failed to swap faces"
+            error instanceof Error ? error.message : "Failed to swap faces",
         });
       }
       break;

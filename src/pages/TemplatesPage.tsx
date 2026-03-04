@@ -18,12 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/useToast";
-import {
-  Upload,
-  GitBranch,
-  PlayCircle,
-  FolderOpen,
-} from "lucide-react";
+import { Upload, GitBranch, PlayCircle, FolderOpen } from "lucide-react";
 import type { Template } from "@/types/template";
 
 export function TemplatesPage() {

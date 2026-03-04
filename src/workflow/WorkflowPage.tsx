@@ -330,8 +330,7 @@ export function WorkflowPage() {
     () => _initialSession.activeTabId,
   );
   const [startupSessionReady] = useState(true);
-  const [restoredFromPersistedSession] =
-    useState(_initialSession.restored);
+  const [restoredFromPersistedSession] = useState(_initialSession.restored);
   const [hasRestoredLastWorkflow, setHasRestoredLastWorkflow] = useState(false);
 
   // Save current store state into the active tab snapshot

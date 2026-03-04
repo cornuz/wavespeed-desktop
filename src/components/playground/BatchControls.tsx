@@ -7,7 +7,7 @@ import { Slider } from "@/components/ui/slider";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuTrigger
+  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Play, Loader2, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -29,7 +29,7 @@ export function BatchControls({
   onRun,
   runLabel,
   runningLabel,
-  price
+  price,
 }: BatchControlsProps) {
   const { t } = useTranslation();
   const { getActiveTab, setBatchConfig } = usePlaygroundStore();
@@ -61,7 +61,7 @@ export function BatchControls({
       <Button
         className={cn(
           "flex-1 h-9 text-sm bg-blue-600 hover:bg-blue-700 text-white transition-colors",
-          "rounded-r-none border-r border-r-white/20 shadow-none"
+          "rounded-r-none border-r border-r-white/20 shadow-none",
         )}
         onClick={onRun}
         disabled={disabled || isRunning || isUploading}
@@ -89,7 +89,7 @@ export function BatchControls({
           <Button
             className={cn(
               "bg-blue-600 hover:bg-blue-700 text-white transition-colors",
-              "rounded-l-none px-1.5 h-9 shadow-none"
+              "rounded-l-none px-1.5 h-9 shadow-none",
             )}
             disabled={disabled || isRunning || isUploading}
           >
@@ -110,7 +110,7 @@ export function BatchControls({
             <div
               className={cn(
                 "grid transition-[grid-template-rows] duration-200 ease-out",
-                enabled ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+                enabled ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
               )}
             >
               <div className="overflow-hidden">

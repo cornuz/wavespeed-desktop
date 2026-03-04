@@ -54,7 +54,7 @@ export class ChunkedDownloader {
    * Download a file with resume support
    */
   async download(
-    options: ChunkedDownloadOptions
+    options: ChunkedDownloadOptions,
   ): Promise<ChunkedDownloadResult> {
     const {
       url,
@@ -63,7 +63,7 @@ export class ChunkedDownloader {
       chunkSize = this.chunkSize,
       timeout = 30000,
       maxRetries = 3,
-      minValidSize = 0
+      minValidSize = 0,
     } = options;
 
     const partPath = destPath + ".part";
@@ -82,20 +82,20 @@ export class ChunkedDownloader {
       if (minValidSize > 0 && finalFileCheck.size < minValidSize) {
         console.warn(
           `[ChunkedDownloader] File is too small (${fileSizeMB}MB < ${Math.round(
-            minValidSize / 1024 / 1024
-          )}MB), likely incomplete`
+            minValidSize / 1024 / 1024,
+          )}MB), likely incomplete`,
         );
         console.warn(
-          `[ChunkedDownloader] Deleting incomplete file and restarting download...`
+          `[ChunkedDownloader] Deleting incomplete file and restarting download...`,
         );
         await window.electronAPI?.fileDelete(destPath);
       } else {
         console.log(
-          `[ChunkedDownloader] File size looks valid, skipping download`
+          `[ChunkedDownloader] File size looks valid, skipping download`,
         );
         return {
           success: true,
-          filePath: destPath
+          filePath: destPath,
         };
       }
     }
@@ -111,8 +111,8 @@ export class ChunkedDownloader {
       if (startByte > 0) {
         console.log(
           `[ChunkedDownloader] Found partial download: ${Math.round(
-            startByte / 1024 / 1024
-          )}MB`
+            startByte / 1024 / 1024,
+          )}MB`,
         );
       }
 
@@ -125,7 +125,7 @@ export class ChunkedDownloader {
           attempt,
           timeout,
           chunkSize,
-          onProgress
+          onProgress,
         });
 
         if (result.success) {
@@ -137,7 +137,7 @@ export class ChunkedDownloader {
         // If user cancelled, don't retry
         if (lastError.includes("cancelled") || lastError.includes("aborted")) {
           console.log(
-            "[ChunkedDownloader] User cancelled download, stopping retry attempts"
+            "[ChunkedDownloader] User cancelled download, stopping retry attempts",
           );
           return { success: false, error: lastError };
         }
@@ -146,22 +146,23 @@ export class ChunkedDownloader {
         if (attempt < maxRetries) {
           const waitTime = attempt * 2000; // 2s, 4s, 6s
           console.log(
-            `[ChunkedDownloader] Retry ${attempt +
-              1}/${maxRetries} in ${waitTime / 1000}s...`
+            `[ChunkedDownloader] Retry ${
+              attempt + 1
+            }/${maxRetries} in ${waitTime / 1000}s...`,
           );
-          await new Promise(resolve => setTimeout(resolve, waitTime));
+          await new Promise((resolve) => setTimeout(resolve, waitTime));
         }
       } catch (error) {
         lastError = (error as Error).message;
         console.error(
           `[ChunkedDownloader] Attempt ${attempt} failed:`,
-          lastError
+          lastError,
         );
 
         // If user cancelled, don't retry
         if (lastError.includes("cancelled") || lastError.includes("aborted")) {
           console.log(
-            "[ChunkedDownloader] User cancelled download, stopping retry attempts"
+            "[ChunkedDownloader] User cancelled download, stopping retry attempts",
           );
           return { success: false, error: lastError };
         }
@@ -171,7 +172,7 @@ export class ChunkedDownloader {
     // All retries failed
     return {
       success: false,
-      error: `Download failed after ${maxRetries} attempts: ${lastError}`
+      error: `Download failed after ${maxRetries} attempts: ${lastError}`,
     };
   }
 
@@ -192,7 +193,7 @@ export class ChunkedDownloader {
     this.abortController = new AbortController();
 
     const headers: HeadersInit = {
-      "User-Agent": "Mozilla/5.0"
+      "User-Agent": "Mozilla/5.0",
     };
 
     // Add Range header for resume support
@@ -201,13 +202,13 @@ export class ChunkedDownloader {
       console.log(
         `[ChunkedDownloader] Requesting resume from byte ${
           params.startByte
-        } (${Math.round(params.startByte / 1024 / 1024)}MB)`
+        } (${Math.round(params.startByte / 1024 / 1024)}MB)`,
       );
     }
 
     console.log(
       `[ChunkedDownloader] Attempt ${params.attempt}: Starting download from:`,
-      params.url
+      params.url,
     );
 
     try {
@@ -215,7 +216,7 @@ export class ChunkedDownloader {
       const timeoutPromise = new Promise<never>((_, reject) => {
         setTimeout(
           () => reject(new Error("Connection timeout")),
-          params.timeout
+          params.timeout,
         );
       });
 
@@ -223,33 +224,33 @@ export class ChunkedDownloader {
       const response = await Promise.race([
         fetch(params.url, {
           headers,
-          signal: this.abortController.signal
+          signal: this.abortController.signal,
         }),
-        timeoutPromise
+        timeoutPromise,
       ]);
 
       console.log(
-        `[ChunkedDownloader] Connected! Response status: ${response.status}`
+        `[ChunkedDownloader] Connected! Response status: ${response.status}`,
       );
 
       // Check for valid response (200 for new download, 206 for resumed download)
       if (response.status !== 200 && response.status !== 206) {
         return {
           success: false,
-          error: `Server responded with status ${response.status}`
+          error: `Server responded with status ${response.status}`,
         };
       }
 
       // Check if server supports resume
       if (params.startByte > 0 && response.status === 200) {
         console.warn(
-          "[ChunkedDownloader] WARNING: Server does NOT support Range requests!"
+          "[ChunkedDownloader] WARNING: Server does NOT support Range requests!",
         );
         console.warn(
-          "[ChunkedDownloader] Server returned 200 instead of 206, will restart download from 0"
+          "[ChunkedDownloader] Server returned 200 instead of 206, will restart download from 0",
         );
         console.warn(
-          "[ChunkedDownloader] Deleting .part file and restarting..."
+          "[ChunkedDownloader] Deleting .part file and restarting...",
         );
         await window.electronAPI?.fileDelete(params.partPath);
         params.startByte = 0;
@@ -264,7 +265,7 @@ export class ChunkedDownloader {
           totalBytes = parseInt(match[1], 10);
         }
         console.log(
-          `[ChunkedDownloader] ✓ Server supports resume! Content-Range: ${contentRange}`
+          `[ChunkedDownloader] ✓ Server supports resume! Content-Range: ${contentRange}`,
         );
       } else {
         const contentLength = response.headers.get("content-length");
@@ -277,13 +278,13 @@ export class ChunkedDownloader {
 
       console.log(
         `[ChunkedDownloader] Total size: ${Math.round(
-          totalBytes / 1024 / 1024
-        )}MB`
+          totalBytes / 1024 / 1024,
+        )}MB`,
       );
       console.log(
         `[ChunkedDownloader] Starting from: ${Math.round(
-          params.startByte / 1024 / 1024
-        )}MB (${params.startByte > 0 ? "RESUME" : "NEW"})`
+          params.startByte / 1024 / 1024,
+        )}MB (${params.startByte > 0 ? "RESUME" : "NEW"})`,
       );
 
       // Read response body as stream
@@ -306,12 +307,12 @@ export class ChunkedDownloader {
             const chunk = this.mergeBuffers(buffer, bufferSize);
             const appendResult = await window.electronAPI?.fileAppendChunk(
               params.partPath,
-              chunk.buffer as ArrayBuffer
+              chunk.buffer as ArrayBuffer,
             );
             if (!appendResult?.success) {
               return {
                 success: false,
-                error: `Failed to write chunk: ${appendResult?.error}`
+                error: `Failed to write chunk: ${appendResult?.error}`,
               };
             }
           }
@@ -338,8 +339,8 @@ export class ChunkedDownloader {
               detail: {
                 current: receivedBytes,
                 total: totalBytes,
-                unit: "bytes"
-              }
+                unit: "bytes",
+              },
             });
           }
           lastProgressUpdate = now;
@@ -350,13 +351,13 @@ export class ChunkedDownloader {
           const chunk = this.mergeBuffers(buffer, bufferSize);
           const appendResult = await window.electronAPI?.fileAppendChunk(
             params.partPath,
-            chunk.buffer as ArrayBuffer
+            chunk.buffer as ArrayBuffer,
           );
 
           if (!appendResult?.success) {
             return {
               success: false,
-              error: `Failed to write chunk: ${appendResult?.error}`
+              error: `Failed to write chunk: ${appendResult?.error}`,
             };
           }
 
@@ -368,28 +369,28 @@ export class ChunkedDownloader {
 
       console.log(
         `[ChunkedDownloader] Download completed, received ${Math.round(
-          receivedBytes / 1024 / 1024
-        )}MB`
+          receivedBytes / 1024 / 1024,
+        )}MB`,
       );
 
       // Rename .part file to final filename
       console.log(
-        `[ChunkedDownloader] Renaming ${params.partPath} -> ${params.destPath}`
+        `[ChunkedDownloader] Renaming ${params.partPath} -> ${params.destPath}`,
       );
       const renameResult = await window.electronAPI?.fileRename(
         params.partPath,
-        params.destPath
+        params.destPath,
       );
 
       if (!renameResult?.success) {
         return {
           success: false,
-          error: `Failed to rename file: ${renameResult?.error}`
+          error: `Failed to rename file: ${renameResult?.error}`,
         };
       }
 
       console.log(
-        `[ChunkedDownloader] File successfully saved to ${params.destPath}`
+        `[ChunkedDownloader] File successfully saved to ${params.destPath}`,
       );
 
       // Send 100% progress
@@ -402,14 +403,14 @@ export class ChunkedDownloader {
           detail: {
             current: totalBytes,
             total: totalBytes,
-            unit: "bytes"
-          }
+            unit: "bytes",
+          },
         });
       }
 
       return {
         success: true,
-        filePath: params.destPath
+        filePath: params.destPath,
       };
     } catch (error) {
       if (error instanceof Error) {

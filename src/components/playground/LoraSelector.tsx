@@ -22,7 +22,7 @@ export function LoraSelector({
   value = [],
   onChange,
   maxItems = 3,
-  disabled = false
+  disabled = false,
 }: LoraSelectorProps) {
   const [customPath, setCustomPath] = useState("");
 
@@ -31,7 +31,7 @@ export function LoraSelector({
       toast({ description: `Maximum ${maxItems} LoRAs allowed` });
       return;
     }
-    if (value.some(v => v.path === lora.path)) {
+    if (value.some((v) => v.path === lora.path)) {
       toast({ description: "LoRA already added" });
       return;
     }
@@ -118,10 +118,10 @@ export function LoraSelector({
               type="text"
               placeholder="user/repo or https://.../*.safetensors"
               value={customPath}
-              onChange={e => setCustomPath(e.target.value)}
+              onChange={(e) => setCustomPath(e.target.value)}
               disabled={disabled}
               className="flex-1"
-              onKeyDown={e =>
+              onKeyDown={(e) =>
                 e.key === "Enter" && (e.preventDefault(), handleAddCustom())
               }
             />

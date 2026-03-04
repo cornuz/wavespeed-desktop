@@ -17,31 +17,31 @@ export function registerStorageIpc(): void {
     "storage:get-workflow-snapshot",
     async (_event, args: { workflowId: string }) => {
       return getStorage().loadWorkflowSnapshot(args.workflowId);
-    }
+    },
   );
 
   ipcMain.handle(
     "storage:get-execution-cache",
     async (
       _event,
-      _args: { workflowId: string; nodeId: string; executionId: string }
+      _args: { workflowId: string; nodeId: string; executionId: string },
     ) => {
       return null; // simplified — execution cache not used in new structure
-    }
+    },
   );
 
   ipcMain.handle(
     "storage:list-node-executions",
     async (_event, args: { workflowId: string; nodeId: string }) => {
       return getStorage().listNodeExecutions(args.workflowId, args.nodeId);
-    }
+    },
   );
 
   ipcMain.handle(
     "storage:list-uploaded-files",
     async (_event, args: { workflowId: string; nodeId: string }) => {
       return getStorage().listUploadedFiles(args.workflowId, args.nodeId);
-    }
+    },
   );
 
   ipcMain.handle(
@@ -53,15 +53,15 @@ export function registerStorageIpc(): void {
         nodeId: string;
         filename: string;
         data: Buffer;
-      }
+      },
     ) => {
       return getStorage().saveUploadedFile(
         args.workflowId,
         args.nodeId,
         args.filename,
-        Buffer.from(args.data)
+        Buffer.from(args.data),
       );
-    }
+    },
   );
 
   ipcMain.handle(
@@ -74,51 +74,51 @@ export function registerStorageIpc(): void {
         prefix: string;
         ext: string;
         data: Buffer;
-      }
+      },
     ) => {
       return getStorage().saveNodeOutput(
         args.workflowId,
         args.nodeId,
         args.prefix,
         args.ext,
-        Buffer.from(args.data)
+        Buffer.from(args.data),
       );
-    }
+    },
   );
 
   ipcMain.handle(
     "storage:copy-uploaded-file",
     async (
       _event,
-      args: { workflowId: string; nodeId: string; sourcePath: string }
+      args: { workflowId: string; nodeId: string; sourcePath: string },
     ) => {
       return getStorage().copyUploadedFile(
         args.workflowId,
         args.nodeId,
-        args.sourcePath
+        args.sourcePath,
       );
-    }
+    },
   );
 
   ipcMain.handle(
     "storage:get-workflow-disk-usage",
     async (_event, args: { workflowId: string }) => {
       return getStorage().getWorkflowDiskUsage(args.workflowId);
-    }
+    },
   );
 
   ipcMain.handle(
     "storage:delete-workflow-files",
     async (_event, args: { workflowId: string }) => {
       getStorage().deleteWorkflowFiles(args.workflowId);
-    }
+    },
   );
 
   ipcMain.handle(
     "storage:artifact-exists",
     async (_event, args: { artifactPath: string }) => {
       return getStorage().artifactExists(args.artifactPath);
-    }
+    },
   );
 
   ipcMain.handle(
@@ -129,15 +129,15 @@ export function registerStorageIpc(): void {
         workflowId: string;
         workflowName: string;
         graphDefinition: unknown;
-      }
+      },
     ) => {
       const result = await dialog.showSaveDialog({
         title: "Save Workflow",
         defaultPath: `${args.workflowName}.json`,
         filters: [
           { name: "JSON", extensions: ["json"] },
-          { name: "All Files", extensions: ["*"] }
-        ]
+          { name: "All Files", extensions: ["*"] },
+        ],
       });
       if (result.canceled || !result.filePath) return null;
       const data = {
@@ -145,11 +145,11 @@ export function registerStorageIpc(): void {
         id: args.workflowId,
         name: args.workflowName,
         exportedAt: new Date().toISOString(),
-        graphDefinition: args.graphDefinition
+        graphDefinition: args.graphDefinition,
       };
       writeFileSync(result.filePath, JSON.stringify(data, null, 2), "utf-8");
       return result.filePath;
-    }
+    },
   );
 
   ipcMain.handle("storage:open-artifacts-folder", async () => {
@@ -165,7 +165,7 @@ export function registerStorageIpc(): void {
       if (!existsSync(workflowPath))
         mkdirSync(workflowPath, { recursive: true });
       shell.openPath(workflowPath);
-    }
+    },
   );
 
   ipcMain.handle("storage:import-workflow-json", async () => {
@@ -173,9 +173,9 @@ export function registerStorageIpc(): void {
       title: "Import Workflow",
       filters: [
         { name: "JSON", extensions: ["json"] },
-        { name: "All Files", extensions: ["*"] }
+        { name: "All Files", extensions: ["*"] },
       ],
-      properties: ["openFile"]
+      properties: ["openFile"],
     });
     if (result.canceled || result.filePaths.length === 0) return null;
     try {
@@ -205,7 +205,7 @@ export function registerStorageIpc(): void {
           const nodeType = String(n.nodeType ?? "ai-task/run");
           const position = (n.position as { x: number; y: number }) ?? {
             x: 200,
-            y: 200
+            y: 200,
           };
 
           let label = nodeType;
@@ -230,9 +230,9 @@ export function registerStorageIpc(): void {
             nodeType,
             position,
             params: { ...params, __meta: { label, modelInputSchema } },
-            currentOutputId: null
+            currentOutputId: null,
           };
-        }
+        },
       );
 
       const enrichedEdges = (rawGraphDef.edges ?? []).map(
@@ -244,8 +244,8 @@ export function registerStorageIpc(): void {
           sourceOutputKey: String(e.sourceOutputKey ?? "output"),
           targetNodeId:
             idMap.get(String(e.targetNodeId)) ?? String(e.targetNodeId),
-          targetInputKey: String(e.targetInputKey ?? "input")
-        })
+          targetInputKey: String(e.targetInputKey ?? "input"),
+        }),
       );
 
       const graphDef = { nodes: enrichedNodes, edges: enrichedEdges };
@@ -262,7 +262,7 @@ export function registerStorageIpc(): void {
     "storage:delete-node-outputs",
     async (_event, args: { workflowId: string; nodeId: string }) => {
       getStorage().deleteNodeOutputs(args.workflowId, args.nodeId);
-    }
+    },
   );
 
   ipcMain.handle(
@@ -272,6 +272,6 @@ export function registerStorageIpc(): void {
       if (existsSync(mediaDir)) {
         require("fs").rmSync(mediaDir, { recursive: true, force: true });
       }
-    }
+    },
   );
 }
