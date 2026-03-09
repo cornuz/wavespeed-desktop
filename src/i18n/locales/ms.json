@@ -642,6 +642,8 @@
       "empty": "Kosong",
       "calculating": "Mengira...",
       "clear": "Padam",
+      "clearConfirmDesc": "Ini akan memadamkan {{size}} data cache. Model yang telah dimuat turun perlu dimuat turun semula. Tindakan ini tidak boleh dibuat asal.",
+      "clearConfirmEmpty": "Ini akan memadamkan semua data cache. Tindakan ini tidak boleh dibuat asal.",
       "cleared": "Cache dipadam",
       "clearedDesc": "Cache model AI telah dipadam. Model akan dimuat turun semula apabila diperlukan.",
       "itemDeleted": "Item cache dipadam",

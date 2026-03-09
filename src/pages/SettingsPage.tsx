@@ -1199,8 +1199,10 @@ export function SettingsPage() {
             <AlertDialogTitle>{t("settings.cache.clear")}</AlertDialogTitle>
             <AlertDialogDescription>
               {(cacheSize ?? 0) > 0
-                ? `This will delete ${formatSize(cacheSize ?? 0)} of cached data including SD models and browser cache. Downloaded models will need to be re-downloaded. This cannot be undone.`
-                : "This will clear all cached data. This cannot be undone."}
+                ? t("settings.cache.clearConfirmDesc", {
+                    size: formatSize(cacheSize ?? 0),
+                  })
+                : t("settings.cache.clearConfirmEmpty")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

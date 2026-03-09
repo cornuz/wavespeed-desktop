@@ -651,6 +651,8 @@
       "empty": "Empty",
       "calculating": "Calculating...",
       "clear": "Clear",
+      "clearConfirmDesc": "This will delete {{size}} of cached data. Downloaded models will need to be re-downloaded. This cannot be undone.",
+      "clearConfirmEmpty": "This will clear all cached data. This cannot be undone.",
       "cleared": "Cache cleared",
       "clearedDesc": "AI model cache has been cleared. Models will be re-downloaded when needed.",
       "itemDeleted": "Cache item deleted",

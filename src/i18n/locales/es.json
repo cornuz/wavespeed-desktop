@@ -643,6 +643,8 @@
       "empty": "Vacío",
       "calculating": "Calculando...",
       "clear": "Limpiar",
+      "clearConfirmDesc": "Se eliminarán {{size}} de datos en caché. Los modelos descargados deberán volver a descargarse. Esta acción no se puede deshacer.",
+      "clearConfirmEmpty": "Se eliminarán todos los datos en caché. Esta acción no se puede deshacer.",
       "cleared": "Caché limpiada",
       "clearedDesc": "La caché de modelos de IA ha sido limpiada. Los modelos se descargarán nuevamente cuando sea necesario.",
       "itemDeleted": "Elemento de caché eliminado",

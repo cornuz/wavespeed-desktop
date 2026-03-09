@@ -643,6 +643,8 @@
       "empty": "Boş",
       "calculating": "Hesaplanıyor...",
       "clear": "Temizle",
+      "clearConfirmDesc": "{{size}} önbellek verisi silinecek. İndirilen modellerin yeniden indirilmesi gerekecek. Bu işlem geri alınamaz.",
+      "clearConfirmEmpty": "Tüm önbellek verileri silinecek. Bu işlem geri alınamaz.",
       "cleared": "Önbellek temizlendi",
       "clearedDesc": "AI model önbelleği temizlendi. Modeller gerektiğinde yeniden indirilecek.",
       "itemDeleted": "Önbellek öğesi silindi",

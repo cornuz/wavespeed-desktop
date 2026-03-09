@@ -546,16 +546,21 @@ export function MobilePlaygroundPage() {
               </div>
               <div className="flex-1 flex flex-col overflow-hidden">
                 <div className="flex-1 p-4 overflow-auto">
-                  {/* Show BatchOutputGrid for batch results (not when viewing history), OutputDisplay otherwise */}
-                  {activeTab.batchResults &&
-                  activeTab.batchResults.length > 0 &&
+                  {/* Show BatchOutputGrid when batch mode is enabled or has results (not when viewing history) */}
+                  {(activeTab.batchConfig?.enabled ||
+                    (activeTab.batchResults &&
+                      activeTab.batchResults.length > 0) ||
+                    activeTab.batchState?.isRunning) &&
                   historyIndex === null ? (
                     <BatchOutputGrid
                       results={activeTab.batchResults}
                       modelId={activeTab.selectedModel?.model_id}
                       onClear={clearBatchResults}
-                      isRunning={activeTab.isRunning}
-                      totalCount={activeTab.batchConfig?.repeatCount}
+                      isRunning={activeTab.batchState?.isRunning}
+                      totalCount={
+                        activeTab.batchState?.queue.length ||
+                        activeTab.batchConfig?.repeatCount
+                      }
                       queue={activeTab.batchState?.queue}
                     />
                   ) : (
@@ -565,7 +570,6 @@ export function MobilePlaygroundPage() {
                       error={activeTab.error}
                       isLoading={activeTab.isRunning}
                       modelId={activeTab.selectedModel?.model_id}
-                      hideGameButton
                     />
                   )}
                 </div>

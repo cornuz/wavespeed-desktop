@@ -642,6 +642,8 @@
       "empty": "Trống",
       "calculating": "Đang tính...",
       "clear": "Xóa",
+      "clearConfirmDesc": "Thao tác này sẽ xóa {{size}} dữ liệu bộ nhớ đệm. Các mô hình đã tải xuống sẽ cần được tải lại. Không thể hoàn tác thao tác này.",
+      "clearConfirmEmpty": "Thao tác này sẽ xóa toàn bộ dữ liệu bộ nhớ đệm. Không thể hoàn tác thao tác này.",
       "cleared": "Đã xóa bộ nhớ đệm",
       "clearedDesc": "Bộ nhớ đệm mô hình AI đã được xóa. Các mô hình sẽ được tải xuống lại khi cần.",
       "itemDeleted": "Đã xóa mục bộ nhớ đệm",

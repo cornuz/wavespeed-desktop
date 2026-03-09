@@ -643,6 +643,8 @@
       "empty": "Vazio",
       "calculating": "Calculando...",
       "clear": "Limpar",
+      "clearConfirmDesc": "Isso excluirá {{size}} de dados em cache. Os modelos baixados precisarão ser baixados novamente. Esta ação não pode ser desfeita.",
+      "clearConfirmEmpty": "Isso limpará todos os dados em cache. Esta ação não pode ser desfeita.",
       "cleared": "Cache limpo",
       "clearedDesc": "O cache de modelos de IA foi limpo. Os modelos serão baixados novamente quando necessário.",
       "itemDeleted": "Item de cache excluído",

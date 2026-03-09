@@ -651,6 +651,8 @@
       "empty": "空",
       "calculating": "计算中...",
       "clear": "清除",
+      "clearConfirmDesc": "这将删除 {{size}} 的缓存数据。已下载的模型需要重新下载。此操作无法撤销。",
+      "clearConfirmEmpty": "这将清除所有缓存数据。此操作无法撤销。",
       "cleared": "缓存已清除",
       "clearedDesc": "AI模型缓存已清除。需要时将重新下载模型。",
       "itemDeleted": "缓存项已删除",

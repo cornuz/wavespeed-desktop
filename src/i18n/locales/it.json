@@ -643,6 +643,8 @@
       "empty": "Vuoto",
       "calculating": "Calcolo...",
       "clear": "Svuota",
+      "clearConfirmDesc": "Verranno eliminati {{size}} di dati nella cache. I modelli scaricati dovranno essere scaricati nuovamente. Questa azione non può essere annullata.",
+      "clearConfirmEmpty": "Tutti i dati nella cache verranno eliminati. Questa azione non può essere annullata.",
       "cleared": "Cache svuotata",
       "clearedDesc": "La cache dei modelli IA è stata svuotata. I modelli verranno riscaricati quando necessario.",
       "itemDeleted": "Elemento della cache eliminato",

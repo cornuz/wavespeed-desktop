@@ -643,6 +643,8 @@
       "empty": "Vide",
       "calculating": "Calcul...",
       "clear": "Effacer",
+      "clearConfirmDesc": "Cela supprimera {{size}} de données en cache. Les modèles téléchargés devront être retéléchargés. Cette action est irréversible.",
+      "clearConfirmEmpty": "Cela supprimera toutes les données en cache. Cette action est irréversible.",
       "cleared": "Cache effacé",
       "clearedDesc": "Le cache des modèles IA a été effacé. Les modèles seront retéléchargés si nécessaire.",
       "itemDeleted": "Élément de cache supprimé",

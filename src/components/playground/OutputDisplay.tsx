@@ -24,11 +24,10 @@ import {
   X,
   Save,
   FolderHeart,
-  Sparkles,
+  Loader2,
 } from "lucide-react";
 import { isImageUrl, isVideoUrl, isAudioUrl } from "@/lib/mediaUtils";
 import { AudioPlayer } from "@/components/shared/AudioPlayer";
-import { FlappyBird } from "./FlappyBird";
 import { toast } from "@/hooks/useToast";
 import { cn } from "@/lib/utils";
 
@@ -100,12 +99,12 @@ interface OutputDisplayProps {
   error: string | null;
   isLoading: boolean;
   modelId?: string;
-  hideGameButton?: boolean;
-  gridLayout?: boolean;
   /** Total number of history items (for fullscreen prev/next across generations) */
   historyLength?: number;
   /** Navigate to prev/next history generation from fullscreen */
   onNavigateHistory?: (direction: "prev" | "next") => void;
+  /** Content to show when idle/loading (replaces game) */
+  idleFallback?: React.ReactNode;
 }
 
 export function OutputDisplay({
@@ -116,6 +115,7 @@ export function OutputDisplay({
   modelId,
   historyLength,
   onNavigateHistory,
+  idleFallback,
 }: OutputDisplayProps) {
   const { t } = useTranslation();
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
@@ -125,12 +125,10 @@ export function OutputDisplay({
   const autoSavedUrlsRef = useRef<Set<string>>(new Set());
   const prevLoadingRef = useRef(false);
 
-  // Game state
-  const [isGameStarted, setIsGameStarted] = useState(false);
-  const [showGame, setShowGame] = useState(
-    () => outputs.length === 0 || isLoading,
+  // Result view state
+  const [hasViewedResults, setHasViewedResults] = useState(
+    () => outputs.length > 0 && !isLoading,
   );
-  const [gameEndedWithResults, setGameEndedWithResults] = useState(false);
   const prevOutputsLengthRef = useRef(0);
 
   const { settings, loadSettings, saveAsset } = useAssetsStore();
@@ -201,32 +199,19 @@ export function OutputDisplay({
     prevOutputsLengthRef.current = outputs.length;
   }, [outputs.length]);
 
-  // Reset game state when outputs are cleared (new run starting)
+  // Reset view state when outputs are cleared (new run starting)
   useEffect(() => {
     if (outputs.length === 0 && !isLoading && !error) {
-      setShowGame(true);
-      setIsGameStarted(false);
-      setGameEndedWithResults(false);
+      setHasViewedResults(false);
     }
   }, [outputs.length, isLoading, error]);
 
-  // Auto-switch from game to results when generation completes
+  // When loading starts, reset hasViewedResults so user sees "View Result" when done
   useEffect(() => {
-    const wasLoading = prevLoadingRef.current;
-    // Don't update ref here — the auto-save effect below also reads it
-    if (wasLoading && !isLoading && outputs.length > 0 && !error) {
-      setShowGame(false);
+    if (isLoading) {
+      setHasViewedResults(false);
     }
-  }, [isLoading, outputs.length, error]);
-
-  const handleGameStart = useCallback(() => {
-    setIsGameStarted(true);
-  }, []);
-
-  const handleGameEnd = useCallback(() => {
-    // Game ended - don't auto-switch, let user view results via notification
-    setGameEndedWithResults(true);
-  }, []);
+  }, [isLoading]);
 
   // Auto-save outputs only when generation completes (isLoading: true → false)
   useEffect(() => {
@@ -456,32 +441,49 @@ export function OutputDisplay({
     );
   }
 
-  // Show game when: no outputs, loading, or user toggled to game view
-  const showGameView =
+  // Idle / Loading / Awaiting view: show fallback or generating indicator
+  if (
     outputs.length === 0 ||
-    isLoading ||
-    (showGame && (gameEndedWithResults || isGameStarted));
-
-  if (showGameView) {
+    (outputs.length > 0 && !isLoading && !hasViewedResults)
+  ) {
+    // Show fallback content with optional loading/result overlay
     return (
-      <div className="relative h-full overflow-hidden rounded-xl border border-border/70 bg-card/50">
-        <FlappyBird
-          onGameStart={handleGameStart}
-          onGameEnd={handleGameEnd}
-          isTaskRunning={isLoading}
-          taskStatus={t("playground.generating")}
-          idleMessage={
-            outputs.length === 0 && !isLoading
-              ? {
-                  title: t("playground.noOutputs"),
-                  subtitle: t("playground.configureAndRun"),
-                }
-              : undefined
-          }
-          hasResults={outputs.length > 0 && !isLoading}
-          onViewResults={() => setShowGame(false)}
-          modelId={modelId}
-        />
+      <div className="relative h-full overflow-hidden rounded-xl">
+        {/* Fallback content (e.g. FeaturedModelsPanel) */}
+        {idleFallback ? (
+          <div className="h-full overflow-auto">{idleFallback}</div>
+        ) : (
+          <div className="h-full border border-border/70 bg-card/50 flex items-center justify-center">
+            <p className="text-sm text-muted-foreground">
+              {t("playground.noOutputs")}
+            </p>
+          </div>
+        )}
+
+        {/* Loading indicator — floating, does not block FeaturedModels */}
+        {isLoading && (
+          <div className="absolute top-3 left-1/2 -translate-x-1/2 z-10 pointer-events-none">
+            <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-background/90 backdrop-blur-sm border border-border/50 shadow-lg">
+              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+              <span className="text-sm font-medium text-muted-foreground">
+                {t("playground.generating")}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* "View Result" button — floating, FeaturedModels still clickable behind */}
+        {outputs.length > 0 && !isLoading && !hasViewedResults && (
+          <div className="absolute top-3 left-1/2 -translate-x-1/2 z-10">
+            <Button
+              onClick={() => setHasViewedResults(true)}
+              className="rounded-full px-5 shadow-lg gap-2"
+            >
+              <CheckCircle2 className="h-4 w-4" />
+              {t("playground.flappyBird.viewResults", "View Results")}
+            </Button>
+          </div>
+        )}
       </div>
     );
   }
@@ -584,14 +586,6 @@ export function OutputDisplay({
               key={index}
               className="relative group rounded-lg border overflow-hidden bg-muted/30 flex items-center justify-center flex-1 min-h-0"
             >
-              <div className="absolute left-2 top-2 z-10">
-                <Badge
-                  variant="secondary"
-                  className="rounded-md bg-background/80 px-2 py-0.5 text-[11px] backdrop-blur"
-                >
-                  <Sparkles className="mr-1 h-3 w-3" />#{index + 1}
-                </Badge>
-              </div>
               {isImage && (
                 <img
                   src={outputStr}

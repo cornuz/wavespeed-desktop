@@ -643,6 +643,8 @@
       "empty": "空",
       "calculating": "计算中...",
       "clear": "清除",
+      "clearConfirmDesc": "{{size}}의 캐시 데이터가 삭제됩니다. 다운로드한 모델은 다시 다운로드해야 합니다. 이 작업은 되돌릴 수 없습니다.",
+      "clearConfirmEmpty": "모든 캐시 데이터가 삭제됩니다. 이 작업은 되돌릴 수 없습니다.",
       "cleared": "缓存已清除",
       "clearedDesc": "AI模型缓存已清除。需要时将重新下载模型。",
       "itemDeleted": "캐시 항목이 삭제되었습니다",

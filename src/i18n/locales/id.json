@@ -643,6 +643,8 @@
       "empty": "Kosong",
       "calculating": "Menghitung...",
       "clear": "Hapus",
+      "clearConfirmDesc": "Ini akan menghapus {{size}} data cache. Model yang telah diunduh perlu diunduh ulang. Tindakan ini tidak dapat dibatalkan.",
+      "clearConfirmEmpty": "Ini akan menghapus semua data cache. Tindakan ini tidak dapat dibatalkan.",
       "cleared": "Cache dihapus",
       "clearedDesc": "Cache model AI telah dihapus. Model akan diunduh ulang saat diperlukan.",
       "itemDeleted": "Item cache dihapus",

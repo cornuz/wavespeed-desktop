@@ -645,6 +645,8 @@
       "empty": "空",
       "calculating": "计算中...",
       "clear": "清除",
+      "clearConfirmDesc": "這將刪除 {{size}} 的快取資料。已下載的模型需要重新下載。此操作無法復原。",
+      "clearConfirmEmpty": "這將清除所有快取資料。此操作無法復原。",
       "cleared": "缓存已清除",
       "clearedDesc": "AI模型缓存已清除。需要时将重新下载模型。",
       "itemDeleted": "快取項目已刪除",

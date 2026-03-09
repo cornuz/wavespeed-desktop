@@ -643,6 +643,8 @@
       "empty": "Leer",
       "calculating": "Berechnung...",
       "clear": "Leeren",
+      "clearConfirmDesc": "Es werden {{size}} an zwischengespeicherten Daten gelöscht. Heruntergeladene Modelle müssen erneut heruntergeladen werden. Diese Aktion kann nicht rückgängig gemacht werden.",
+      "clearConfirmEmpty": "Alle zwischengespeicherten Daten werden gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.",
       "cleared": "Cache geleert",
       "clearedDesc": "Der KI-Modell-Cache wurde geleert. Modelle werden bei Bedarf erneut heruntergeladen.",
       "itemDeleted": "Cache-Element gelöscht",

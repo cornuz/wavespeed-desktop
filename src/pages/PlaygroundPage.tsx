@@ -1214,14 +1214,26 @@ export function PlaygroundPage() {
                       isLoading={activeTab.isRunning}
                       modelId={activeTab.selectedModel?.model_id}
                       batchResults={activeTab.batchResults}
+                      batchEnabled={activeTab.batchConfig.enabled}
                       batchIsRunning={activeTab.batchState?.isRunning}
-                      batchTotalCount={activeTab.batchState?.queue.length}
+                      batchTotalCount={
+                        activeTab.batchState?.queue.length ||
+                        (activeTab.batchConfig.enabled
+                          ? activeTab.batchConfig.repeatCount
+                          : undefined)
+                      }
                       batchQueue={activeTab.batchState?.queue}
                       onClearBatch={clearBatchResults}
                       batchPreviewInputs={batchPreviewInputs}
                       historyIndex={historyIndex}
                       historyLength={historyLen}
                       onNavigateHistory={navigateHistory}
+                      idleFallback={
+                        <FeaturedModelsPanel
+                          onSelectFeatured={handleExploreSelectFeatured}
+                          models={models}
+                        />
+                      }
                     />
                     <HistoryDrawer
                       history={activeTab.generationHistory}
