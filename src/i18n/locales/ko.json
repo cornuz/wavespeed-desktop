@@ -1,4 +1,4 @@
-{
+﻿{
   "common": {
     "loading": "로딩 중...",
     "save": "저장",
@@ -40,7 +40,8 @@
     "showMore": "더 보기",
     "showLess": "접기",
     "show": "표시",
-    "hide": "숨기기"
+    "hide": "숨기기",
+    "customize": "커스터마이즈"
   },
   "nav": {
     "home": "홈",

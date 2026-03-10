@@ -1,4 +1,4 @@
-{
+﻿{
   "common": {
     "loading": "Yükleniyor...",
     "save": "Kaydet",
@@ -40,7 +40,8 @@
     "showMore": "Daha fazla göster",
     "showLess": "Daha az göster",
     "show": "Göster",
-    "hide": "Gizle"
+    "hide": "Gizle",
+    "customize": "Özelleştir"
   },
   "nav": {
     "home": "Ana Sayfa",

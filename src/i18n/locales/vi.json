@@ -1,4 +1,4 @@
-{
+﻿{
   "common": {
     "loading": "Đang tải...",
     "save": "Lưu",
@@ -40,7 +40,8 @@
     "showMore": "Xem thêm",
     "showLess": "Thu gọn",
     "show": "Hiển thị",
-    "hide": "Ẩn"
+    "hide": "Ẩn",
+    "customize": "Tùy chỉnh"
   },
   "nav": {
     "home": "Trang chủ",

@@ -425,6 +425,7 @@ class WaveSpeedClient {
         page_size: pageSize,
         created_after: filters?.created_after || oneDayAgo.toISOString(),
         created_before: filters?.created_before || now.toISOString(),
+        include_inputs: true,
       };
 
       if (filters?.model) body.model = filters.model;

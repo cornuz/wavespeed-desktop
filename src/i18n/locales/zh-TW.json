@@ -1,4 +1,4 @@
-{
+﻿{
   "common": {
     "loading": "載入中...",
     "save": "儲存",
@@ -40,7 +40,8 @@
     "showMore": "顯示更多",
     "showLess": "收起",
     "show": "顯示",
-    "hide": "隱藏"
+    "hide": "隱藏",
+    "customize": "自訂"
   },
   "nav": {
     "home": "首頁",

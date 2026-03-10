@@ -1,4 +1,4 @@
-{
+﻿{
   "common": {
     "loading": "Memuat...",
     "save": "Simpan",
@@ -40,7 +40,8 @@
     "showMore": "Tampilkan lebih",
     "showLess": "Tampilkan sedikit",
     "show": "Tampilkan",
-    "hide": "Sembunyikan"
+    "hide": "Sembunyikan",
+    "customize": "Sesuaikan"
   },
   "nav": {
     "home": "Beranda",

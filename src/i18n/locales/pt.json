@@ -1,4 +1,4 @@
-{
+﻿{
   "common": {
     "loading": "Carregando...",
     "save": "Salvar",
@@ -40,7 +40,8 @@
     "showMore": "Mostrar mais",
     "showLess": "Mostrar menos",
     "show": "Mostrar",
-    "hide": "Ocultar"
+    "hide": "Ocultar",
+    "customize": "Personalizar"
   },
   "nav": {
     "home": "Início",

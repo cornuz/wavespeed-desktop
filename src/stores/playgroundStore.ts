@@ -162,6 +162,8 @@ interface PlaygroundState {
   createTab: (
     model?: Model,
     initialFormValues?: Record<string, unknown>,
+    initialOutputs?: (string | Record<string, unknown>)[],
+    initialPrediction?: PredictionResult | null,
   ) => string;
   closeTab: (tabId: string) => void;
   setActiveTab: (tabId: string) => void;
@@ -196,6 +198,9 @@ interface PlaygroundState {
 
   // Consume pending form values (returns them and clears from tab)
   consumePendingFormValues: () => Record<string, unknown> | null;
+
+  // Find formValues from any tab's generationHistory by prediction ID
+  findFormValuesByPredictionId: (predictionId: string) => Record<string, unknown> | null;
 }
 
 // Check if a value is considered "empty"
@@ -243,11 +248,17 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
   tabs: initialSession?.tabs ?? [],
   activeTabId: initialSession?.activeTabId ?? null,
 
-  createTab: (model?: Model, initialFormValues?: Record<string, unknown>) => {
+  createTab: (model?: Model, initialFormValues?: Record<string, unknown>, initialOutputs?: (string | Record<string, unknown>)[], initialPrediction?: PredictionResult | null) => {
     const id = `tab-${++tabCounter}`;
     const newTab = createEmptyTab(id, model);
     if (initialFormValues) {
       newTab.pendingFormValues = { ...initialFormValues };
+    }
+    if (initialOutputs && initialOutputs.length > 0) {
+      newTab.outputs = initialOutputs;
+    }
+    if (initialPrediction) {
+      newTab.currentPrediction = initialPrediction;
     }
     set((state) => ({
       tabs: [...state.tabs, newTab],
@@ -937,5 +948,19 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
       ),
     }));
     return pending;
+  },
+
+  findFormValuesByPredictionId: (predictionId: string) => {
+    const tabs = get().tabs;
+    for (const tab of tabs) {
+      for (const item of tab.generationHistory) {
+        if (item.prediction?.id === predictionId || item.id === predictionId) {
+          if (item.formValues && Object.keys(item.formValues).length > 0) {
+            return item.formValues;
+          }
+        }
+      }
+    }
+    return null;
   },
 }));
