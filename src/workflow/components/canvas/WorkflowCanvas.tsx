@@ -21,6 +21,7 @@ import ReactFlow, {
   type Connection,
   type ReactFlowInstance,
   type Node,
+  type Edge,
   type NodeChange,
   type OnSelectionChangeParams,
 } from "reactflow";
@@ -330,6 +331,7 @@ export function WorkflowCanvas({ nodeDefs = [] }: WorkflowCanvasProps) {
     onNodesChange,
     onEdgesChange,
     addEdge,
+    updateEdge: updateEdgeInStore,
     addNode,
     removeNode,
     removeNodes,
@@ -547,6 +549,53 @@ export function WorkflowCanvas({ nodeDefs = [] }: WorkflowCanvasProps) {
   const onConnect = useCallback(
     (connection: Connection) => addEdge(connection),
     [addEdge],
+  );
+
+  // Edge reconnection: drag an existing edge endpoint to a different handle
+  const edgeUpdateSuccessful = useRef(true);
+  const onEdgeUpdateStart = useCallback(() => {
+    edgeUpdateSuccessful.current = false;
+  }, []);
+  const onEdgeUpdate = useCallback(
+    (oldEdge: Edge, newConnection: Connection) => {
+      edgeUpdateSuccessful.current = true;
+      updateEdgeInStore(oldEdge, newConnection);
+      // After reconnection the node UI changes (connected params show badges
+      // instead of form controls), which moves handle DOM positions internally
+      // even though the node's outer size may stay the same. React Flow only
+      // re-measures handles via ResizeObserver when the outer size changes.
+      // Workaround: after the DOM settles, force React Flow to re-measure by
+      // dispatching dimension changes for affected nodes.
+      requestAnimationFrame(() => {
+        const affectedNodeIds = new Set<string>();
+        if (oldEdge.source) affectedNodeIds.add(oldEdge.source);
+        if (oldEdge.target) affectedNodeIds.add(oldEdge.target);
+        if (newConnection.source) affectedNodeIds.add(newConnection.source);
+        if (newConnection.target) affectedNodeIds.add(newConnection.target);
+        // Nudge each affected node's width by ±1px to trigger ResizeObserver,
+        // then restore it on the next frame.
+        for (const nid of affectedNodeIds) {
+          const el = document.querySelector(
+            `.react-flow__node[data-id="${nid}"]`,
+          ) as HTMLElement | null;
+          if (el) {
+            const origWidth = el.style.width;
+            el.style.width = `${el.offsetWidth + 1}px`;
+            requestAnimationFrame(() => {
+              el.style.width = origWidth;
+            });
+          }
+        }
+      });
+    },
+    [updateEdgeInStore],
+  );
+  const onEdgeUpdateEnd = useCallback(
+    (_: MouseEvent | TouchEvent, _edge: Edge) => {
+      // If the drag didn't land on a valid handle, snap back — do NOT delete the edge
+      edgeUpdateSuccessful.current = true;
+    },
+    [],
   );
   const onNodeClick = useCallback(
     (_: React.MouseEvent, node: { id: string }) => selectNode(node.id),
@@ -1189,6 +1238,9 @@ export function WorkflowCanvas({ nodeDefs = [] }: WorkflowCanvasProps) {
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
+          onEdgeUpdate={onEdgeUpdate}
+          onEdgeUpdateStart={onEdgeUpdateStart}
+          onEdgeUpdateEnd={onEdgeUpdateEnd}
           onNodeClick={onNodeClick}
           onPaneClick={onPaneClick}
           onSelectionChange={onSelectionChange}
@@ -1213,6 +1265,8 @@ export function WorkflowCanvas({ nodeDefs = [] }: WorkflowCanvasProps) {
           }}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
+          edgesUpdatable
+          reconnectRadius={6}
           selectionOnDrag={interactionMode === "select"}
           selectionMode={SelectionMode.Partial}
           multiSelectionKeyCode="Shift"
