@@ -415,7 +415,7 @@ export async function translatePrompts(
           ? `immutable_traits: {core_visual: "${c.immutable_traits.core_visual}", art_style: "${c.immutable_traits.art_style}"}`
           : `visual anchor: ${c.visual_prompt}`;
         const mutable = c.mutable_states
-          ? `mutable_states: {clothing: [${c.mutable_states.clothing.join(", ")}], expression: [${c.mutable_states.expression.join(", ")}]}`
+          ? `mutable_states: {clothing: [${(c.mutable_states.clothing ?? []).join(", ")}], expression: [${(c.mutable_states.expression ?? []).join(", ")}]}`
           : "";
         return `${c.name}: ${immutable}${mutable ? "\n  " + mutable : ""}`;
       })
@@ -430,14 +430,14 @@ export async function translatePrompts(
       .map((s) => {
         const bfr = s.base_frame_request;
         const bfrStr = bfr
-          ? ` base_frame_request={subjects=[${bfr.subject_names.join(",")}], pose="${bfr.pose_or_angle}", scene="${bfr.scene_context}"}`
+          ? ` base_frame_request={subjects=[${(bfr.subject_names ?? []).join(",")}], pose="${bfr.pose_or_angle}", scene="${bfr.scene_context}"}`
           : "";
         const motions = (s.subject_motions || [])
           .map((m) => `{${m.subject}: mid_action="${m.mid_action}", dir=${m.direction}, intensity=${m.intensity}${m.clothing_state ? `, clothing="${m.clothing_state}"` : ""}${m.expression_state ? `, expression="${m.expression_state}"` : ""}}`)
           .join(", ");
         const motionStr = motions ? ` subject_motions=[${motions}]` : "";
         const envStr = s.env_motion ? ` env_motion={${s.env_motion.description}, dir=${s.env_motion.direction}}` : "";
-        return `Shot #${s.sequence_number} [${s.shot_type}, ${s.camera_movement}]: scene="${s.scene_name}", characters=[${s.character_names.join(",")}], action="${s.action_description}", emotion=${s.emotion_tag}${bfrStr}${motionStr}${envStr}`;
+        return `Shot #${s.sequence_number} [${s.shot_type}, ${s.camera_movement}]: scene="${s.scene_name}", characters=[${(s.character_names ?? []).join(",")}], action="${s.action_description}", emotion=${s.emotion_tag}${bfrStr}${motionStr}${envStr}`;
       })
       .join("\n");
 
