@@ -63,8 +63,13 @@ export function HistoryDrawer({
   onApplySettings,
 }: HistoryDrawerProps) {
   const { t } = useTranslation();
-  const [isExpanded, setIsExpanded] = useState(true);
-  const userCollapsedRef = useRef(false);
+  const [isExpanded, setIsExpanded] = useState(() => {
+    const stored = localStorage.getItem("historyDrawerExpanded");
+    return stored !== null ? stored === "true" : true;
+  });
+  const userCollapsedRef = useRef(
+    localStorage.getItem("historyDrawerExpanded") === "false",
+  );
   const prevLenRef = useRef(history.length);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -80,6 +85,7 @@ export function HistoryDrawer({
     const next = !isExpanded;
     setIsExpanded(next);
     userCollapsedRef.current = !next;
+    localStorage.setItem("historyDrawerExpanded", String(next));
   };
 
   // Navigate history: prev / next with wrap-around
