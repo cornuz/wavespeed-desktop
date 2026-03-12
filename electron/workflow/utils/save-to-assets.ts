@@ -126,7 +126,11 @@ async function downloadToFile(url: string, destPath: string): Promise<boolean> {
     renameSync(tempPath, destPath);
     return true;
   } catch {
-    try { if (existsSync(tempPath)) unlinkSync(tempPath); } catch { /* best-effort */ }
+    try {
+      if (existsSync(tempPath)) unlinkSync(tempPath);
+    } catch {
+      /* best-effort */
+    }
     return false;
   }
 }

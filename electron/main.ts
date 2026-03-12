@@ -40,12 +40,18 @@ import { initWorkflowModule, closeWorkflowDatabase } from "./workflow";
 async function downloadToFile(
   url: string,
   destPath: string,
-): Promise<{ success: true; filePath: string; fileSize: number } | { success: false; error: string }> {
+): Promise<
+  | { success: true; filePath: string; fileSize: number }
+  | { success: false; error: string }
+> {
   const tempPath = destPath + ".download";
   try {
     const response = await net.fetch(url);
     if (!response.ok) {
-      return { success: false, error: `HTTP ${response.status} downloading file` };
+      return {
+        success: false,
+        error: `HTTP ${response.status} downloading file`,
+      };
     }
     const buffer = Buffer.from(await response.arrayBuffer());
     writeFileSync(tempPath, buffer);
@@ -55,7 +61,9 @@ async function downloadToFile(
   } catch (err) {
     try {
       if (existsSync(tempPath)) unlinkSync(tempPath);
-    } catch { /* best-effort */ }
+    } catch {
+      /* best-effort */
+    }
     return { success: false, error: (err as Error).message };
   }
 }
