@@ -64,6 +64,7 @@ export function NodePalette({ definitions }: NodePaletteProps) {
   const addNode = useWorkflowStore((s) => s.addNode);
   const width = useUIStore((s) => s.sidebarWidth);
   const setSidebarWidth = useUIStore((s) => s.setSidebarWidth);
+  const pendingIteratorParentId = useUIStore((s) => s.pendingIteratorParentId);
   const [dragging, setDragging] = useState(false);
   const [query, setQuery] = useState("");
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -81,18 +82,50 @@ export function NodePalette({ definitions }: NodePaletteProps) {
 
   const handleClick = useCallback(
     (def: NodeTypeDefinition) => {
+      // Don't allow creating iterators inside iterators
+      const pendingParentId = useUIStore.getState().pendingIteratorParentId;
+      if (pendingParentId && def.type === "control/iterator") return;
+
       const defaultParams: Record<string, unknown> = {};
       for (const p of def.params) {
         if (p.default !== undefined) defaultParams[p.key] = p.default;
       }
-      const center = useUIStore.getState().getViewportCenter();
-      const x = center.x + (Math.random() - 0.5) * 60;
-      const y = center.y + (Math.random() - 0.5) * 60;
+
+      let x: number, y: number;
+
+      if (pendingParentId) {
+        // Creating inside an Iterator — compute absolute position in the internal canvas area
+        const iteratorNode = useWorkflowStore.getState().nodes.find((n) => n.id === pendingParentId);
+        if (iteratorNode) {
+          const itW = (iteratorNode.data?.params?.__nodeWidth as number) ?? 600;
+          const itH = (iteratorNode.data?.params?.__nodeHeight as number) ?? 400;
+          const childW = (defaultParams.__nodeWidth as number) ?? 300;
+          // Account for port strips — width depends on whether ports are exposed
+          const inputDefs = iteratorNode.data?.inputDefinitions ?? [];
+          const outputDefs = iteratorNode.data?.outputDefinitions ?? [];
+          const leftStrip = (inputDefs as unknown[]).length > 0 ? 140 : 24;
+          const rightStrip = (outputDefs as unknown[]).length > 0 ? 140 : 24;
+          const internalW = itW - leftStrip - rightStrip;
+          // Center the child in the internal canvas area
+          x = iteratorNode.position.x + leftStrip + Math.max(10, (internalW - childW) / 2);
+          y = iteratorNode.position.y + Math.max(60, itH / 2 - 40);
+        } else {
+          const center = useUIStore.getState().getViewportCenter();
+          x = center.x + (Math.random() - 0.5) * 60;
+          y = center.y + (Math.random() - 0.5) * 60;
+        }
+      } else {
+        const center = useUIStore.getState().getViewportCenter();
+        x = center.x + (Math.random() - 0.5) * 60;
+        y = center.y + (Math.random() - 0.5) * 60;
+      }
+
       const localizedLabel = t(
         `workflow.nodeDefs.${def.type}.label`,
         def.label,
       );
-      addNode(
+
+      const newNodeId = addNode(
         def.type,
         { x, y },
         defaultParams,
@@ -101,6 +134,14 @@ export function NodePalette({ definitions }: NodePaletteProps) {
         def.inputs,
         def.outputs,
       );
+
+      // If creating inside an Iterator, adopt immediately
+      // adoptNode converts absolute position to relative and sets parentNode + extent
+      if (pendingParentId) {
+        useWorkflowStore.getState().adoptNode(pendingParentId, newNodeId);
+        useUIStore.getState().setPendingIteratorParentId(null);
+      }
+
       recordRecentNodeType(def.type);
       // Auto-close palette after adding a node
       toggleNodePalette();
@@ -122,15 +163,20 @@ export function NodePalette({ definitions }: NodePaletteProps) {
   );
 
   const displayDefs = useMemo(() => {
+    let defs = definitions;
+    // When creating inside an Iterator, filter out the iterator type (no nesting)
+    if (pendingIteratorParentId) {
+      defs = defs.filter((d) => d.type !== "control/iterator");
+    }
     const q = query.trim();
-    if (!q) return definitions;
-    return fuzzySearch(definitions, q, (def) => [
+    if (!q) return defs;
+    return fuzzySearch(defs, q, (def) => [
       def.type,
       def.label,
       t(`workflow.nodeDefs.${def.type}.label`, def.label),
       def.category,
     ]).map((r) => r.item);
-  }, [definitions, query, t]);
+  }, [definitions, query, t, pendingIteratorParentId]);
 
   const groupedDefs = useMemo(() => {
     const groups = new Map<string, NodeTypeDefinition[]>();
@@ -166,6 +212,7 @@ export function NodePalette({ definitions }: NodePaletteProps) {
   );
 
   /* ── render ──────────────────────────────────────────────── */
+
   return (
     <div
       className="border-r border-border/70 bg-background/95 backdrop-blur flex flex-col relative overflow-hidden h-full"
@@ -185,6 +232,19 @@ export function NodePalette({ definitions }: NodePaletteProps) {
           <X className="w-4 h-4" />
         </button>
       </div>
+
+      {/* ── iterator context banner ── */}
+      {pendingIteratorParentId && (
+        <div className="px-3 py-1.5 bg-cyan-500/10 border-b border-cyan-500/20 flex items-center gap-1.5">
+          <svg className="w-3.5 h-3.5 text-cyan-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="17 1 21 5 17 9" /><path d="M3 11V9a4 4 0 0 1 4-4h14" />
+            <polyline points="7 23 3 19 7 15" /><path d="M21 13v2a4 4 0 0 1-4 4H3" />
+          </svg>
+          <span className="text-[11px] text-cyan-400 font-medium">
+            {t("workflow.addingInsideIterator", "Adding inside Iterator")}
+          </span>
+        </div>
+      )}
 
       {/* ── search ── */}
       <div className="px-3 py-2 shrink-0">

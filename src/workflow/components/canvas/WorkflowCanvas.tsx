@@ -32,6 +32,8 @@ import { useUIStore } from "../../stores/ui.store";
 import { CustomNode } from "./CustomNode";
 import { CustomEdge } from "./CustomEdge";
 import { AnnotationNode } from "./AnnotationNode";
+import IteratorNodeContainer from "./iterator-node/IteratorNodeContainer";
+import { useIteratorAdoption } from "../../hooks/useIteratorAdoption";
 import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 import type {
   NodeTypeDefinition,
@@ -94,7 +96,7 @@ function saveRecentNodeTypes(types: string[]) {
   }
 }
 
-const nodeTypes = { custom: CustomNode, annotation: AnnotationNode };
+const nodeTypes = { custom: CustomNode, annotation: AnnotationNode, "control/iterator": IteratorNodeContainer };
 const edgeTypes = { custom: CustomEdge };
 
 /** Zoom in/out and fit view controls, positioned on the right of the canvas. */
@@ -390,6 +392,40 @@ export function WorkflowCanvas({ nodeDefs = [] }: WorkflowCanvasProps) {
     });
   }, []);
 
+  // ── Iterator adoption: drag-in/out detection, auto-adopt on create, release on delete ──
+  const {
+    handleNodesChangeForAdoption,
+    handleNodeCreated,
+    handleNodesDeleted,
+  } = useIteratorAdoption();
+
+  /** Wrapped onNodesChange that also triggers iterator adoption detection */
+  const onNodesChangeWithAdoption = useCallback(
+    (changes: NodeChange[]) => {
+      onNodesChange(changes);
+      handleNodesChangeForAdoption(changes);
+    },
+    [onNodesChange, handleNodesChangeForAdoption],
+  );
+
+  /** Wrapped removeNode that releases child from iterator before deletion */
+  const removeNodeWithRelease = useCallback(
+    (nodeId: string) => {
+      handleNodesDeleted([nodeId]);
+      removeNode(nodeId);
+    },
+    [removeNode, handleNodesDeleted],
+  );
+
+  /** Wrapped removeNodes that releases children from iterators before deletion */
+  const removeNodesWithRelease = useCallback(
+    (nodeIds: string[]) => {
+      handleNodesDeleted(nodeIds);
+      removeNodes(nodeIds);
+    },
+    [removeNodes, handleNodesDeleted],
+  );
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -430,10 +466,10 @@ export function WorkflowCanvas({ nodeDefs = [] }: WorkflowCanvasProps) {
       ) {
         event.preventDefault();
         if (selectedNodeIds.size === 1) {
-          removeNode([...selectedNodeIds][0]);
+          removeNodeWithRelease([...selectedNodeIds][0]);
           selectNode(null);
         } else {
-          removeNodes([...selectedNodeIds]);
+          removeNodesWithRelease([...selectedNodeIds]);
           selectNode(null);
         }
       }
@@ -484,7 +520,7 @@ export function WorkflowCanvas({ nodeDefs = [] }: WorkflowCanvasProps) {
           try {
             const node = JSON.parse(copiedNode);
             const center = useUIStore.getState().getViewportCenter();
-            addNode(
+            const pastedNodeId = addNode(
               node.data.nodeType,
               {
                 x: center.x + (Math.random() - 0.5) * 60,
@@ -496,6 +532,7 @@ export function WorkflowCanvas({ nodeDefs = [] }: WorkflowCanvasProps) {
               node.data.inputDefinitions ?? [],
               node.data.outputDefinitions ?? [],
             );
+            handleNodeCreated(pastedNodeId);
             if (typeof node.data?.nodeType === "string")
               recordRecentNodeType(node.data.nodeType);
           } catch (e) {
@@ -509,8 +546,8 @@ export function WorkflowCanvas({ nodeDefs = [] }: WorkflowCanvasProps) {
   }, [
     selectedNodeId,
     selectedNodeIds,
-    removeNode,
-    removeNodes,
+    removeNodeWithRelease,
+    removeNodesWithRelease,
     selectNode,
     selectNodes,
     nodes,
@@ -519,7 +556,8 @@ export function WorkflowCanvas({ nodeDefs = [] }: WorkflowCanvasProps) {
     redo,
     saveWorkflow,
     recordRecentNodeType,
-    onNodesChange,
+    handleNodeCreated,
+    onNodesChangeWithAdoption,
   ]);
 
   // Touch gesture handling: 2 fingers = pan, 3 fingers = select, pinch = zoom (native)
@@ -685,6 +723,11 @@ export function WorkflowCanvas({ nodeDefs = [] }: WorkflowCanvasProps) {
       for (const p of def.params) {
         if (p.default !== undefined) defaultParams[p.key] = p.default;
       }
+      // Iterator nodes need default bounding box dimensions
+      if (def.type === "control/iterator") {
+        defaultParams.__nodeWidth = 600;
+        defaultParams.__nodeHeight = 400;
+      }
       const localizedLabel = t(
         `workflow.nodeDefs.${def.type}.label`,
         def.label,
@@ -722,7 +765,7 @@ export function WorkflowCanvas({ nodeDefs = [] }: WorkflowCanvasProps) {
         position = projectMenuPosition(contextMenu.x, contextMenu.y);
       }
 
-      addNode(
+      const newNodeId = addNode(
         def.type,
         position,
         defaultParams,
@@ -732,9 +775,20 @@ export function WorkflowCanvas({ nodeDefs = [] }: WorkflowCanvasProps) {
         def.outputs,
       );
       recordRecentNodeType(def.type);
+      handleNodeCreated(newNodeId);
+
+      // If pendingIteratorParentId is set (e.g. from child node "+" button),
+      // adopt the new node into the iterator
+      const pendingItId = useUIStore.getState().pendingIteratorParentId;
+      if (pendingItId) {
+        const { adoptNode } = useWorkflowStore.getState();
+        adoptNode(pendingItId, newNodeId);
+        useUIStore.getState().setPendingIteratorParentId(null);
+      }
+
       setContextMenu(null);
     },
-    [addNode, contextMenu, nodes, projectMenuPosition, t, recordRecentNodeType],
+    [addNode, contextMenu, nodes, projectMenuPosition, t, recordRecentNodeType, handleNodeCreated],
   );
 
   const addNodeDisplayDefs = useMemo(() => {
@@ -867,10 +921,20 @@ export function WorkflowCanvas({ nodeDefs = [] }: WorkflowCanvasProps) {
       });
 
       recordRecentNodeType("ai-task/run");
+      handleNodeCreated(newNodeId);
+
+      // If pendingIteratorParentId is set, adopt the new node into the iterator
+      const pendingItId = useUIStore.getState().pendingIteratorParentId;
+      if (pendingItId) {
+        const { adoptNode: adopt } = useWorkflowStore.getState();
+        adopt(pendingItId, newNodeId);
+        useUIStore.getState().setPendingIteratorParentId(null);
+      }
+
       selectNode(newNodeId);
       setContextMenu(null);
     },
-    [addNode, contextMenu, nodes, nodeDefs, projectMenuPosition, recordRecentNodeType, selectNode],
+    [addNode, contextMenu, nodes, nodeDefs, projectMenuPosition, recordRecentNodeType, handleNodeCreated, selectNode],
   );
 
   const getContextMenuItems = useCallback((): ContextMenuItem[] => {
@@ -985,7 +1049,7 @@ export function WorkflowCanvas({ nodeDefs = [] }: WorkflowCanvasProps) {
           icon: "🗑️",
           shortcut: "Del",
           action: () => {
-            removeNodes([...selectedNodeIds]);
+            removeNodesWithRelease([...selectedNodeIds]);
             selectNode(null);
           },
           destructive: true,
@@ -995,7 +1059,7 @@ export function WorkflowCanvas({ nodeDefs = [] }: WorkflowCanvasProps) {
           label: t("workflow.delete", "Delete"),
           icon: "🗑️",
           shortcut: "Del",
-          action: () => removeNode(nodeId),
+          action: () => removeNodeWithRelease(nodeId),
           destructive: true,
         });
       }
@@ -1058,7 +1122,7 @@ export function WorkflowCanvas({ nodeDefs = [] }: WorkflowCanvasProps) {
           try {
             const node = JSON.parse(copiedNode);
             const position = menuToFlowPosition();
-            addNode(
+            const pastedId = addNode(
               node.data.nodeType,
               position,
               node.data.params,
@@ -1067,6 +1131,7 @@ export function WorkflowCanvas({ nodeDefs = [] }: WorkflowCanvasProps) {
               node.data.inputDefinitions ?? [],
               node.data.outputDefinitions ?? [],
             );
+            handleNodeCreated(pastedId);
             if (typeof node.data?.nodeType === "string")
               recordRecentNodeType(node.data.nodeType);
           } catch (e) {
@@ -1078,8 +1143,8 @@ export function WorkflowCanvas({ nodeDefs = [] }: WorkflowCanvasProps) {
     return items;
   }, [
     contextMenu,
-    removeNode,
-    removeNodes,
+    removeNodeWithRelease,
+    removeNodesWithRelease,
     selectedNodeIds,
     selectNode,
     nodes,
@@ -1110,12 +1175,33 @@ export function WorkflowCanvas({ nodeDefs = [] }: WorkflowCanvasProps) {
           x: event.clientX - bounds.left,
           y: event.clientY - bounds.top,
         });
+
+        // Reject drop if it lands inside an iterator boundary (external nodes can't enter)
+        if (nodeType !== "control/iterator") {
+          const iteratorNodes = useWorkflowStore.getState().nodes.filter((n) => n.type === "control/iterator");
+          for (const it of iteratorNodes) {
+            const itX = it.position.x;
+            const itY = it.position.y;
+            const itW = (it.data?.params?.__nodeWidth as number) ?? 600;
+            const itH = (it.data?.params?.__nodeHeight as number) ?? 400;
+            if (position.x >= itX && position.x <= itX + itW && position.y >= itY && position.y <= itY + itH) {
+              // Don't allow drop inside iterator — user must use the internal Add Node button
+              return;
+            }
+          }
+        }
+
         const def = nodeDefs.find((d) => d.type === nodeType);
         const defaultParams: Record<string, unknown> = {};
         if (def) {
           for (const p of def.params) {
             if (p.default !== undefined) defaultParams[p.key] = p.default;
           }
+        }
+        // Iterator nodes need default bounding box dimensions
+        if (nodeType === "control/iterator") {
+          defaultParams.__nodeWidth = 600;
+          defaultParams.__nodeHeight = 400;
         }
         const newNodeId = addNode(
           nodeType,
@@ -1127,6 +1213,7 @@ export function WorkflowCanvas({ nodeDefs = [] }: WorkflowCanvasProps) {
           def?.outputs ?? [],
         );
         recordRecentNodeType(nodeType);
+        handleNodeCreated(newNodeId);
         selectNode(newNodeId);
         return;
       }
@@ -1172,6 +1259,7 @@ export function WorkflowCanvas({ nodeDefs = [] }: WorkflowCanvasProps) {
         uploadDef?.outputs ?? [],
       );
       recordRecentNodeType("input/media-upload");
+      handleNodeCreated(newNodeId);
       selectNode(newNodeId);
 
       // Upload the file and update the newly created node's params
@@ -1219,7 +1307,7 @@ export function WorkflowCanvas({ nodeDefs = [] }: WorkflowCanvasProps) {
           });
       });
     },
-    [addNode, nodeDefs, recordRecentNodeType, selectNode, t],
+    [addNode, nodeDefs, recordRecentNodeType, handleNodeCreated, selectNode, t],
   );
 
   useEffect(() => {
@@ -1241,6 +1329,12 @@ export function WorkflowCanvas({ nodeDefs = [] }: WorkflowCanvasProps) {
       const { x, y, sourceNodeId, side } = (e as CustomEvent).detail;
       if (sourceNodeId && side) {
         sideAddRef.current = { sourceNodeId, side };
+        // If the source node is inside an iterator, set pendingIteratorParentId
+        // so the new node is also created inside the same iterator
+        const sourceNode = useWorkflowStore.getState().nodes.find((n) => n.id === sourceNodeId);
+        if (sourceNode?.parentNode) {
+          useUIStore.getState().setPendingIteratorParentId(sourceNode.parentNode);
+        }
       } else {
         sideAddRef.current = null;
       }
@@ -1492,7 +1586,7 @@ export function WorkflowCanvas({ nodeDefs = [] }: WorkflowCanvasProps) {
         <ReactFlow
           nodes={nodes}
           edges={edges}
-          onNodesChange={onNodesChange}
+          onNodesChange={onNodesChangeWithAdoption}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
           onEdgeUpdate={onEdgeUpdate}

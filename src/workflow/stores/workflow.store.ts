@@ -15,7 +15,15 @@ import {
 } from "reactflow";
 import { v4 as uuid } from "uuid";
 import { workflowIpc, registryIpc } from "../ipc/ipc-client";
-import type { WorkflowNode, WorkflowEdge } from "@/workflow/types/workflow";
+import type { WorkflowNode, WorkflowEdge, ExposedParam } from "@/workflow/types/workflow";
+import type { PortDefinition } from "@/workflow/types/node-defs";
+import { wouldCreateCycleInSubWorkflow } from "@/workflow/lib/cycle-detection";
+
+/* ── Iterator bounding-box constants ──────────────────────────────── */
+const MIN_ITERATOR_WIDTH = 600;
+const MIN_ITERATOR_HEIGHT = 400;
+const CHILD_PADDING = 40;
+const PORT_STRIP_WIDTH = 140;
 
 /** Lazy getter to avoid circular import with execution.store */
 function getActiveExecutions(): Set<string> {
@@ -215,6 +223,7 @@ async function _doSaveWorkflow(
       },
     },
     currentOutputId: null, // placeholder — repo will preserve existing DB value
+    parentNodeId: n.parentNode ?? null,
   }));
 
   const wfEdges: WorkflowEdge[] = edges.map((e) => ({
@@ -224,6 +233,7 @@ async function _doSaveWorkflow(
     sourceOutputKey: e.sourceHandle ?? "output",
     targetNodeId: e.target,
     targetInputKey: e.targetHandle ?? "input",
+    isInternal: e.data?.isInternal === true,
   }));
 
   await workflowIpc.save({
@@ -282,6 +292,11 @@ export interface WorkflowState {
   newWorkflow: (name: string) => Promise<void>;
   setWorkflowName: (name: string) => void;
   renameWorkflow: (newName: string) => Promise<void>;
+  adoptNode: (iteratorId: string, childId: string) => void;
+  releaseNode: (iteratorId: string, childId: string) => void;
+  updateBoundingBox: (iteratorId: string) => void;
+  exposeParam: (iteratorId: string, param: ExposedParam) => void;
+  unexposeParam: (iteratorId: string, namespacedKey: string, direction: "input" | "output") => void;
   reset: () => void;
 }
 
@@ -308,7 +323,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     const id = uuid();
     const newNode: ReactFlowNode = {
       id,
-      type: "custom",
+      type: type === "control/iterator" ? "control/iterator" : "custom",
       position,
       data: {
         nodeType: type,
@@ -411,6 +426,50 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
         e.targetHandle === (connection.targetHandle ?? "input"),
     );
     if (duplicate) return;
+
+    // ── Sub-workflow cycle detection ──
+    // If both source and target are inside the same Iterator, validate that
+    // the new edge won't create a cycle within the sub-workflow.
+    const sourceNode = nodes.find((n) => n.id === connection.source);
+    const targetNode = nodes.find((n) => n.id === connection.target);
+    const isInternal =
+      sourceNode?.parentNode &&
+      targetNode?.parentNode &&
+      sourceNode.parentNode === targetNode.parentNode;
+
+    if (isInternal) {
+      const parentId = sourceNode!.parentNode!;
+      const subNodeIds = nodes
+        .filter((n) => n.parentNode === parentId)
+        .map((n) => n.id);
+      const internalEdges = edges
+        .filter(
+          (e) =>
+            e.data?.isInternal &&
+            subNodeIds.includes(e.source) &&
+            subNodeIds.includes(e.target),
+        )
+        .map((e) => ({ sourceNodeId: e.source, targetNodeId: e.target }));
+
+      const wouldCycle = wouldCreateCycleInSubWorkflow(
+        subNodeIds,
+        internalEdges,
+        { sourceNodeId: connection.source, targetNodeId: connection.target },
+      );
+      if (wouldCycle) {
+        // Reject the connection — dispatch a toast event for the UI
+        window.dispatchEvent(
+          new CustomEvent("workflow:toast", {
+            detail: {
+              type: "error",
+              msg: "Cannot connect: this would create a cycle inside the Iterator",
+            },
+          }),
+        );
+        return;
+      }
+    }
+
     // Guard: a target handle can only have one incoming connection
     const targetHandle = connection.targetHandle ?? "input";
     const existingToTarget = edges.some(
@@ -431,6 +490,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
         sourceHandle: connection.sourceHandle ?? "output",
         targetHandle,
         type: "custom",
+        ...(isInternal ? { data: { isInternal: true } } : {}),
       };
       set({
         edges: [...filtered, newEdge],
@@ -448,6 +508,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
         sourceHandle: connection.sourceHandle ?? "output",
         targetHandle,
         type: "custom",
+        ...(isInternal ? { data: { isInternal: true } } : {}),
       };
       set((state) => ({
         edges: [...state.edges, newEdge],
@@ -572,6 +633,13 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
       canUndo: true,
       canRedo: false,
     }));
+
+    // If this node is a child of an Iterator, recalculate the bounding box
+    // so the Iterator auto-expands when child node size changes
+    const node = nodes.find((n) => n.id === nodeId);
+    if (node?.parentNode) {
+      get().updateBoundingBox(node.parentNode);
+    }
   },
 
   updateNodeData: (nodeId, dataUpdate) => {
@@ -621,6 +689,11 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
         ? { canUndo: true, canRedo: false }
         : {}),
     }));
+
+    // NOTE: We intentionally do NOT call updateBoundingBox on position changes.
+    // The iterator border should only expand when child nodes are added or their
+    // UI size changes (e.g. model switch), not when dragging children around.
+    // Children are clamped within the iterator bounds by useIteratorAdoption.
   },
 
   onEdgesChange: (changes) => {
@@ -708,6 +781,16 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
       // Keep empty map as fallback; nodes still load with persisted params.
     }
 
+    // Build a map of iteratorId → childNodeIds from parent relationships
+    const iteratorChildMap = new Map<string, string[]>();
+    for (const n of wf.graphDefinition.nodes) {
+      if (n.parentNodeId) {
+        const children = iteratorChildMap.get(n.parentNodeId) ?? [];
+        children.push(n.id);
+        iteratorChildMap.set(n.parentNodeId, children);
+      }
+    }
+
     const rfNodes: ReactFlowNode[] = wf.graphDefinition.nodes.map((n) => {
       // Restore modelInputSchema and label from saved params metadata
       const meta = (n.params as Record<string, unknown>).__meta as
@@ -718,9 +801,11 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
       const label = (meta?.label as string) || (def ? def.label : n.nodeType);
       // Strip __meta from the params passed to the node
       const { __meta: _, ...cleanParams } = n.params as Record<string, unknown>;
-      return {
+
+      const isIterator = n.nodeType === "control/iterator";
+      const rfNode: ReactFlowNode = {
         id: n.id,
-        type: "custom",
+        type: isIterator ? "control/iterator" : "custom",
         position: n.position,
         data: {
           nodeType: n.nodeType,
@@ -730,8 +815,19 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
           paramDefinitions: def?.params ?? [],
           inputDefinitions: def?.inputs ?? [],
           outputDefinitions: def?.outputs ?? [],
+          ...(isIterator
+            ? { childNodeIds: iteratorChildMap.get(n.id) ?? [] }
+            : {}),
         },
       };
+
+      // Restore parent-child relationship for sub-nodes
+      if (n.parentNodeId) {
+        rfNode.parentNode = n.parentNodeId;
+        rfNode.extent = "parent" as const;
+      }
+
+      return rfNode;
     });
     const rfEdges: ReactFlowEdge[] = wf.graphDefinition.edges.map((e) => ({
       id: e.id,
@@ -740,6 +836,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
       sourceHandle: e.sourceOutputKey,
       targetHandle: e.targetInputKey,
       type: "custom",
+      ...(e.isInternal ? { data: { isInternal: true } } : {}),
     }));
     set({
       workflowId: wf.id,
@@ -748,6 +845,11 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
       edges: rfEdges,
       isDirty: false,
     });
+
+    // Recalculate bounding boxes for all iterator nodes
+    for (const iteratorId of iteratorChildMap.keys()) {
+      get().updateBoundingBox(iteratorId);
+    }
 
     // Restore previous execution results for all nodes
     try {
@@ -795,6 +897,313 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
         set({ workflowName: result.finalName });
       }
     }
+  },
+
+  adoptNode: (iteratorId, childId) => {
+    const { nodes, edges } = get();
+
+    const iteratorNode = nodes.find((n) => n.id === iteratorId);
+    const childNode = nodes.find((n) => n.id === childId);
+    if (!iteratorNode || !childNode) return;
+
+    // Prevent nesting: reject if the child is itself an Iterator node
+    if (childNode.data.nodeType === "control/iterator") return;
+
+    // Reject if child already has a parent
+    if (childNode.parentNode) return;
+
+    pushUndo({ nodes, edges });
+
+    // Convert child position to relative coordinates (relative to iterator)
+    const relativePosition = {
+      x: childNode.position.x - iteratorNode.position.x,
+      y: childNode.position.y - iteratorNode.position.y,
+    };
+
+    // Update childNodeIds in iterator data
+    const currentChildIds: string[] =
+      iteratorNode.data.childNodeIds ?? [];
+    const updatedChildIds = currentChildIds.includes(childId)
+      ? currentChildIds
+      : [...currentChildIds, childId];
+
+    set((state) => ({
+      nodes: state.nodes.map((n) => {
+        if (n.id === childId) {
+          return {
+            ...n,
+            position: relativePosition,
+            parentNode: iteratorId,
+            extent: "parent" as const,
+            data: { ...n.data },
+          };
+        }
+        if (n.id === iteratorId) {
+          return {
+            ...n,
+            data: {
+              ...n.data,
+              childNodeIds: updatedChildIds,
+            },
+          };
+        }
+        return n;
+      }),
+      isDirty: true,
+      canUndo: true,
+      canRedo: false,
+    }));
+
+    // Recalculate bounding box after adopting the child
+    get().updateBoundingBox(iteratorId);
+  },
+
+  releaseNode: (iteratorId, childId) => {
+    const { nodes, edges } = get();
+
+    const iteratorNode = nodes.find((n) => n.id === iteratorId);
+    const childNode = nodes.find((n) => n.id === childId);
+    if (!iteratorNode || !childNode) return;
+
+    // Only release if the child actually belongs to this iterator
+    if (childNode.parentNode !== iteratorId) return;
+
+    pushUndo({ nodes, edges });
+
+    // Convert child position back to absolute coordinates
+    const absolutePosition = {
+      x: childNode.position.x + iteratorNode.position.x,
+      y: childNode.position.y + iteratorNode.position.y,
+    };
+
+    // Remove from childNodeIds in iterator data
+    const currentChildIds: string[] =
+      iteratorNode.data.childNodeIds ?? [];
+    const updatedChildIds = currentChildIds.filter(
+      (id: string) => id !== childId,
+    );
+
+    set((state) => ({
+      nodes: state.nodes.map((n) => {
+        if (n.id === childId) {
+          // Remove parentNode and extent by spreading without them
+          const { parentNode: _, extent: _e, ...rest } = n;
+          return {
+            ...rest,
+            position: absolutePosition,
+            data: { ...n.data },
+          };
+        }
+        if (n.id === iteratorId) {
+          return {
+            ...n,
+            data: {
+              ...n.data,
+              childNodeIds: updatedChildIds,
+            },
+          };
+        }
+        return n;
+      }),
+      isDirty: true,
+      canUndo: true,
+      canRedo: false,
+    }));
+
+    // Recalculate bounding box after releasing the child
+    get().updateBoundingBox(iteratorId);
+  },
+
+  updateBoundingBox: (iteratorId) => {
+    const { nodes } = get();
+    const iteratorNode = nodes.find((n) => n.id === iteratorId);
+    if (!iteratorNode) return;
+
+    const children = nodes.filter((n) => n.parentNode === iteratorId);
+    const currentParams = iteratorNode.data.params ?? {};
+    const currentW = (currentParams.__nodeWidth as number) ?? MIN_ITERATOR_WIDTH;
+    const currentH = (currentParams.__nodeHeight as number) ?? MIN_ITERATOR_HEIGHT;
+
+    // Only expand — never shrink. If children fit inside the current size, do nothing.
+    let requiredWidth = MIN_ITERATOR_WIDTH;
+    let requiredHeight = MIN_ITERATOR_HEIGHT;
+
+    if (children.length > 0) {
+      let maxRight = 0;
+      let maxBottom = 0;
+      for (const child of children) {
+        const cw = (child.data?.params?.__nodeWidth as number) ?? 300;
+        // Use DOM measurement for height when available (child nodes auto-size vertically)
+        let ch = (child.data?.params?.__nodeHeight as number) ?? 80;
+        try {
+          const el = document.querySelector(`[data-id="${child.id}"]`) as HTMLElement | null;
+          if (el) ch = Math.max(ch, el.offsetHeight);
+        } catch { /* ignore DOM errors */ }
+        const right = child.position.x + cw + CHILD_PADDING;
+        const bottom = child.position.y + ch + CHILD_PADDING;
+        if (right > maxRight) maxRight = right;
+        if (bottom > maxBottom) maxBottom = bottom;
+      }
+      requiredWidth = Math.max(MIN_ITERATOR_WIDTH, maxRight + PORT_STRIP_WIDTH);
+      requiredHeight = Math.max(MIN_ITERATOR_HEIGHT, maxBottom);
+    }
+
+    // Only grow, never shrink
+    const newWidth = Math.max(currentW, requiredWidth);
+    const newHeight = Math.max(currentH, requiredHeight);
+
+    if (currentW === newWidth && currentH === newHeight) {
+      return; // no change needed
+    }
+
+    set((state) => ({
+      nodes: state.nodes.map((n) => {
+        if (n.id === iteratorId) {
+          return {
+            ...n,
+            data: {
+              ...n.data,
+              params: {
+                ...n.data.params,
+                __nodeWidth: newWidth,
+                __nodeHeight: newHeight,
+              },
+            },
+          };
+        }
+        return n;
+      }),
+      isDirty: true,
+    }));
+  },
+
+  exposeParam: (iteratorId, param) => {
+    const { nodes, edges } = get();
+    const iteratorNode = nodes.find((n) => n.id === iteratorId);
+    if (!iteratorNode) return;
+
+    pushUndo({ nodes, edges });
+
+    const params = iteratorNode.data.params ?? {};
+    const paramListKey = param.direction === "input" ? "exposedInputs" : "exposedOutputs";
+    const defKey = param.direction === "input" ? "inputDefinitions" : "outputDefinitions";
+
+    // Parse existing exposed params
+    const currentList: ExposedParam[] = (() => {
+      try {
+        const raw = params[paramListKey];
+        return typeof raw === "string" ? JSON.parse(raw) : [];
+      } catch {
+        return [];
+      }
+    })();
+
+    // Don't add duplicates
+    if (currentList.some((p: ExposedParam) => p.namespacedKey === param.namespacedKey)) return;
+
+    const updatedList = [...currentList, param];
+
+    // Build new port definition
+    const newPort: PortDefinition = {
+      key: param.namespacedKey,
+      label: param.namespacedKey,
+      dataType: param.dataType,
+      required: false,
+    };
+
+    const currentDefs: PortDefinition[] = iteratorNode.data[defKey] ?? [];
+    const updatedDefs = [...currentDefs, newPort];
+
+    set((state) => ({
+      nodes: state.nodes.map((n) => {
+        if (n.id === iteratorId) {
+          return {
+            ...n,
+            data: {
+              ...n.data,
+              params: {
+                ...n.data.params,
+                [paramListKey]: JSON.stringify(updatedList),
+              },
+              [defKey]: updatedDefs,
+            },
+          };
+        }
+        return n;
+      }),
+      isDirty: true,
+      canUndo: true,
+      canRedo: false,
+    }));
+  },
+
+  unexposeParam: (iteratorId, namespacedKey, direction) => {
+    const { nodes, edges } = get();
+    const iteratorNode = nodes.find((n) => n.id === iteratorId);
+    if (!iteratorNode) return;
+
+    pushUndo({ nodes, edges });
+
+    const params = iteratorNode.data.params ?? {};
+    const paramListKey = direction === "input" ? "exposedInputs" : "exposedOutputs";
+    const defKey = direction === "input" ? "inputDefinitions" : "outputDefinitions";
+
+    // Parse existing exposed params and remove the matching entry
+    const currentList: ExposedParam[] = (() => {
+      try {
+        const raw = params[paramListKey];
+        return typeof raw === "string" ? JSON.parse(raw) : [];
+      } catch {
+        return [];
+      }
+    })();
+
+    const updatedList = currentList.filter(
+      (p: ExposedParam) => p.namespacedKey !== namespacedKey,
+    );
+
+    // Remove the corresponding port definition
+    const currentDefs: PortDefinition[] = iteratorNode.data[defKey] ?? [];
+    const updatedDefs = currentDefs.filter(
+      (d: PortDefinition) => d.key !== namespacedKey,
+    );
+
+    // Remove any connected edges to/from the handle
+    const handleId = direction === "input"
+      ? `input-${namespacedKey}`
+      : `output-${namespacedKey}`;
+
+    const edgesToRemove = edges.filter((e) =>
+      direction === "input"
+        ? e.target === iteratorId && e.targetHandle === handleId
+        : e.source === iteratorId && e.sourceHandle === handleId,
+    );
+    const edgeIdsToRemove = new Set(edgesToRemove.map((e) => e.id));
+
+    set((state) => ({
+      nodes: state.nodes.map((n) => {
+        if (n.id === iteratorId) {
+          return {
+            ...n,
+            data: {
+              ...n.data,
+              params: {
+                ...n.data.params,
+                [paramListKey]: JSON.stringify(updatedList),
+              },
+              [defKey]: updatedDefs,
+            },
+          };
+        }
+        return n;
+      }),
+      edges: edgeIdsToRemove.size > 0
+        ? state.edges.filter((e) => !edgeIdsToRemove.has(e.id))
+        : state.edges,
+      isDirty: true,
+      canUndo: true,
+      canRedo: false,
+    }));
   },
 
   reset: () => {

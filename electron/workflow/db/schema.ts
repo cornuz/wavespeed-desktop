@@ -197,6 +197,31 @@ export function runMigrations(db: SqlJsDatabase): void {
         db.run("INSERT INTO schema_version (version) VALUES (2)");
       },
     },
+    // Migration 3: Add Iterator Node support
+    {
+      version: 3,
+      apply: (db: SqlJsDatabase) => {
+        console.log(
+          "[Schema] Applying migration 3: Add Iterator Node support",
+        );
+
+        db.run(
+          "ALTER TABLE nodes ADD COLUMN parent_node_id TEXT REFERENCES nodes(id) ON DELETE SET NULL",
+        );
+        db.run(
+          "ALTER TABLE edges ADD COLUMN is_internal INTEGER NOT NULL DEFAULT 0 CHECK (is_internal IN (0, 1))",
+        );
+
+        db.run(
+          "CREATE INDEX IF NOT EXISTS idx_nodes_parent ON nodes(parent_node_id)",
+        );
+        db.run(
+          "CREATE INDEX IF NOT EXISTS idx_edges_internal ON edges(is_internal)",
+        );
+
+        db.run("INSERT INTO schema_version (version) VALUES (3)");
+      },
+    },
   ];
 
   for (const m of migrations) {

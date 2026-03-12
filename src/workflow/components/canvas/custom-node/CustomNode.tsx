@@ -414,6 +414,13 @@ function CustomNodeComponent({
   const removeNode = useWorkflowStore((s) => s.removeNode);
   const { continueFrom } = useExecutionStore();
 
+  // Detect if this node is inside an Iterator container
+  const parentIteratorId = useMemo(() => {
+    const thisNode = allNodes.find((n) => n.id === id);
+    return (thisNode as { parentNode?: string } | undefined)?.parentNode ?? null;
+  }, [allNodes, id]);
+  const isInsideIterator = !!parentIteratorId;
+
   const ensureWorkflowId = async () => {
     let wfId = workflowId;
     if (!wfId || isDirty) {
@@ -705,6 +712,7 @@ function CustomNodeComponent({
           ${!running && !selected && status === "unconfirmed" ? "border-orange-500/70" : ""}
           ${!running && !selected && status === "error" ? "border-red-500/70" : ""}
           ${!running && !selected && status === "idle" ? (hovered ? "border-[hsl(var(--border))] shadow-lg" : "border-[hsl(var(--border))] shadow-md") : ""}
+          ${isInsideIterator && !running && !selected && status === "idle" ? "ring-1 ring-cyan-500/20" : ""}
         `}
         style={{ width: savedWidth, minHeight: savedHeight, fontSize: 13 }}
       >
@@ -938,7 +946,9 @@ function CustomNodeComponent({
           <TooltipTrigger asChild>
             <button
               type="button"
-              className="nodrag nopan absolute top-1/2 -translate-y-1/2 -right-3 z-40 flex items-center justify-center w-6 h-6 rounded-full shadow-lg backdrop-blur-sm bg-blue-500 text-white hover:bg-blue-600 hover:scale-110 transition-all duration-150"
+              className={`nodrag nopan absolute top-1/2 -translate-y-1/2 -right-3 z-40 flex items-center justify-center w-6 h-6 rounded-full shadow-lg backdrop-blur-sm text-white hover:scale-110 transition-all duration-150 ${
+                isInsideIterator ? "bg-cyan-500 hover:bg-cyan-600" : "bg-blue-500 hover:bg-blue-600"
+              }`}
               onClick={(e) => {
                 e.stopPropagation();
                 const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();

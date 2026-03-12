@@ -4,6 +4,7 @@ export type {
   GraphDefinition,
   WorkflowNode,
   WorkflowEdge,
+  ExposedParam,
 } from "./workflow";
 
 export type {

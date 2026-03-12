@@ -1057,6 +1057,17 @@ export function WorkflowPage() {
     prevWasRunning.current = wasRunning;
   }, [wasRunning, isRunning, nodeStatuses]);
 
+  // Listen for workflow:toast events dispatched from the store (e.g. cycle detection)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { type, msg } = (e as CustomEvent).detail;
+      setExecToast({ type, msg });
+      setTimeout(() => setExecToast(null), 4000);
+    };
+    window.addEventListener("workflow:toast", handler);
+    return () => window.removeEventListener("workflow:toast", handler);
+  }, []);
+
   // Model loading state
   const [modelSyncStatus, setModelSyncStatus] =
     useState<ModelSyncStatus>("idle");

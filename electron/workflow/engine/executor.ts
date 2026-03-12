@@ -63,8 +63,14 @@ export class ExecutionEngine {
 
   /** Run all nodes in topological order. */
   async runAll(workflowId: string): Promise<void> {
-    const nodes = getNodesByWorkflowId(workflowId);
-    const edges = getEdgesByWorkflowId(workflowId);
+    const allNodes = getNodesByWorkflowId(workflowId);
+    const allEdges = getEdgesByWorkflowId(workflowId);
+
+    // Exclude child nodes (they are executed internally by their parent Iterator handler)
+    const nodes = allNodes.filter((n) => !n.parentNodeId);
+    // Exclude internal edges (edges between sub-nodes inside an Iterator)
+    const edges = allEdges.filter((e) => !e.isInternal);
+
     const nodeIds = nodes.map((n) => n.id);
     const simpleEdges = edges.map((e) => ({
       sourceNodeId: e.sourceNodeId,
@@ -119,14 +125,19 @@ export class ExecutionEngine {
 
   /** Run a single node, resolving upstream inputs. Always skips cache (user explicitly re-runs). */
   async runNode(workflowId: string, nodeId: string): Promise<void> {
-    const nodes = getNodesByWorkflowId(workflowId);
-    const edges = getEdgesByWorkflowId(workflowId);
+    const allNodes = getNodesByWorkflowId(workflowId);
+    const allEdges = getEdgesByWorkflowId(workflowId);
 
-    if (nodes.length === 0) {
+    if (allNodes.length === 0) {
       throw new Error(
         `No nodes found in workflow ${workflowId}. Please ensure the workflow is saved before running nodes.`,
       );
     }
+
+    // Include all nodes in the map (needed for resolveInputs to find upstream sources)
+    // but filter out internal edges so they don't interfere with outer resolution
+    const nodes = allNodes;
+    const edges = allEdges.filter((e) => !e.isInternal);
 
     const nodeMap = new Map(nodes.map((n) => [n.id, n]));
     const node = nodeMap.get(nodeId);
@@ -146,15 +157,21 @@ export class ExecutionEngine {
 
   /** Continue from a node — execute it and all downstream nodes. */
   async continueFrom(workflowId: string, nodeId: string): Promise<void> {
-    const nodes = getNodesByWorkflowId(workflowId);
-    const edges = getEdgesByWorkflowId(workflowId);
+    const allNodes = getNodesByWorkflowId(workflowId);
+    const allEdges = getEdgesByWorkflowId(workflowId);
+
+    // Exclude child nodes and internal edges from outer workflow execution
+    const nodes = allNodes.filter((n) => !n.parentNodeId);
+    const edges = allEdges.filter((e) => !e.isInternal);
+
     const nodeIds = nodes.map((n) => n.id);
     const simpleEdges = edges.map((e) => ({
       sourceNodeId: e.sourceNodeId,
       targetNodeId: e.targetNodeId,
     }));
     const downstream = downstreamNodes(nodeId, nodeIds, simpleEdges);
-    const nodeMap = new Map(nodes.map((n) => [n.id, n]));
+    // Use all nodes in the map so resolveInputs can find upstream sources
+    const nodeMap = new Map(allNodes.map((n) => [n.id, n]));
 
     const levels = topologicalLevels(nodeIds, simpleEdges);
     let stopped = false;
@@ -175,9 +192,10 @@ export class ExecutionEngine {
       throw new Error(`Circuit breaker tripped for node ${nodeId}`);
     }
 
-    const nodes = getNodesByWorkflowId(workflowId);
-    const edges = getEdgesByWorkflowId(workflowId);
-    const nodeMap = new Map(nodes.map((n) => [n.id, n]));
+    const allNodes = getNodesByWorkflowId(workflowId);
+    const allEdges = getEdgesByWorkflowId(workflowId);
+    const edges = allEdges.filter((e) => !e.isInternal);
+    const nodeMap = new Map(allNodes.map((n) => [n.id, n]));
     const node = nodeMap.get(nodeId);
     if (!node) throw new Error(`Node ${nodeId} not found`);
 
@@ -210,8 +228,13 @@ export class ExecutionEngine {
 
   /** Mark all downstream nodes as needing re-execution. */
   markDownstreamStale(workflowId: string, nodeId: string): string[] {
-    const nodes = getNodesByWorkflowId(workflowId);
-    const edges = getEdgesByWorkflowId(workflowId);
+    const allNodes = getNodesByWorkflowId(workflowId);
+    const allEdges = getEdgesByWorkflowId(workflowId);
+
+    // Exclude child nodes and internal edges from outer workflow graph
+    const nodes = allNodes.filter((n) => !n.parentNodeId);
+    const edges = allEdges.filter((e) => !e.isInternal);
+
     const nodeIds = nodes.map((n) => n.id);
     const simpleEdges = edges.map((e) => ({
       sourceNodeId: e.sourceNodeId,

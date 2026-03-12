@@ -7,6 +7,7 @@ import { previewDisplayDef, PreviewDisplayHandler } from "./output/preview";
 import { registerFreeToolNodes } from "./free-tool/register";
 import { concatDef, ConcatHandler } from "./processing/concat";
 import { selectDef, SelectHandler } from "./processing/select";
+import { iteratorDef, IteratorNodeHandler } from "./control/iterator";
 
 export function registerAllNodes(): void {
   nodeRegistry.register(mediaUploadDef, new MediaUploadHandler());
@@ -17,6 +18,7 @@ export function registerAllNodes(): void {
   registerFreeToolNodes();
   nodeRegistry.register(concatDef, new ConcatHandler());
   nodeRegistry.register(selectDef, new SelectHandler());
+  nodeRegistry.register(iteratorDef, new IteratorNodeHandler(nodeRegistry));
   console.log(
     `[Registry] Registered ${nodeRegistry.getAll().length} node types`,
   );

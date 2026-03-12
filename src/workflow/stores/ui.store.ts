@@ -37,6 +37,9 @@ export interface UIState {
   getViewportCenter: () => { x: number; y: number };
   /** Register the getter (called once from WorkflowCanvas onInit) */
   setGetViewportCenter: (fn: () => { x: number; y: number }) => void;
+  /** When set, the next node created from the palette will be adopted by this Iterator */
+  pendingIteratorParentId: string | null;
+  setPendingIteratorParentId: (id: string | null) => void;
 
   selectNode: (nodeId: string | null) => void;
   selectNodes: (nodeIds: string[]) => void;
@@ -84,6 +87,8 @@ export const useUIStore = create<UIState>((set, get) => ({
   interactionMode: "hand",
   getViewportCenter: () => ({ x: 200, y: 150 }),
   setGetViewportCenter: (fn) => set({ getViewportCenter: fn }),
+  pendingIteratorParentId: null,
+  setPendingIteratorParentId: (id) => set({ pendingIteratorParentId: id }),
 
   selectNode: (nodeId) =>
     set({
@@ -117,6 +122,8 @@ export const useUIStore = create<UIState>((set, get) => ({
     set((s) => ({
       showNodePalette: !s.showNodePalette,
       showWorkflowPanel: false,
+      // Clear pending iterator parent when closing the palette
+      ...(!s.showNodePalette ? {} : { pendingIteratorParentId: null }),
     })),
   toggleWorkflowPanel: () =>
     set((s) => ({
