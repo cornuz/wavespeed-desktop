@@ -34,7 +34,7 @@ import {
 } from "./ipc/ipc-client";
 import { useModelsStore } from "@/stores/modelsStore";
 import { useApiKeyStore } from "@/stores/apiKeyStore";
-import { apiClient } from "@/api/client";
+import { workflowClient } from "@/api/client";
 import { useTemplateStore } from "@/stores/templateStore";
 import {
   Tooltip,
@@ -237,6 +237,7 @@ export function WorkflowPage() {
   const [runCount, setRunCount] = useState(1);
   const [isBatchRunning, setIsBatchRunning] = useState(false);
   const runCancelRef = useRef(false);
+
   const normalizedPreviewSrc = useMemo(() => {
     if (!previewSrc) return "";
     if (/^local-asset:\/\//i.test(previewSrc)) {
@@ -1225,7 +1226,7 @@ export function WorkflowPage() {
         ...settingsForApi
       } = settings;
       try {
-        const optimized = await apiClient.optimizePrompt({
+        const optimized = await workflowClient.optimizePrompt({
           ...settingsForApi,
           text: sourceText,
         });

@@ -20,7 +20,7 @@ import { Handle, Position, useReactFlow, type NodeProps } from "reactflow";
 import { useExecutionStore } from "../../../stores/execution.store";
 import { useWorkflowStore } from "../../../stores/workflow.store";
 import { useUIStore } from "../../../stores/ui.store";
-import { apiClient } from "@/api/client";
+import { workflowClient } from "@/api/client";
 import { useModelsStore } from "@/stores/modelsStore";
 import { getFormFieldsFromModel } from "@/lib/schemaToForm";
 import { formFieldsToModelParamSchema } from "../../../lib/model-converter";
@@ -552,7 +552,7 @@ function CustomNodeComponent({
     } = settings;
 
     try {
-      const optimized = await apiClient.optimizePrompt({
+      const optimized = await workflowClient.optimizePrompt({
         ...settingsForApi,
         text: sourceText,
       });

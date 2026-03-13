@@ -38,6 +38,17 @@ export function BatchControls({
   const { getActiveTab, setBatchConfig } = usePlaygroundStore();
   const activeTab = getActiveTab();
 
+  // Delay abort button by 500ms to prevent accidental clicks
+  const [abortReady, setAbortReady] = useState(false);
+  useEffect(() => {
+    if (!isRunning) {
+      setAbortReady(false);
+      return;
+    }
+    const timer = setTimeout(() => setAbortReady(true), 500);
+    return () => clearTimeout(timer);
+  }, [isRunning]);
+
   if (!activeTab) return null;
 
   const { batchConfig } = activeTab;
@@ -54,17 +65,6 @@ export function BatchControls({
   const handleRandomizeSeedChange = (checked: boolean) => {
     setBatchConfig({ randomizeSeed: checked });
   };
-
-  // Delay abort button by 500ms to prevent accidental clicks
-  const [abortReady, setAbortReady] = useState(false);
-  useEffect(() => {
-    if (!isRunning) {
-      setAbortReady(false);
-      return;
-    }
-    const timer = setTimeout(() => setAbortReady(true), 500);
-    return () => clearTimeout(timer);
-  }, [isRunning]);
 
   const displayLabel =
     enabled && repeatCount > 1 ? `${runLabel} (${repeatCount})` : runLabel;
