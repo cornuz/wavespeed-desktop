@@ -1,4 +1,4 @@
-{
+﻿{
   "common": {
     "loading": "Carregando...",
     "save": "Salvar",
@@ -38,7 +38,10 @@
     "add": "Add",
     "saving": "Saving...",
     "showMore": "Mostrar mais",
-    "showLess": "Mostrar menos"
+    "showLess": "Mostrar menos",
+    "show": "Mostrar",
+    "hide": "Ocultar",
+    "customize": "Personalizar"
   },
   "nav": {
     "home": "Início",
@@ -131,6 +134,7 @@
     "selectModelPrompt": "Selecione um modelo para configurar parâmetros",
     "run": "Executar",
     "running": "Executando...",
+    "abort": "Cancelar",
     "stop": "Parar",
     "parameters": "Parâmetros",
     "output": "Saída",
@@ -268,7 +272,28 @@
       "title": "Histórico",
       "openInNewTab": "Abrir em nova aba",
       "useSettings": "Usar estas configurações"
-    }
+    },
+    "rightPanel": {
+      "explore": "Explorar",
+      "allModels": "Todos os modelos",
+      "models": "Modelos",
+      "featuredModels": "Modelos em destaque",
+      "resultsHub": "Hub de resultados",
+      "result": "Resultado",
+      "templates": "Modelos",
+      "assets": "Meus recursos"
+    },
+    "explore": {
+      "searchPlaceholder": "Pesquisar modelos, LoRAs e estilos...",
+      "all": "Todos",
+      "allModels": "Todos os modelos",
+      "favorites": "Favoritos",
+      "noFavorites": "Nenhum favorito ainda — clique na estrela para salvar um modelo",
+      "searchResults": "{{count}} resultados",
+      "filterByType": "Filtrar por tipo"
+    },
+    "recentGenerations": "Gerações recentes",
+    "viewAll": "Ver tudo"
   },
   "history": {
     "title": "Histórico",
@@ -620,6 +645,8 @@
       "empty": "Vazio",
       "calculating": "Calculando...",
       "clear": "Limpar",
+      "clearConfirmDesc": "Isso excluirá {{size}} de dados em cache. Os modelos baixados precisarão ser baixados novamente. Esta ação não pode ser desfeita.",
+      "clearConfirmEmpty": "Isso limpará todos os dados em cache. Esta ação não pode ser desfeita.",
       "cleared": "Cache limpo",
       "clearedDesc": "O cache de modelos de IA foi limpo. Os modelos serão baixados novamente quando necessário.",
       "itemDeleted": "Item de cache excluído",
@@ -1080,6 +1107,9 @@
     "exportFailed": "Falha ao exportar",
     "estimated": "Custo estimado",
     "fitView": "Ajustar vista",
+    "toggleGrid": "Alternar grelha",
+    "zoomIn": "Ampliar",
+    "zoomOut": "Reduzir",
     "autoLayout": "Organizar automaticamente",
     "freeToolModelHint": "A primeira execução fará o download automático do modelo de IA, aguarde",
     "more": "Mais",

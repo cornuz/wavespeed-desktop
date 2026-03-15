@@ -47,19 +47,59 @@ jobs:
           echo "═══════════════════════════════════════════════"
 
           # ─── Check 1: Override files (mobile has its own version) ───
+          # Only warn when the diff touches shared sections that mobile also has.
+          # Desktop-only sections (Assets, Downloads, Debug, SD cache, Electron
+          # updates, electronAPI calls) are ignored.
           echo ""
           echo "▶ Check 1: Override file sync"
           OVERRIDE_MAP=(
             "src/pages/SettingsPage.tsx|mobile/src/pages/SettingsPage.tsx"
           )
+          # Patterns that indicate desktop-only code (changes here don't need mobile sync)
+          DESKTOP_ONLY_PATTERNS="useAssetsStore|useSettingsStore|electronAPI|sdModels|sdAuxiliary|sdBinary|sd-model|sd-auxiliary|sd-binary|downloadTimeout|selectDirectory|autoSaveAssets|assetsDirectory|logPath|openLogDirectory|copyLogPath|settings\.downloads|settings\.assets|settings\.debug"
+
           for entry in "${OVERRIDE_MAP[@]}"; do
             DESKTOP_FILE="${entry%%|*}"
             MOBILE_FILE="${entry##*|}"
             if echo "$CHANGED_FILES" | grep -q "^${DESKTOP_FILE}$"; then
-              WARNINGS=$((WARNINGS + 1))
-              MSG="**Override Sync**: \`${DESKTOP_FILE}\` was modified but mobile uses its own version at \`${MOBILE_FILE}\`. Changes will NOT apply to mobile — please review and manually sync."
-              ISSUES="${ISSUES}\n- ${MSG}"
-              echo "::warning file=${DESKTOP_FILE}::⚠️ ${MSG}"
+              # Get only the added/removed lines (ignore context) in the desktop file
+              DIFF_CONTENT=$(git diff "$PREV_TAG" "$CURRENT_TAG" -- "$DESKTOP_FILE" | grep '^[+-]' | grep -v '^[+-][+-][+-]' || true)
+              # Filter out lines matching desktop-only patterns
+              SHARED_DIFF=$(echo "$DIFF_CONTENT" | grep -vE "$DESKTOP_ONLY_PATTERNS" || true)
+              # Filter out lines that are only whitespace / blank additions/removals
+              SHARED_DIFF=$(echo "$SHARED_DIFF" | grep -vE '^\s*[+-]\s*$' || true)
+
+              if [ -z "$SHARED_DIFF" ]; then
+                echo "  ℹ️  ${DESKTOP_FILE} changed but only in desktop-only sections — no mobile sync needed."
+              else
+                # Extra check: verify added lines aren't already present in mobile file.
+                # If mobile already contains all the new code, it's already synced.
+                UNSYNCED=""
+                while IFS= read -r line; do
+                  [ -z "$line" ] && continue
+                  # Only check added lines (lines starting with +)
+                  if [[ "$line" == +* ]]; then
+                    # Strip the leading + and trim whitespace for comparison
+                    CONTENT=$(echo "${line:1}" | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')
+                    [ -z "$CONTENT" ] && continue
+                    # Escape special regex chars for grep
+                    ESCAPED=$(printf '%s' "$CONTENT" | sed 's/[.[\*^$()+?{|\\]/\\&/g')
+                    if ! grep -qF "$CONTENT" "$MOBILE_FILE" 2>/dev/null; then
+                      UNSYNCED="${UNSYNCED}\n  ${line}"
+                    fi
+                  fi
+                done <<< "$SHARED_DIFF"
+
+                if [ -n "$UNSYNCED" ]; then
+                  WARNINGS=$((WARNINGS + 1))
+                  MSG="**Override Sync**: \`${DESKTOP_FILE}\` has shared-section changes not yet present in \`${MOBILE_FILE}\`. Please review and sync."
+                  ISSUES="${ISSUES}\n- ${MSG}"
+                  echo "::warning file=${DESKTOP_FILE}::⚠️ ${MSG}"
+                  printf "  Unsynced lines:%b\n" "$UNSYNCED"
+                else
+                  echo "  ℹ️  ${DESKTOP_FILE} changed but mobile already has the same code — no sync needed."
+                fi
+              fi
             fi
           done
 

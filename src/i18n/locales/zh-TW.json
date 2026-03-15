@@ -1,4 +1,4 @@
-{
+﻿{
   "common": {
     "loading": "載入中...",
     "save": "儲存",
@@ -38,7 +38,10 @@
     "add": "Add",
     "saving": "Saving...",
     "showMore": "顯示更多",
-    "showLess": "收起"
+    "showLess": "收起",
+    "show": "顯示",
+    "hide": "隱藏",
+    "customize": "自訂"
   },
   "nav": {
     "home": "首頁",
@@ -131,6 +134,7 @@
     "selectModelPrompt": "選擇一個模型以設定參數",
     "run": "執行",
     "running": "執行中...",
+    "abort": "中止",
     "stop": "停止",
     "parameters": "參數",
     "output": "輸出",
@@ -268,7 +272,28 @@
       "title": "歷史記錄",
       "openInNewTab": "在新分頁開啟",
       "useSettings": "使用此設定"
-    }
+    },
+    "rightPanel": {
+      "explore": "探索",
+      "allModels": "所有模型",
+      "models": "模型",
+      "featuredModels": "精選模型",
+      "resultsHub": "結果中心",
+      "result": "結果",
+      "templates": "範本",
+      "assets": "我的資產"
+    },
+    "explore": {
+      "searchPlaceholder": "搜尋模型、LoRA 與風格...",
+      "all": "全部",
+      "allModels": "所有模型",
+      "favorites": "收藏",
+      "noFavorites": "尚無收藏 — 點擊星標以收藏模型",
+      "searchResults": "{{count}} 個結果",
+      "filterByType": "依類型篩選"
+    },
+    "recentGenerations": "最近生成",
+    "viewAll": "查看全部"
   },
   "history": {
     "title": "歷史紀錄",
@@ -622,6 +647,8 @@
       "empty": "空",
       "calculating": "计算中...",
       "clear": "清除",
+      "clearConfirmDesc": "這將刪除 {{size}} 的快取資料。已下載的模型需要重新下載。此操作無法復原。",
+      "clearConfirmEmpty": "這將清除所有快取資料。此操作無法復原。",
       "cleared": "缓存已清除",
       "clearedDesc": "AI模型缓存已清除。需要时将重新下载模型。",
       "itemDeleted": "快取項目已刪除",
@@ -1069,6 +1096,9 @@
     "runNode": "執行節點",
     "modelSelection": "模型選擇",
     "fitView": "適配視圖",
+    "toggleGrid": "切換網格",
+    "zoomIn": "放大",
+    "zoomOut": "縮小",
     "autoLayout": "整理佈局",
     "freeToolModelHint": "首次運行時將自動下載 AI 模型，請耐心等待",
     "more": "更多",

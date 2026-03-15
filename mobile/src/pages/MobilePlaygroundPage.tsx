@@ -7,6 +7,7 @@ import { useApiKeyStore } from "@/stores/apiKeyStore";
 import { useTemplateStore } from "@/stores/templateStore";
 import { usePredictionInputsStore } from "@mobile/stores/predictionInputsStore";
 import { apiClient } from "@/api/client";
+import { getDefaultValues } from "@/lib/schemaToForm";
 import { DynamicForm } from "@/components/playground/DynamicForm";
 import { OutputDisplay } from "@/components/playground/OutputDisplay";
 import { BatchControls } from "@/components/playground/BatchControls";
@@ -270,10 +271,14 @@ export function MobilePlaygroundPage() {
 
   // When a tab is created with pendingFormValues and DynamicForm doesn't call onSetDefaults
   useEffect(() => {
-    if (!activeTab?.pendingFormValues) return;
+    const tab = getActiveTab();
+    if (!tab?.pendingFormValues) return;
     const pending = consumePendingFormValues();
     if (pending) {
-      setFormValues({ ...activeTab.formValues, ...pending });
+      const currentTab = getActiveTab();
+      const fields = currentTab?.formFields ?? [];
+      const defaults = fields.length > 0 ? getDefaultValues(fields) : {};
+      setFormValues({ ...defaults, ...currentTab?.formValues, ...pending });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTabId]);
@@ -546,16 +551,21 @@ export function MobilePlaygroundPage() {
               </div>
               <div className="flex-1 flex flex-col overflow-hidden">
                 <div className="flex-1 p-4 overflow-auto">
-                  {/* Show BatchOutputGrid for batch results (not when viewing history), OutputDisplay otherwise */}
-                  {activeTab.batchResults &&
-                  activeTab.batchResults.length > 0 &&
+                  {/* Show BatchOutputGrid when batch mode is enabled or has results (not when viewing history) */}
+                  {(activeTab.batchConfig?.enabled ||
+                    (activeTab.batchResults &&
+                      activeTab.batchResults.length > 0) ||
+                    activeTab.batchState?.isRunning) &&
                   historyIndex === null ? (
                     <BatchOutputGrid
                       results={activeTab.batchResults}
                       modelId={activeTab.selectedModel?.model_id}
                       onClear={clearBatchResults}
-                      isRunning={activeTab.isRunning}
-                      totalCount={activeTab.batchConfig?.repeatCount}
+                      isRunning={activeTab.batchState?.isRunning}
+                      totalCount={
+                        activeTab.batchState?.queue.length ||
+                        activeTab.batchConfig?.repeatCount
+                      }
                       queue={activeTab.batchState?.queue}
                     />
                   ) : (
@@ -565,7 +575,6 @@ export function MobilePlaygroundPage() {
                       error={activeTab.error}
                       isLoading={activeTab.isRunning}
                       modelId={activeTab.selectedModel?.model_id}
-                      hideGameButton
                     />
                   )}
                 </div>

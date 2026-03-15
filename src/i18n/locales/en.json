@@ -38,7 +38,10 @@
     "add": "Add",
     "saving": "Saving...",
     "showMore": "Show more",
-    "showLess": "Show less"
+    "showLess": "Show less",
+    "show": "Show",
+    "hide": "Hide",
+    "customize": "Customize"
   },
   "nav": {
     "home": "Home",
@@ -134,6 +137,7 @@
     "selectModelPrompt": "Select a model to configure parameters",
     "run": "Run",
     "running": "Running...",
+    "abort": "Abort",
     "stop": "Stop",
     "parameters": "Parameters",
     "output": "Output",
@@ -150,7 +154,7 @@
     "savedAs": "Saved as \"{{name}}\"",
     "resetForm": "Reset form",
     "webPage": "WebPage",
-    "docs": "Docs",
+    "docs": "Documentation",
     "noTabs": "No playground tabs open",
     "openSessions": "Open Sessions",
     "workspace": "Workspace",
@@ -291,7 +295,8 @@
       "allModels": "All Models",
       "favorites": "Favorites",
       "noFavorites": "No favorites yet — star a model to save it here",
-      "searchResults": "{{count}} results"
+      "searchResults": "{{count}} results",
+      "filterByType": "Filter by type"
     },
     "recentGenerations": "Recent Generations",
     "viewAll": "View All"
@@ -649,6 +654,8 @@
       "empty": "Empty",
       "calculating": "Calculating...",
       "clear": "Clear",
+      "clearConfirmDesc": "This will delete {{size}} of cached data. Downloaded models will need to be re-downloaded. This cannot be undone.",
+      "clearConfirmEmpty": "This will clear all cached data. This cannot be undone.",
       "cleared": "Cache cleared",
       "clearedDesc": "AI model cache has been cleared. Models will be re-downloaded when needed.",
       "itemDeleted": "Cache item deleted",
@@ -1133,6 +1140,7 @@
     "exportFailed": "Export failed",
     "estimated": "Est.",
     "fitView": "Fit View",
+    "toggleGrid": "Toggle Grid",
     "zoomIn": "Zoom in",
     "zoomOut": "Zoom out",
     "autoLayout": "Auto Layout",

@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { OutputDisplay } from "./OutputDisplay";
 import { BatchOutputGrid } from "./BatchOutputGrid";
 import type { PredictionResult } from "@/types/prediction";
@@ -11,6 +12,7 @@ interface ResultPanelProps {
   modelId?: string;
   // Batch
   batchResults: BatchResult[];
+  batchEnabled?: boolean;
   batchIsRunning?: boolean;
   batchTotalCount?: number;
   batchQueue?: BatchQueueItem[];
@@ -21,6 +23,8 @@ interface ResultPanelProps {
   historyIndex: number | null;
   historyLength?: number;
   onNavigateHistory?: (direction: "prev" | "next") => void;
+  /** Content to show when idle/loading (replaces game) */
+  idleFallback?: ReactNode;
 }
 
 export function ResultPanel({
@@ -30,6 +34,7 @@ export function ResultPanel({
   isLoading,
   modelId,
   batchResults,
+  batchEnabled,
   batchIsRunning,
   batchTotalCount,
   batchQueue,
@@ -37,9 +42,12 @@ export function ResultPanel({
   historyIndex,
   historyLength,
   onNavigateHistory,
+  idleFallback,
 }: ResultPanelProps) {
-  // Only show batch grid when there are actual results
-  const showBatchGrid = batchResults.length > 0 && historyIndex === null;
+  // Show batch grid whenever batch mode is enabled (even before running)
+  const showBatchGrid =
+    (batchEnabled || batchResults.length > 0 || batchIsRunning) &&
+    historyIndex === null;
 
   return (
     <div className="flex-1 min-w-0 overflow-auto p-5 md:p-6 animate-in fade-in duration-200 fill-mode-both">
@@ -61,6 +69,7 @@ export function ResultPanel({
           modelId={modelId}
           historyLength={historyLength}
           onNavigateHistory={onNavigateHistory}
+          idleFallback={idleFallback}
         />
       )}
     </div>

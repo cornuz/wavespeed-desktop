@@ -1218,7 +1218,6 @@ export function MobileHistoryPage() {
                     error={null}
                     isLoading={false}
                     modelId={selectedItem.model}
-                    hideGameButton
                   />
                 </div>
               )}

@@ -1,4 +1,4 @@
-{
+﻿{
   "common": {
     "loading": "Chargement...",
     "save": "Enregistrer",
@@ -38,7 +38,10 @@
     "add": "Add",
     "saving": "Saving...",
     "showMore": "Afficher plus",
-    "showLess": "Afficher moins"
+    "showLess": "Afficher moins",
+    "show": "Afficher",
+    "hide": "Masquer",
+    "customize": "Personnaliser"
   },
   "nav": {
     "home": "Accueil",
@@ -131,6 +134,7 @@
     "selectModelPrompt": "Sélectionnez un modèle pour configurer les paramètres",
     "run": "Exécuter",
     "running": "Exécution...",
+    "abort": "Annuler",
     "stop": "Arrêter",
     "parameters": "Paramètres",
     "output": "Sortie",
@@ -268,7 +272,28 @@
       "title": "Historique",
       "openInNewTab": "Ouvrir dans un nouvel onglet",
       "useSettings": "Utiliser ces paramètres"
-    }
+    },
+    "rightPanel": {
+      "explore": "Explorer",
+      "allModels": "Tous les modèles",
+      "models": "Modèles",
+      "featuredModels": "Modèles en vedette",
+      "resultsHub": "Hub des résultats",
+      "result": "Résultat",
+      "templates": "Modèles",
+      "assets": "Mes ressources"
+    },
+    "explore": {
+      "searchPlaceholder": "Rechercher des modèles, LoRAs et styles...",
+      "all": "Tous",
+      "allModels": "Tous les modèles",
+      "favorites": "Favoris",
+      "noFavorites": "Pas encore de favoris — cliquez sur l'étoile pour enregistrer un modèle",
+      "searchResults": "{{count}} résultats",
+      "filterByType": "Filtrer par type"
+    },
+    "recentGenerations": "Générations récentes",
+    "viewAll": "Tout afficher"
   },
   "history": {
     "title": "Historique",
@@ -620,6 +645,8 @@
       "empty": "Vide",
       "calculating": "Calcul...",
       "clear": "Effacer",
+      "clearConfirmDesc": "Cela supprimera {{size}} de données en cache. Les modèles téléchargés devront être retéléchargés. Cette action est irréversible.",
+      "clearConfirmEmpty": "Cela supprimera toutes les données en cache. Cette action est irréversible.",
       "cleared": "Cache effacé",
       "clearedDesc": "Le cache des modèles IA a été effacé. Les modèles seront retéléchargés si nécessaire.",
       "itemDeleted": "Élément de cache supprimé",
@@ -1081,6 +1108,9 @@
     "exportFailed": "Échec de l'exportation",
     "estimated": "Coût estimé",
     "fitView": "Ajuster la vue",
+    "toggleGrid": "Afficher/masquer la grille",
+    "zoomIn": "Zoom avant",
+    "zoomOut": "Zoom arrière",
     "autoLayout": "Disposition automatique",
     "freeToolModelHint": "La première exécution téléchargera automatiquement le modèle IA, veuillez patienter",
     "more": "Plus",

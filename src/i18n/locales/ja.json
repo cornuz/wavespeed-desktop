@@ -1,4 +1,4 @@
-{
+﻿{
   "common": {
     "loading": "読み込み中...",
     "save": "保存",
@@ -38,7 +38,10 @@
     "add": "Add",
     "saving": "Saving...",
     "showMore": "もっと見る",
-    "showLess": "閉じる"
+    "showLess": "閉じる",
+    "show": "表示",
+    "hide": "非表示",
+    "customize": "カスタマイズ"
   },
   "nav": {
     "home": "ホーム",
@@ -131,6 +134,7 @@
     "selectModelPrompt": "パラメータを設定するにはモデルを選択してください",
     "run": "実行",
     "running": "実行中...",
+    "abort": "中止",
     "stop": "停止",
     "parameters": "パラメータ",
     "output": "出力",
@@ -268,7 +272,28 @@
       "title": "履歴",
       "openInNewTab": "新しいタブで開く",
       "useSettings": "この設定を使用"
-    }
+    },
+    "rightPanel": {
+      "explore": "探索",
+      "allModels": "すべてのモデル",
+      "models": "モデル",
+      "featuredModels": "おすすめモデル",
+      "resultsHub": "結果ハブ",
+      "result": "結果",
+      "templates": "テンプレート",
+      "assets": "マイアセット"
+    },
+    "explore": {
+      "searchPlaceholder": "モデル、LoRA、スタイルを検索...",
+      "all": "すべて",
+      "allModels": "すべてのモデル",
+      "favorites": "お気に入り",
+      "noFavorites": "お気に入りはまだありません — 星をクリックしてモデルを保存",
+      "searchResults": "{{count}} 件の結果",
+      "filterByType": "タイプで絞り込み"
+    },
+    "recentGenerations": "最近の生成",
+    "viewAll": "すべて表示"
   },
   "history": {
     "title": "履歴",
@@ -620,6 +645,8 @@
       "empty": "空",
       "calculating": "计算中...",
       "clear": "清除",
+      "clearConfirmDesc": "{{size}} のキャッシュデータが削除されます。ダウンロード済みのモデルは再ダウンロードが必要になります。この操作は取り消せません。",
+      "clearConfirmEmpty": "すべてのキャッシュデータが削除されます。この操作は取り消せません。",
       "cleared": "缓存已清除",
       "clearedDesc": "AI模型缓存已清除。需要时将重新下载模型。",
       "itemDeleted": "キャッシュ項目を削除しました",
@@ -1072,6 +1099,9 @@
     "runNode": "ノード実行",
     "modelSelection": "モデル選択",
     "fitView": "ビューに合わせる",
+    "toggleGrid": "グリッド切替",
+    "zoomIn": "ズームイン",
+    "zoomOut": "ズームアウト",
     "autoLayout": "自動整列",
     "freeToolModelHint": "初回実行時にAIモデルを自動ダウンロードします、しばらくお待ちください",
     "more": "その他",

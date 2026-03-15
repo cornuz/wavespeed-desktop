@@ -30,6 +30,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { toast } from "@/hooks/useToast";
 import {
   Eye,
@@ -92,6 +102,7 @@ export function SettingsPage() {
   const [cacheItems, setCacheItems] = useState<CacheItem[]>([]);
   const [showCacheDialog, setShowCacheDialog] = useState(false);
   const [isDeletingItem, setIsDeletingItem] = useState<string | null>(null);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   // Model download state
   const [isDownloadingModels, setIsDownloadingModels] = useState(false);
@@ -1180,7 +1191,7 @@ export function SettingsPage() {
               variant="destructive"
               size="sm"
               className="shrink-0"
-              onClick={handleClearCache}
+              onClick={() => setShowClearConfirm(true)}
               disabled={isClearingCache || cacheSize === 0}
             >
               {isClearingCache ? (
@@ -1348,7 +1359,7 @@ export function SettingsPage() {
               <Button
                 variant="destructive"
                 size="sm"
-                onClick={handleClearCache}
+                onClick={() => setShowClearConfirm(true)}
                 disabled={isClearingCache}
               >
                 {isClearingCache ? (
@@ -1362,6 +1373,32 @@ export function SettingsPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Clear Cache Confirmation */}
+      <AlertDialog open={showClearConfirm} onOpenChange={setShowClearConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("settings.cache.clear")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {(cacheSize ?? 0) > 0
+                ? t("settings.cache.clearConfirmDesc", {
+                    size: formatSize(cacheSize ?? 0),
+                  })
+                : t("settings.cache.clearConfirmEmpty")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={handleClearCache}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              {t("settings.cache.clear")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Updates Card */}
       <Card className="mt-6">

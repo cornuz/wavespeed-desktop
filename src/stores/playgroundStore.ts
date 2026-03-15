@@ -130,6 +130,9 @@ export async function hydratePlaygroundSession(): Promise<void> {
   }
 }
 
+// Module-level map for AbortControllers (not serializable, so kept outside store state)
+const abortControllers = new Map<string, AbortController>();
+
 interface PlaygroundTab {
   id: string;
   createdAt: number;
@@ -162,6 +165,8 @@ interface PlaygroundState {
   createTab: (
     model?: Model,
     initialFormValues?: Record<string, unknown>,
+    initialOutputs?: (string | Record<string, unknown>)[],
+    initialPrediction?: PredictionResult | null,
   ) => string;
   closeTab: (tabId: string) => void;
   setActiveTab: (tabId: string) => void;
@@ -179,6 +184,7 @@ interface PlaygroundState {
   clearValidationError: (key: string) => void;
   resetForm: () => void;
   runPrediction: () => Promise<void>;
+  abortRun: () => void;
   clearOutput: () => void;
 
   // Batch processing actions
@@ -196,6 +202,11 @@ interface PlaygroundState {
 
   // Consume pending form values (returns them and clears from tab)
   consumePendingFormValues: () => Record<string, unknown> | null;
+
+  // Find formValues from any tab's generationHistory by prediction ID
+  findFormValuesByPredictionId: (
+    predictionId: string,
+  ) => Record<string, unknown> | null;
 }
 
 // Check if a value is considered "empty"
@@ -243,11 +254,22 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
   tabs: initialSession?.tabs ?? [],
   activeTabId: initialSession?.activeTabId ?? null,
 
-  createTab: (model?: Model, initialFormValues?: Record<string, unknown>) => {
+  createTab: (
+    model?: Model,
+    initialFormValues?: Record<string, unknown>,
+    initialOutputs?: (string | Record<string, unknown>)[],
+    initialPrediction?: PredictionResult | null,
+  ) => {
     const id = `tab-${++tabCounter}`;
     const newTab = createEmptyTab(id, model);
     if (initialFormValues) {
       newTab.pendingFormValues = { ...initialFormValues };
+    }
+    if (initialOutputs && initialOutputs.length > 0) {
+      newTab.outputs = initialOutputs;
+    }
+    if (initialPrediction) {
+      newTab.currentPrediction = initialPrediction;
     }
     set((state) => ({
       tabs: [...state.tabs, newTab],
@@ -446,6 +468,10 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
 
     const tabId = get().activeTabId;
 
+    // Create AbortController for this run
+    const controller = new AbortController();
+    if (tabId) abortControllers.set(tabId, controller);
+
     try {
       // Clean up form values - remove empty strings and undefined
       const cleanedInput: Record<string, unknown> = {};
@@ -468,11 +494,26 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
         normalizedInput,
         {
           enableSyncMode: normalizedInput.enable_sync_mode as boolean,
+          signal: controller.signal,
+        },
+      );
+
+      // Normalize outputs: some models return [{ url: "..." }] instead of ["..."]
+      const rawOutputs = result.outputs || [];
+      const outputs: (string | Record<string, unknown>)[] = rawOutputs.map(
+        (o) => {
+          if (
+            typeof o === "object" &&
+            o !== null &&
+            typeof (o as { url?: string }).url === "string"
+          ) {
+            return (o as { url: string }).url;
+          }
+          return o;
         },
       );
 
       // Build history items — split multi-media outputs into individual entries
-      const outputs = result.outputs || [];
       const historyItems: GenerationHistoryItem[] = [];
 
       const mediaEntries: { output: string; type: "image" | "video" }[] = [];
@@ -536,13 +577,17 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
         ),
       }));
     } catch (error) {
+      // Don't show error for user-initiated abort
+      const isAbort =
+        error instanceof DOMException && error.name === "AbortError";
       set((state) => ({
         tabs: state.tabs.map((tab) =>
           tab.id === tabId
             ? {
                 ...tab,
-                error:
-                  error instanceof Error
+                error: isAbort
+                  ? null
+                  : error instanceof Error
                     ? error.message
                     : "Failed to run prediction",
                 isRunning: false,
@@ -550,6 +595,17 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
             : tab,
         ),
       }));
+    } finally {
+      if (tabId) abortControllers.delete(tabId);
+    }
+  },
+
+  abortRun: () => {
+    const tabId = get().activeTabId;
+    if (!tabId) return;
+    const controller = abortControllers.get(tabId);
+    if (controller) {
+      controller.abort();
     }
   },
 
@@ -654,6 +710,10 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
 
     const tabId = get().activeTabId;
 
+    // Create AbortController for this batch run
+    const controller = new AbortController();
+    if (tabId) abortControllers.set(tabId, controller);
+
     set((state) => ({
       tabs: state.tabs.map((tab) =>
         tab.id === tabId
@@ -706,23 +766,38 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
           normalizedInput,
           {
             enableSyncMode: normalizedInput.enable_sync_mode as boolean,
+            signal: controller.signal,
           },
         );
         const timing = Date.now() - startTime;
+
+        // Normalize outputs: some models return [{ url: "..." }] instead of ["..."]
+        const batchOutputs: (string | Record<string, unknown>)[] = (
+          result.outputs || []
+        ).map((o) => {
+          if (
+            typeof o === "object" &&
+            o !== null &&
+            typeof (o as { url?: string }).url === "string"
+          ) {
+            return (o as { url: string }).url;
+          }
+          return o;
+        });
 
         results[i] = {
           id: queue[i].id,
           index: i,
           input,
           prediction: result,
-          outputs: result.outputs || [],
+          outputs: batchOutputs,
           error: null,
           timing,
         };
 
         // Build history items for this single batch result
         const itemHistoryEntries: GenerationHistoryItem[] = [];
-        for (const output of result.outputs || []) {
+        for (const output of batchOutputs) {
           if (typeof output === "string") {
             const mType = isImageUrl(output)
               ? ("image" as const)
@@ -768,6 +843,11 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
           ),
         }));
       } catch (error) {
+        // Skip state updates for aborted requests
+        const isAbort =
+          error instanceof DOMException && error.name === "AbortError";
+        if (isAbort) return;
+
         const errorMessage =
           error instanceof Error ? error.message : "Failed to run prediction";
         const timing = Date.now() - startTime;
@@ -819,14 +899,17 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
           ? {
               ...tab,
               isRunning: false,
+              error: null,
               batchState: tab.batchState
                 ? { ...tab.batchState, isRunning: false }
                 : null,
-              batchResults: results,
+              batchResults: results.filter(Boolean),
             }
           : tab,
       ),
     }));
+
+    if (tabId) abortControllers.delete(tabId);
   },
 
   cancelBatch: () => {
@@ -909,5 +992,19 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
       ),
     }));
     return pending;
+  },
+
+  findFormValuesByPredictionId: (predictionId: string) => {
+    const tabs = get().tabs;
+    for (const tab of tabs) {
+      for (const item of tab.generationHistory) {
+        if (item.prediction?.id === predictionId || item.id === predictionId) {
+          if (item.formValues && Object.keys(item.formValues).length > 0) {
+            return item.formValues;
+          }
+        }
+      }
+    }
+    return null;
   },
 }));

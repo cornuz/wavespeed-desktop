@@ -1,4 +1,4 @@
-{
+﻿{
   "common": {
     "loading": "Memuatkan...",
     "save": "Simpan",
@@ -38,7 +38,10 @@
     "add": "Add",
     "saving": "Saving...",
     "showMore": "Tunjuk lagi",
-    "showLess": "Tunjuk kurang"
+    "showLess": "Tunjuk kurang",
+    "show": "Tunjuk",
+    "hide": "Sembunyikan",
+    "customize": "Sesuaikan"
   },
   "nav": {
     "home": "Laman Utama",
@@ -131,6 +134,7 @@
     "selectModelPrompt": "Pilih model untuk mengkonfigurasi parameter",
     "run": "Jalankan",
     "running": "Sedang berjalan...",
+    "abort": "Batalkan",
     "stop": "Hentikan",
     "parameters": "Parameter",
     "output": "Output",
@@ -268,7 +272,28 @@
       "title": "Sejarah",
       "openInNewTab": "Buka di tab baharu",
       "useSettings": "Gunakan tetapan ini"
-    }
+    },
+    "rightPanel": {
+      "explore": "Terokai",
+      "allModels": "Semua Model",
+      "models": "Model",
+      "featuredModels": "Model Pilihan",
+      "resultsHub": "Hab Hasil",
+      "result": "Hasil",
+      "templates": "Templat",
+      "assets": "Aset Saya"
+    },
+    "explore": {
+      "searchPlaceholder": "Cari model, LoRA dan gaya...",
+      "all": "Semua",
+      "allModels": "Semua Model",
+      "favorites": "Kegemaran",
+      "noFavorites": "Tiada kegemaran lagi — klik bintang untuk simpan model",
+      "searchResults": "{{count}} hasil",
+      "filterByType": "Tapis mengikut jenis"
+    },
+    "recentGenerations": "Penjanaan terkini",
+    "viewAll": "Lihat semua"
   },
   "history": {
     "title": "Sejarah",
@@ -619,6 +644,8 @@
       "empty": "Kosong",
       "calculating": "Mengira...",
       "clear": "Padam",
+      "clearConfirmDesc": "Ini akan memadamkan {{size}} data cache. Model yang telah dimuat turun perlu dimuat turun semula. Tindakan ini tidak boleh dibuat asal.",
+      "clearConfirmEmpty": "Ini akan memadamkan semua data cache. Tindakan ini tidak boleh dibuat asal.",
       "cleared": "Cache dipadam",
       "clearedDesc": "Cache model AI telah dipadam. Model akan dimuat turun semula apabila diperlukan.",
       "itemDeleted": "Item cache dipadam",
@@ -1080,6 +1107,9 @@
     "exportFailed": "Gagal mengeksport",
     "estimated": "Anggaran kos",
     "fitView": "Sesuaikan pandangan",
+    "toggleGrid": "Togol grid",
+    "zoomIn": "Zum masuk",
+    "zoomOut": "Zum keluar",
     "autoLayout": "Susun atur automatik",
     "freeToolModelHint": "Larian pertama akan memuat turun model AI secara automatik, sila tunggu",
     "more": "Lagi",

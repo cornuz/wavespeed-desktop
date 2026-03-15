@@ -1,4 +1,4 @@
-{
+﻿{
   "common": {
     "loading": "로딩 중...",
     "save": "저장",
@@ -38,7 +38,10 @@
     "add": "Add",
     "saving": "Saving...",
     "showMore": "더 보기",
-    "showLess": "접기"
+    "showLess": "접기",
+    "show": "표시",
+    "hide": "숨기기",
+    "customize": "커스터마이즈"
   },
   "nav": {
     "home": "홈",
@@ -131,6 +134,7 @@
     "selectModelPrompt": "매개변수를 구성하려면 모델을 선택하세요",
     "run": "실행",
     "running": "실행 중...",
+    "abort": "중단",
     "stop": "중지",
     "parameters": "매개변수",
     "output": "출력",
@@ -268,7 +272,28 @@
       "title": "기록",
       "openInNewTab": "새 탭에서 열기",
       "useSettings": "이 설정 사용"
-    }
+    },
+    "rightPanel": {
+      "explore": "탐색",
+      "allModels": "모든 모델",
+      "models": "모델",
+      "featuredModels": "추천 모델",
+      "resultsHub": "결과 허브",
+      "result": "결과",
+      "templates": "템플릿",
+      "assets": "내 에셋"
+    },
+    "explore": {
+      "searchPlaceholder": "모델, LoRA 및 스타일 검색...",
+      "all": "전체",
+      "allModels": "모든 모델",
+      "favorites": "즐겨찾기",
+      "noFavorites": "아직 즐겨찾기가 없습니다 — 별을 클릭하여 모델 저장",
+      "searchResults": "{{count}}개 결과",
+      "filterByType": "유형별 필터"
+    },
+    "recentGenerations": "최근 생성",
+    "viewAll": "전체 보기"
   },
   "history": {
     "title": "기록",
@@ -620,6 +645,8 @@
       "empty": "空",
       "calculating": "计算中...",
       "clear": "清除",
+      "clearConfirmDesc": "{{size}}의 캐시 데이터가 삭제됩니다. 다운로드한 모델은 다시 다운로드해야 합니다. 이 작업은 되돌릴 수 없습니다.",
+      "clearConfirmEmpty": "모든 캐시 데이터가 삭제됩니다. 이 작업은 되돌릴 수 없습니다.",
       "cleared": "缓存已清除",
       "clearedDesc": "AI模型缓存已清除。需要时将重新下载模型。",
       "itemDeleted": "캐시 항목이 삭제되었습니다",
@@ -1081,6 +1108,9 @@
     "exportFailed": "내보내기 실패",
     "estimated": "예상 비용",
     "fitView": "뷰 맞춤",
+    "toggleGrid": "그리드 전환",
+    "zoomIn": "확대",
+    "zoomOut": "축소",
     "autoLayout": "자동 정렬",
     "freeToolModelHint": "첫 실행 시 AI 모델이 자동 다운로드됩니다, 잠시 기다려 주세요",
     "more": "더보기",

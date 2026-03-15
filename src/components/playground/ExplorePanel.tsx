@@ -106,12 +106,12 @@ const ModelCard = memo(function ModelCard({
   return (
     <div
       onClick={() => onSelect(model.model_id)}
-      className="cursor-pointer rounded-lg border border-border bg-card shadow-sm hover:bg-accent/50 hover:border-primary/30 hover:shadow-md transition-all group overflow-hidden dark:bg-white/[0.06] dark:border-white/[0.08] dark:hover:bg-white/[0.10]"
+      className="cursor-pointer rounded-lg border border-border bg-card shadow-sm hover:bg-accent/50 hover:border-primary/30 hover:shadow-md transition-all group overflow-hidden dark:bg-white/[0.06] dark:border-white/[0.08] dark:hover:bg-white/[0.10] min-w-[260px]"
     >
       <div className={cn("h-[2px]", getBarColor(model.type || ""))} />
       <div className="p-2.5 flex flex-col h-[calc(100%-2px)]">
         <div className="flex items-start justify-between gap-2">
-          <p className="text-sm font-semibold group-hover:text-primary transition-colors flex-1 min-w-0 truncate">
+          <p className="text-sm font-semibold group-hover:text-primary transition-colors flex-1 min-w-0 line-clamp-2 break-words">
             {model.name}
           </p>
           {model.type && (
@@ -268,7 +268,7 @@ export function ExplorePanel({
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("popularity");
   const [sortAsc, setSortAsc] = useState(false);
-  const [typeFiltersExpanded, setTypeFiltersExpanded] = useState(false);
+  const [typeFiltersOpen, setTypeFiltersOpen] = useState(false); // type filter row collapsed by default
 
   // Local search state with debounce
   const [searchInput, setSearchInput] = useState("");
@@ -328,8 +328,8 @@ export function ExplorePanel({
 
   // Responsive grid columns — use window resize to measure scroll container width
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const CARD_HEIGHT = 82;
-  const MIN_CARD_WIDTH = 240;
+  const CARD_HEIGHT = 98; // Tall enough for 2-line model name
+  const MIN_CARD_WIDTH = 260; // Ensure model name can display fully (no truncation for typical names)
   const MAX_COLS = 4;
   const GRID_PADDING = 32;
   const GAP = 8;
@@ -516,56 +516,68 @@ export function ExplorePanel({
                   })
                 : t("playground.explore.allModels", "All Models")}
           </h3>
-          <div
-            className={cn(
-              "flex gap-1.5 flex-wrap mb-3 relative",
-              mobile && !typeFiltersExpanded && "max-h-[30px] overflow-hidden",
-            )}
-          >
-            <button
-              onClick={() => setTypeFilter(null)}
-              className={cn(
-                "text-xs px-2.5 py-1 rounded-full font-medium transition-colors whitespace-nowrap",
-                !typeFilter
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {t("playground.explore.all", "All")}
-            </button>
-            {allTypes.map((type) => (
+          <div className="mb-2">
+            {!typeFiltersOpen ? (
               <button
-                key={type}
-                onClick={() => setTypeFilter(typeFilter === type ? null : type)}
-                className={cn(
-                  "text-xs px-2.5 py-1 rounded-full font-medium transition-colors whitespace-nowrap",
-                  typeFilter === type
-                    ? "ring-1 ring-current " + getTypeColor(type)
-                    : getTypeColor(type) + " hover:opacity-80",
-                )}
+                type="button"
+                onClick={() => setTypeFiltersOpen(true)}
+                className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
               >
-                {type}
+                <ChevronDown className="h-3 w-3" />
+                {t("playground.explore.filterByType", "Filter by type")}
+                {typeFilter && (
+                  <span
+                    className={cn(
+                      "ml-1 px-2 py-0.5 rounded-md font-medium",
+                      getTypeColor(typeFilter),
+                    )}
+                  >
+                    {typeFilter}
+                  </span>
+                )}
               </button>
-            ))}
+            ) : (
+              <>
+                <div className="flex gap-1 flex-wrap items-center mb-1">
+                  <button
+                    onClick={() => setTypeFilter(null)}
+                    className={cn(
+                      "text-[11px] px-2 py-0.5 rounded-md font-medium transition-colors whitespace-nowrap",
+                      !typeFilter
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {t("playground.explore.all", "All")}
+                  </button>
+                  {allTypes.map((type) => (
+                    <button
+                      key={type}
+                      onClick={() =>
+                        setTypeFilter(typeFilter === type ? null : type)
+                      }
+                      className={cn(
+                        "text-[11px] px-2 py-0.5 rounded-md font-medium transition-colors whitespace-nowrap",
+                        typeFilter === type
+                          ? "ring-1 ring-current " + getTypeColor(type)
+                          : getTypeColor(type) + " hover:opacity-80",
+                      )}
+                    >
+                      {type}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setTypeFiltersOpen(false)}
+                    className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground ml-1"
+                  >
+                    <ChevronUp className="h-3 w-3" />
+                    {t("common.hide", "Hide")}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
-          {mobile && allTypes.length > 5 && (
-            <button
-              onClick={() => setTypeFiltersExpanded(!typeFiltersExpanded)}
-              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground mb-3 -mt-1"
-            >
-              {typeFiltersExpanded ? (
-                <>
-                  <ChevronUp className="h-3 w-3" />
-                  {t("common.showLess", "Show less")}
-                </>
-              ) : (
-                <>
-                  <ChevronDown className="h-3 w-3" />
-                  {t("common.showMore", "Show more")}
-                </>
-              )}
-            </button>
-          )}
 
           {filteredModels.length === 0 ? (
             <div className="py-12 text-center text-sm text-muted-foreground">
@@ -600,7 +612,7 @@ export function ExplorePanel({
                       height: `${virtualRow.size - GAP}px`,
                       transform: `translateY(${virtualRow.start}px)`,
                       display: "grid",
-                      gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+                      gridTemplateColumns: `repeat(${cols}, minmax(${MIN_CARD_WIDTH}px, 1fr))`,
                       gap: `${GAP}px`,
                     }}
                   >

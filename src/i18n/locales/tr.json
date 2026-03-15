@@ -1,4 +1,4 @@
-{
+﻿{
   "common": {
     "loading": "Yükleniyor...",
     "save": "Kaydet",
@@ -38,7 +38,10 @@
     "add": "Add",
     "saving": "Saving...",
     "showMore": "Daha fazla göster",
-    "showLess": "Daha az göster"
+    "showLess": "Daha az göster",
+    "show": "Göster",
+    "hide": "Gizle",
+    "customize": "Özelleştir"
   },
   "nav": {
     "home": "Ana Sayfa",
@@ -131,6 +134,7 @@
     "selectModelPrompt": "Parametreleri yapılandırmak için bir model seçin",
     "run": "Çalıştır",
     "running": "Çalışıyor...",
+    "abort": "İptal",
     "stop": "Durdur",
     "parameters": "Parametreler",
     "output": "Çıktı",
@@ -268,7 +272,28 @@
       "title": "Geçmiş",
       "openInNewTab": "Yeni sekmede aç",
       "useSettings": "Bu ayarları kullan"
-    }
+    },
+    "rightPanel": {
+      "explore": "Keşfet",
+      "allModels": "Tüm Modeller",
+      "models": "Modeller",
+      "featuredModels": "Öne Çıkan Modeller",
+      "resultsHub": "Sonuç Merkezi",
+      "result": "Sonuç",
+      "templates": "Şablonlar",
+      "assets": "Varlıklarım"
+    },
+    "explore": {
+      "searchPlaceholder": "Model, LoRA ve stil ara...",
+      "all": "Tümü",
+      "allModels": "Tüm Modeller",
+      "favorites": "Favoriler",
+      "noFavorites": "Henüz favori yok — model kaydetmek için yıldıza tıklayın",
+      "searchResults": "{{count}} sonuç",
+      "filterByType": "Türe göre filtrele"
+    },
+    "recentGenerations": "Son oluşturmalar",
+    "viewAll": "Tümünü görüntüle"
   },
   "history": {
     "title": "Geçmiş",
@@ -620,6 +645,8 @@
       "empty": "Boş",
       "calculating": "Hesaplanıyor...",
       "clear": "Temizle",
+      "clearConfirmDesc": "{{size}} önbellek verisi silinecek. İndirilen modellerin yeniden indirilmesi gerekecek. Bu işlem geri alınamaz.",
+      "clearConfirmEmpty": "Tüm önbellek verileri silinecek. Bu işlem geri alınamaz.",
       "cleared": "Önbellek temizlendi",
       "clearedDesc": "AI model önbelleği temizlendi. Modeller gerektiğinde yeniden indirilecek.",
       "itemDeleted": "Önbellek öğesi silindi",
@@ -1080,6 +1107,9 @@
     "exportFailed": "Dışa aktarma başarısız",
     "estimated": "Tahmini maliyet",
     "fitView": "Görünüme sığdır",
+    "toggleGrid": "Izgarayı aç/kapat",
+    "zoomIn": "Yakınlaştır",
+    "zoomOut": "Uzaklaştır",
     "autoLayout": "Otomatik düzenle",
     "freeToolModelHint": "İlk çalıştırmada AI modeli otomatik indirilecek, lütfen bekleyin",
     "more": "Daha fazla",

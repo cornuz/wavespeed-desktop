@@ -1,4 +1,4 @@
-{
+﻿{
   "common": {
     "loading": "Đang tải...",
     "save": "Lưu",
@@ -38,7 +38,10 @@
     "add": "Add",
     "saving": "Saving...",
     "showMore": "Xem thêm",
-    "showLess": "Thu gọn"
+    "showLess": "Thu gọn",
+    "show": "Hiển thị",
+    "hide": "Ẩn",
+    "customize": "Tùy chỉnh"
   },
   "nav": {
     "home": "Trang chủ",
@@ -131,6 +134,7 @@
     "selectModelPrompt": "Chọn mô hình để cấu hình tham số",
     "run": "Chạy",
     "running": "Đang chạy...",
+    "abort": "Hủy bỏ",
     "stop": "Dừng",
     "parameters": "Tham số",
     "output": "Đầu ra",
@@ -268,7 +272,28 @@
       "title": "Lịch sử",
       "openInNewTab": "Mở trong tab mới",
       "useSettings": "Sử dụng cài đặt này"
-    }
+    },
+    "rightPanel": {
+      "explore": "Khám phá",
+      "allModels": "Tất cả mô hình",
+      "models": "Mô hình",
+      "featuredModels": "Mô hình nổi bật",
+      "resultsHub": "Trung tâm kết quả",
+      "result": "Kết quả",
+      "templates": "Mẫu",
+      "assets": "Tài sản của tôi"
+    },
+    "explore": {
+      "searchPlaceholder": "Tìm kiếm mô hình, LoRA và phong cách...",
+      "all": "Tất cả",
+      "allModels": "Tất cả mô hình",
+      "favorites": "Yêu thích",
+      "noFavorites": "Chưa có yêu thích — nhấp vào ngôi sao để lưu mô hình",
+      "searchResults": "{{count}} kết quả",
+      "filterByType": "Lọc theo loại"
+    },
+    "recentGenerations": "Tạo gần đây",
+    "viewAll": "Xem tất cả"
   },
   "history": {
     "title": "Lịch sử",
@@ -619,6 +644,8 @@
       "empty": "Trống",
       "calculating": "Đang tính...",
       "clear": "Xóa",
+      "clearConfirmDesc": "Thao tác này sẽ xóa {{size}} dữ liệu bộ nhớ đệm. Các mô hình đã tải xuống sẽ cần được tải lại. Không thể hoàn tác thao tác này.",
+      "clearConfirmEmpty": "Thao tác này sẽ xóa toàn bộ dữ liệu bộ nhớ đệm. Không thể hoàn tác thao tác này.",
       "cleared": "Đã xóa bộ nhớ đệm",
       "clearedDesc": "Bộ nhớ đệm mô hình AI đã được xóa. Các mô hình sẽ được tải xuống lại khi cần.",
       "itemDeleted": "Đã xóa mục bộ nhớ đệm",
@@ -1080,6 +1107,9 @@
     "exportFailed": "Xuất thất bại",
     "estimated": "Chi phí ước tính",
     "fitView": "Vừa khung xem",
+    "toggleGrid": "Bật/tắt lưới",
+    "zoomIn": "Phóng to",
+    "zoomOut": "Thu nhỏ",
     "autoLayout": "Tự động sắp xếp",
     "freeToolModelHint": "Lần chạy đầu tiên sẽ tự động tải mô hình AI, vui lòng chờ",
     "more": "Thêm",

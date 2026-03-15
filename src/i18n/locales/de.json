@@ -1,4 +1,4 @@
-{
+﻿{
   "common": {
     "loading": "Laden...",
     "save": "Speichern",
@@ -38,7 +38,10 @@
     "add": "Add",
     "saving": "Saving...",
     "showMore": "Mehr anzeigen",
-    "showLess": "Weniger anzeigen"
+    "showLess": "Weniger anzeigen",
+    "show": "Anzeigen",
+    "hide": "Ausblenden",
+    "customize": "Anpassen"
   },
   "nav": {
     "home": "Startseite",
@@ -131,6 +134,7 @@
     "selectModelPrompt": "Wählen Sie ein Modell, um Parameter zu konfigurieren",
     "run": "Ausführen",
     "running": "Wird ausgeführt...",
+    "abort": "Abbrechen",
     "stop": "Stoppen",
     "parameters": "Parameter",
     "output": "Ausgabe",
@@ -268,7 +272,28 @@
       "title": "Verlauf",
       "openInNewTab": "In neuem Tab öffnen",
       "useSettings": "Diese Einstellungen verwenden"
-    }
+    },
+    "rightPanel": {
+      "explore": "Erkunden",
+      "allModels": "Alle Modelle",
+      "models": "Modelle",
+      "featuredModels": "Empfohlene Modelle",
+      "resultsHub": "Ergebnis-Hub",
+      "result": "Ergebnis",
+      "templates": "Vorlagen",
+      "assets": "Meine Assets"
+    },
+    "explore": {
+      "searchPlaceholder": "Modelle, LoRAs und Stile suchen...",
+      "all": "Alle",
+      "allModels": "Alle Modelle",
+      "favorites": "Favoriten",
+      "noFavorites": "Noch keine Favoriten — markieren Sie ein Modell mit einem Stern.",
+      "searchResults": "{{count}} Ergebnisse",
+      "filterByType": "Nach Typ filtern"
+    },
+    "recentGenerations": "Letzte Generierungen",
+    "viewAll": "Alle anzeigen"
   },
   "history": {
     "title": "Verlauf",
@@ -620,6 +645,8 @@
       "empty": "Leer",
       "calculating": "Berechnung...",
       "clear": "Leeren",
+      "clearConfirmDesc": "Es werden {{size}} an zwischengespeicherten Daten gelöscht. Heruntergeladene Modelle müssen erneut heruntergeladen werden. Diese Aktion kann nicht rückgängig gemacht werden.",
+      "clearConfirmEmpty": "Alle zwischengespeicherten Daten werden gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.",
       "cleared": "Cache geleert",
       "clearedDesc": "Der KI-Modell-Cache wurde geleert. Modelle werden bei Bedarf erneut heruntergeladen.",
       "itemDeleted": "Cache-Element gelöscht",
@@ -1081,6 +1108,9 @@
     "exportFailed": "Export fehlgeschlagen",
     "estimated": "Kosten",
     "fitView": "Ansicht anpassen",
+    "toggleGrid": "Raster umschalten",
+    "zoomIn": "Vergrößern",
+    "zoomOut": "Verkleinern",
     "autoLayout": "Automatisches Layout",
     "freeToolModelHint": "Beim ersten Ausführen wird das KI-Modell automatisch heruntergeladen, bitte warten",
     "more": "Mehr",
