@@ -363,11 +363,23 @@ interface TemplateState {
   useTemplate: (id: string) => Promise<void>;
 
   // Import/Export
-  exportTemplates: (ids?: string[], exportAll?: boolean) => Promise<void>;
+  exportSingleTemplate: (
+    id: string,
+    defaultName: string,
+  ) => Promise<{ success: boolean; canceled?: boolean }>;
+  exportBatchTemplates: (
+    ids: string[],
+  ) => Promise<{ success: boolean; count?: number; canceled?: boolean }>;
   importTemplates: (
     file: File,
     mode: "merge" | "replace" | "rename",
   ) => Promise<{ imported: number; skipped: number; replaced: number }>;
+  pickAndImportTemplates: (mode: "merge" | "replace" | "rename") => Promise<{
+    imported: number;
+    skipped: number;
+    replaced: number;
+    canceled?: boolean;
+  }>;
 
   // Query existing names for uniqueness checks
   queryTemplateNames: (templateType?: string) => Promise<string[]>;
@@ -576,33 +588,29 @@ export const useTemplateStore = create<TemplateState>((set, get) => ({
     }
   },
 
-  exportTemplates: async (ids?: string[], exportAll?: boolean) => {
+  exportSingleTemplate: async (id: string, defaultName: string) => {
     try {
-      const data = await invokeTemplateIpc<TemplateExport>("template:export", {
-        ids,
-      });
-      const blob = new Blob([JSON.stringify(data, null, 2)], {
-        type: "application/json",
-      });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      const now = new Date();
-      const ts = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}_${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}${String(now.getSeconds()).padStart(2, "0")}`;
-      const tpls = data.templates ?? [];
-      const types = new Set(tpls.map((t: Template) => t.templateType));
-      const typePrefix = types.size === 1 ? [...types][0] : "mixed";
-      let namePrefix: string;
-      if (tpls.length === 1) {
-        namePrefix = tpls[0].name.replace(/[^a-zA-Z0-9\u4e00-\u9fff_-]/g, "_");
-      } else if (exportAll) {
-        namePrefix = `export_all_${tpls.length}`;
-      } else {
-        namePrefix = `export_${tpls.length}`;
-      }
-      a.download = `${typePrefix}_${namePrefix}_${ts}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
+      const result = await invokeTemplateIpc<{
+        success: boolean;
+        filePath?: string;
+        canceled?: boolean;
+      }>("template:exportSingle", { id, defaultName });
+      return result;
+    } catch (error) {
+      set({ error: (error as Error).message });
+      throw error;
+    }
+  },
+
+  exportBatchTemplates: async (ids: string[]) => {
+    try {
+      const result = await invokeTemplateIpc<{
+        success: boolean;
+        count?: number;
+        folderPath?: string;
+        canceled?: boolean;
+      }>("template:exportBatch", { ids });
+      return result;
     } catch (error) {
       set({ error: (error as Error).message });
       throw error;
@@ -619,6 +627,48 @@ export const useTemplateStore = create<TemplateState>((set, get) => ({
         skipped: number;
         replaced: number;
       }>("template:import", { data, mode });
+      await get().loadTemplates(get().currentFilter);
+      set({ isLoading: false });
+      return result;
+    } catch (error) {
+      set({ error: (error as Error).message, isLoading: false });
+      throw error;
+    }
+  },
+
+  pickAndImportTemplates: async (mode: "merge" | "replace" | "rename") => {
+    try {
+      const pickResult = await invokeTemplateIpc<{
+        canceled: boolean;
+        templates?: TemplateExport[];
+      }>("template:importPick");
+
+      if (pickResult.canceled || !pickResult.templates?.length) {
+        return { imported: 0, skipped: 0, replaced: 0, canceled: true };
+      }
+
+      set({ isLoading: true, error: null });
+
+      // Merge all templates from all selected files into one import
+      const allTemplates: Template[] = [];
+      for (const data of pickResult.templates) {
+        if (data.templates) {
+          allTemplates.push(...data.templates);
+        }
+      }
+
+      const mergedData: TemplateExport = {
+        version: "1.0",
+        exportedAt: new Date().toISOString(),
+        templates: allTemplates,
+      };
+
+      const result = await invokeTemplateIpc<{
+        imported: number;
+        skipped: number;
+        replaced: number;
+      }>("template:import", { data: mergedData, mode });
+
       await get().loadTemplates(get().currentFilter);
       set({ isLoading: false });
       return result;

@@ -2,6 +2,8 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useTemplateStore } from "@/stores/templateStore";
+import { useModelsStore } from "@/stores/modelsStore";
+import { usePlaygroundStore } from "@/stores/playgroundStore";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -26,7 +28,7 @@ import {
   ChevronRight,
   ChevronDown,
 } from "lucide-react";
-import type { Template } from "@/types/template";
+import type { Template, TemplateExport } from "@/types/template";
 
 export function TemplatesPage() {
   const { t } = useTranslation();
@@ -36,8 +38,10 @@ export function TemplatesPage() {
     updateTemplate,
     deleteTemplate,
     deleteTemplates,
-    exportTemplates,
+    exportSingleTemplate,
+    exportBatchTemplates,
     importTemplates,
+    pickAndImportTemplates,
     useTemplate,
     queryTemplateNames,
   } = useTemplateStore();
@@ -162,9 +166,14 @@ export function TemplatesPage() {
   const handleUseTemplate = async (template: Template) => {
     await useTemplate(template.id);
     if (template.playgroundData) {
-      navigate(
-        `/playground/${encodeURIComponent(template.playgroundData.modelId)}?template=${template.id}`,
-      );
+      const { modelId, values } = template.playgroundData;
+      const model = useModelsStore
+        .getState()
+        .models.find((m) => m.model_id === modelId);
+      if (model) {
+        usePlaygroundStore.getState().createTab(model, values);
+      }
+      navigate(`/playground/${encodeURIComponent(modelId)}`);
     } else if (template.workflowData) {
       navigate(`/workflow?template=${template.id}`);
     }
@@ -358,7 +367,8 @@ export function TemplatesPage() {
 
   const handleExportTemplate = async (template: Template) => {
     try {
-      await exportTemplates([template.id]);
+      const result = await exportSingleTemplate(template.id, template.name);
+      if (result.canceled) return;
       toast({
         title: t("templates.templateExported"),
         description: t("templates.exportedSuccessfully", {
@@ -380,12 +390,29 @@ export function TemplatesPage() {
         selectedIds.size > 0
           ? Array.from(selectedIds)
           : localTemplates.map((t) => t.id);
-      const isExportAll = selectedIds.size === 0;
-      await exportTemplates(ids, isExportAll);
+
+      // Single template → save dialog; multiple → folder picker
+      if (ids.length === 1) {
+        const tpl = localTemplates.find((t) => t.id === ids[0]);
+        if (tpl) {
+          const result = await exportSingleTemplate(tpl.id, tpl.name);
+          if (result.canceled) return;
+          toast({
+            title: t("templates.templateExported"),
+            description: t("templates.exportedSuccessfully", {
+              name: tpl.name,
+            }),
+          });
+        }
+        return;
+      }
+
+      const result = await exportBatchTemplates(ids);
+      if (result.canceled) return;
       toast({
         title: t("templates.templatesExported"),
         description: t("templates.exportedCount", {
-          count: ids.length,
+          count: result.count || ids.length,
         }),
       });
     } catch (error) {
@@ -397,16 +424,100 @@ export function TemplatesPage() {
     }
   };
 
-  const [importFile, setImportFile] = useState<File | null>(null);
   const [importPreview, setImportPreview] = useState<{
     count: number;
     exportedAt: string;
     conflicts: number;
+    pendingTemplates: Template[];
   } | null>(null);
   const [importMode, setImportMode] = useState<"merge" | "replace" | "rename">(
     "merge",
   );
 
+  const handleImportClick = async () => {
+    try {
+      // Use Electron native multi-file picker via IPC
+      const { default: invokeIpc } = {
+        default: (window as any).workflowAPI?.invoke,
+      };
+      if (!invokeIpc) {
+        // Browser fallback
+        fileInputRef.current?.click();
+        return;
+      }
+
+      const pickResult = await invokeIpc("template:importPick");
+      if (pickResult.canceled || !pickResult.templates?.length) return;
+
+      // Merge all templates from all selected files
+      const allTemplates: Template[] = [];
+      for (const data of pickResult.templates) {
+        if (data.templates) {
+          // Filter to match current tab's templateType
+          const matching = data.templates.filter(
+            (t: Template) => t.templateType === templateType,
+          );
+          allTemplates.push(...matching);
+        }
+      }
+
+      if (allTemplates.length === 0) {
+        toast({
+          title: t("templates.importFailed"),
+          description: t("templates.noMatchingTypeTemplates", {
+            type:
+              templateType === "workflow"
+                ? t("templates.workflow")
+                : t("templates.playground"),
+          }),
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Check for name conflicts
+      const existingNames = new Set(await queryTemplateNames(templateType));
+      let conflicts = 0;
+      for (const tpl of allTemplates) {
+        if (existingNames.has(tpl.name)) conflicts++;
+      }
+
+      if (conflicts === 0) {
+        // No conflicts — import directly
+        const data: TemplateExport = {
+          version: "1.0",
+          exportedAt: new Date().toISOString(),
+          templates: allTemplates,
+        };
+        const file = new File([JSON.stringify(data)], "import.json", {
+          type: "application/json",
+        });
+        const result = await importTemplates(file, "merge");
+        toast({
+          title: t("templates.templatesImported"),
+          description: t("templates.importedSuccessfully", {
+            imported: result.imported,
+            skipped: result.skipped,
+          }),
+        });
+        reloadTemplates();
+      } else {
+        // Has conflicts — show dialog
+        setImportPreview({
+          count: allTemplates.length,
+          exportedAt: new Date().toISOString(),
+          conflicts,
+          pendingTemplates: allTemplates,
+        });
+        setImportMode("rename");
+      }
+    } catch {
+      // Fallback to file input
+      fileInputRef.current?.click();
+    }
+  };
+
+  // Browser fallback: file input handler
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -420,76 +531,30 @@ export function TemplatesPage() {
       const templates = allTemplates.filter(
         (t: Template) => t.templateType === templateType,
       );
-      const skippedOtherType = allTemplates.length - templates.length;
       const count = templates.length;
-      const exportedAt = data?.exportedAt ?? "";
 
       if (count === 0) {
         toast({
           title: t("templates.importFailed"),
-          description:
-            skippedOtherType > 0
-              ? t("templates.noMatchingTypeTemplates", {
-                  type:
-                    templateType === "workflow"
-                      ? t("templates.workflow")
-                      : t("templates.playground"),
-                })
-              : t("common.error"),
+          description: t("common.error"),
           variant: "destructive",
         });
         return;
       }
 
-      // Build a filtered file with only matching templates
       const filteredData = { ...data, templates };
       const filteredFile = new File([JSON.stringify(filteredData)], file.name, {
         type: file.type,
       });
-
-      // Check for name conflicts
-      const importTypes = [
-        ...new Set(templates.map((t: Template) => t.templateType)),
-      ] as string[];
-      const existingNamesByType: Record<string, Set<string>> = {};
-      for (const tType of importTypes) {
-        const names = await queryTemplateNames(tType);
-        existingNamesByType[tType] = new Set(names);
-      }
-      let conflicts = 0;
-      for (const tpl of templates) {
-        const typeNames = existingNamesByType[tpl.templateType];
-        if (typeNames?.has(tpl.name)) conflicts++;
-      }
-
-      if (count === 1 && conflicts === 0) {
-        // Single template, no conflict — import directly
-        const result = await importTemplates(filteredFile, "merge");
-        toast({
-          title: t("templates.templatesImported"),
-          description: t("templates.importedSuccessfully", {
-            imported: result.imported,
-            skipped: result.skipped,
-          }),
-        });
-        reloadTemplates();
-      } else if (conflicts === 0) {
-        // Multiple templates, no conflicts — import directly
-        const result = await importTemplates(filteredFile, "merge");
-        toast({
-          title: t("templates.templatesImported"),
-          description: t("templates.importedSuccessfully", {
-            imported: result.imported,
-            skipped: result.skipped,
-          }),
-        });
-        reloadTemplates();
-      } else {
-        // Has conflicts — show dialog
-        setImportFile(filteredFile);
-        setImportPreview({ count, exportedAt, conflicts });
-        setImportMode("rename");
-      }
+      const result = await importTemplates(filteredFile, "merge");
+      toast({
+        title: t("templates.templatesImported"),
+        description: t("templates.importedSuccessfully", {
+          imported: result.imported,
+          skipped: result.skipped,
+        }),
+      });
+      reloadTemplates();
     } catch {
       toast({
         title: t("templates.importFailed"),
@@ -500,9 +565,18 @@ export function TemplatesPage() {
   };
 
   const handleImportConfirm = async () => {
-    if (!importFile) return;
+    if (!importPreview?.pendingTemplates) return;
     try {
-      const result = await importTemplates(importFile, importMode);
+      // Build a File from pending templates and import
+      const data: TemplateExport = {
+        version: "1.0",
+        exportedAt: new Date().toISOString(),
+        templates: importPreview.pendingTemplates,
+      };
+      const file = new File([JSON.stringify(data)], "import.json", {
+        type: "application/json",
+      });
+      const result = await importTemplates(file, importMode);
       toast({
         title: t("templates.templatesImported"),
         description: t("templates.importedSuccessfully", {
@@ -518,7 +592,6 @@ export function TemplatesPage() {
         variant: "destructive",
       });
     } finally {
-      setImportFile(null);
       setImportPreview(null);
     }
   };
@@ -604,11 +677,7 @@ export function TemplatesPage() {
           </Button>
         )}
 
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => fileInputRef.current?.click()}
-        >
+        <Button variant="outline" size="sm" onClick={handleImportClick}>
           <Upload className="h-4 w-4 mr-1" />
           {t("templates.import")}
         </Button>
@@ -913,13 +982,7 @@ export function TemplatesPage() {
             </label>
           </div>
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setImportFile(null);
-                setImportPreview(null);
-              }}
-            >
+            <Button variant="outline" onClick={() => setImportPreview(null)}>
               {t("common.cancel")}
             </Button>
             <Button onClick={handleImportConfirm}>

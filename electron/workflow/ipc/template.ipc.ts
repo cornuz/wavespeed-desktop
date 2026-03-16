@@ -1,4 +1,6 @@
-import { ipcMain } from "electron";
+import { ipcMain, dialog, BrowserWindow } from "electron";
+import { writeFileSync, existsSync, readFileSync } from "fs";
+import { join } from "path";
 import * as templateRepo from "../db/template.repo";
 import { migrateTemplatesSync } from "../services/template-migration";
 import {
@@ -11,6 +13,24 @@ import type {
   CreateTemplateInput,
   TemplateExport,
 } from "../../../src/types/template";
+
+function sanitizeFilename(name: string): string {
+  return name.replace(/[<>:"/\\|?*]/g, "_").trim() || "template";
+}
+
+function getUniqueFilePath(dir: string, baseName: string, ext: string): string {
+  let candidate = join(dir, `${baseName}${ext}`);
+  if (!existsSync(candidate)) return candidate;
+  let counter = 1;
+  while (existsSync(join(dir, `${baseName} (${counter})${ext}`))) counter++;
+  return join(dir, `${baseName} (${counter})${ext}`);
+}
+
+function getTemplateById(id: string): Template | null {
+  return id.startsWith("file-")
+    ? getFileTemplateById(id)
+    : templateRepo.getTemplateById(id);
+}
 
 export function registerTemplateIpc(): void {
   ipcMain.handle(
@@ -114,27 +134,107 @@ export function registerTemplateIpc(): void {
     },
   );
 
+  // Single template export — save dialog
   ipcMain.handle(
-    "template:export",
-    async (_event, args: { ids?: string[] }): Promise<TemplateExport> => {
-      let templates: Template[];
-      if (args.ids) {
-        templates = args.ids
-          .map((id) =>
-            id.startsWith("file-")
-              ? getFileTemplateById(id)
-              : templateRepo.getTemplateById(id),
-          )
-          .filter(Boolean) as Template[];
-      } else {
-        templates = templateRepo.queryTemplates();
+    "template:exportSingle",
+    async (
+      _event,
+      args: { id: string; defaultName: string },
+    ): Promise<{ success: boolean; filePath?: string; canceled?: boolean }> => {
+      const template = getTemplateById(args.id);
+      if (!template) throw new Error(`Template ${args.id} not found`);
+
+      const win = BrowserWindow.getFocusedWindow();
+      const result = await dialog.showSaveDialog(win!, {
+        defaultPath: `${sanitizeFilename(args.defaultName)}.json`,
+        filters: [{ name: "JSON", extensions: ["json"] }],
+      });
+
+      if (result.canceled || !result.filePath) {
+        return { success: false, canceled: true };
       }
 
-      return {
+      const data: TemplateExport = {
         version: "1.0",
         exportedAt: new Date().toISOString(),
-        templates,
+        templates: [template],
       };
+      writeFileSync(result.filePath, JSON.stringify(data, null, 2), "utf-8");
+      return { success: true, filePath: result.filePath };
+    },
+  );
+
+  // Batch template export — folder picker, one file per template
+  ipcMain.handle(
+    "template:exportBatch",
+    async (
+      _event,
+      args: { ids: string[] },
+    ): Promise<{
+      success: boolean;
+      count?: number;
+      folderPath?: string;
+      canceled?: boolean;
+    }> => {
+      const templates = args.ids
+        .map((id) => getTemplateById(id))
+        .filter(Boolean) as Template[];
+      if (templates.length === 0) throw new Error("No templates found");
+
+      const win = BrowserWindow.getFocusedWindow();
+      const result = await dialog.showOpenDialog(win!, {
+        properties: ["openDirectory", "createDirectory"],
+      });
+
+      if (result.canceled || !result.filePaths.length) {
+        return { success: false, canceled: true };
+      }
+
+      const folder = result.filePaths[0];
+      const now = new Date().toISOString();
+      let count = 0;
+
+      for (const tpl of templates) {
+        const baseName = sanitizeFilename(tpl.name);
+        const filePath = getUniqueFilePath(folder, baseName, ".json");
+        const data: TemplateExport = {
+          version: "1.0",
+          exportedAt: now,
+          templates: [tpl],
+        };
+        writeFileSync(filePath, JSON.stringify(data, null, 2), "utf-8");
+        count++;
+      }
+
+      return { success: true, count, folderPath: folder };
+    },
+  );
+
+  // Import picker — multi-file selection, returns parsed data
+  ipcMain.handle(
+    "template:importPick",
+    async (): Promise<{
+      canceled: boolean;
+      templates?: TemplateExport[];
+    }> => {
+      const win = BrowserWindow.getFocusedWindow();
+      const result = await dialog.showOpenDialog(win!, {
+        properties: ["openFile", "multiSelections"],
+        filters: [{ name: "JSON", extensions: ["json"] }],
+      });
+
+      if (result.canceled || !result.filePaths.length) {
+        return { canceled: true };
+      }
+
+      const templates: TemplateExport[] = [];
+      for (const filePath of result.filePaths) {
+        const content = readFileSync(filePath, "utf-8");
+        const data = JSON.parse(content) as TemplateExport;
+        templates.push(data);
+      }
+
+      return { canceled: false, templates };
     },
   );
 
