@@ -91,7 +91,8 @@ export function initializeSchema(db: SqlJsDatabase): void {
     use_count INTEGER NOT NULL DEFAULT 0,
     thumbnail TEXT,
     playground_data TEXT,
-    workflow_data TEXT
+    workflow_data TEXT,
+    search_text TEXT
   )`);
 
   // Indexes
@@ -195,6 +196,17 @@ export function runMigrations(db: SqlJsDatabase): void {
         );
 
         db.run("INSERT INTO schema_version (version) VALUES (2)");
+      },
+    },
+    // Migration 3: Add search_text column to templates for i18n search
+    {
+      version: 3,
+      apply: (db: SqlJsDatabase) => {
+        console.log(
+          "[Schema] Applying migration 3: Add search_text to templates",
+        );
+        db.run("ALTER TABLE templates ADD COLUMN search_text TEXT");
+        db.run("INSERT INTO schema_version (version) VALUES (3)");
       },
     },
   ];
