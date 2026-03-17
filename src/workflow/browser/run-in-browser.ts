@@ -1330,7 +1330,7 @@ export async function executeWorkflowInBrowser(
                       const apiParams = buildApiParams(childParams, childInputs);
                       const resolvedParams = await uploadLocalUrls(apiParams, signal);
                       callbacks.onProgress(childId, 10, `Running ${modelId}...`);
-                      const result = await apiClient.run(modelId, resolvedParams, { signal });
+                      const result = await workflowClient.run(modelId, resolvedParams, { signal });
                       const outputUrl = Array.isArray(result.outputs) && result.outputs.length > 0 ? String(result.outputs[0]) : "";
                       const model = useModelsStore.getState().getModelById(modelId);
                       const cost = model?.base_price ?? 0;
