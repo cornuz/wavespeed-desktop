@@ -78,7 +78,9 @@ const migrations: NamedMigration[] = [
     apply: (db: SqlJsDatabase) => {
       console.log("[Schema] Applying migration: 003_add_search_text");
       const cols = db.exec("PRAGMA table_info(templates)");
-      const hasColumn = cols[0]?.values?.some((row) => row[1] === "search_text");
+      const hasColumn = cols[0]?.values?.some(
+        (row) => row[1] === "search_text",
+      );
       if (!hasColumn) {
         db.run("ALTER TABLE templates ADD COLUMN search_text TEXT");
       }
@@ -243,9 +245,13 @@ export function runMigrations(db: SqlJsDatabase): void {
 
   if (hasLegacyTable && !hasNewTable) {
     // Migrate from old numeric system to named migrations
-    console.log("[Schema] Upgrading from legacy schema_version to named migrations");
+    console.log(
+      "[Schema] Upgrading from legacy schema_version to named migrations",
+    );
 
-    const result = db.exec("SELECT MAX(version) as version FROM schema_version");
+    const result = db.exec(
+      "SELECT MAX(version) as version FROM schema_version",
+    );
     const legacyVersion = (result[0]?.values?.[0]?.[0] as number) ?? 0;
 
     // Create the new table
@@ -255,7 +261,9 @@ export function runMigrations(db: SqlJsDatabase): void {
     )`);
 
     // Map old version number to known migration IDs
-    const knownApplied = LEGACY_VERSION_MAP[legacyVersion] ?? ["001_initial_schema"];
+    const knownApplied = LEGACY_VERSION_MAP[legacyVersion] ?? [
+      "001_initial_schema",
+    ];
     for (const id of knownApplied) {
       db.run("INSERT OR IGNORE INTO schema_migrations (id) VALUES (?)", [id]);
     }
