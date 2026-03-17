@@ -134,6 +134,26 @@ export function registerTemplateIpc(): void {
     },
   );
 
+  ipcMain.handle(
+    "template:export",
+    async (_event, args: { ids?: string[] }): Promise<TemplateExport> => {
+      let templates: Template[];
+      if (args.ids) {
+        templates = args.ids
+          .map((id) => getTemplateById(id))
+          .filter(Boolean) as Template[];
+      } else {
+        templates = templateRepo.queryTemplates();
+      }
+
+      return {
+        version: "1.0",
+        exportedAt: new Date().toISOString(),
+        templates,
+      };
+    },
+  );
+
   // Single template export — save dialog
   ipcMain.handle(
     "template:exportSingle",

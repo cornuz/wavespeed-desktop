@@ -363,6 +363,7 @@ interface TemplateState {
   useTemplate: (id: string) => Promise<void>;
 
   // Import/Export
+  exportTemplates: (ids?: string[], exportAll?: boolean) => Promise<void>;
   exportSingleTemplate: (
     id: string,
     defaultName: string,
@@ -370,6 +371,10 @@ interface TemplateState {
   exportBatchTemplates: (
     ids: string[],
   ) => Promise<{ success: boolean; count?: number; canceled?: boolean }>;
+  exportMergedTemplates: (
+    ids: string[],
+    defaultName: string,
+  ) => Promise<{ success: boolean; canceled?: boolean }>;
   importTemplates: (
     file: File,
     mode: "merge" | "replace" | "rename",
@@ -588,6 +593,39 @@ export const useTemplateStore = create<TemplateState>((set, get) => ({
     }
   },
 
+  exportTemplates: async (ids?: string[], exportAll?: boolean) => {
+    try {
+      const data = await invokeTemplateIpc<TemplateExport>("template:export", {
+        ids,
+      });
+      const blob = new Blob([JSON.stringify(data, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const now = new Date();
+      const ts = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}_${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}${String(now.getSeconds()).padStart(2, "0")}`;
+      const tpls = data.templates ?? [];
+      const types = new Set(tpls.map((t: Template) => t.templateType));
+      const typePrefix = types.size === 1 ? [...types][0] : "mixed";
+      let namePrefix: string;
+      if (tpls.length === 1) {
+        namePrefix = tpls[0].name.replace(/[^a-zA-Z0-9\u4e00-\u9fff_-]/g, "_");
+      } else if (exportAll) {
+        namePrefix = `export_all_${tpls.length}`;
+      } else {
+        namePrefix = `export_${tpls.length}`;
+      }
+      a.download = `${typePrefix}_${namePrefix}_${ts}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      set({ error: (error as Error).message });
+      throw error;
+    }
+  },
+
   exportSingleTemplate: async (id: string, defaultName: string) => {
     try {
       const result = await invokeTemplateIpc<{
@@ -617,6 +655,19 @@ export const useTemplateStore = create<TemplateState>((set, get) => ({
     }
   },
 
+  exportMergedTemplates: async (ids: string[], defaultName: string) => {
+    try {
+      const result = await invokeTemplateIpc<{
+        success: boolean;
+        filePath?: string;
+        canceled?: boolean;
+      }>("template:exportMerged", { ids, defaultName });
+      return result;
+    } catch (error) {
+      set({ error: (error as Error).message });
+      throw error;
+    }
+  },
   importTemplates: async (file: File, mode: "merge" | "replace" | "rename") => {
     set({ isLoading: true, error: null });
     try {

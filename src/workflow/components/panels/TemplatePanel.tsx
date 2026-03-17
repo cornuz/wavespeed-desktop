@@ -6,7 +6,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { useUIStore } from "../../stores/ui.store";
 import { useTemplateStore } from "@/stores/templateStore";
-import { Search, Play, Download, FolderOpen } from "lucide-react";
+import { Search, Download, FolderOpen } from "lucide-react";
 import type { Template, TemplateFilter } from "@/types/template";
 
 interface TemplatePanelProps {
@@ -143,10 +143,11 @@ export function TemplatePanel({ onUseTemplate, onClose }: TemplatePanelProps) {
             return (
               <div
                 key={template.id}
-                className="flex items-center gap-2 mx-1.5 mb-1 px-2.5 py-2 rounded-md border border-border/30 hover:bg-accent/30 transition-colors"
+                onClick={() => handleUse(template)}
+                className="group flex items-center gap-2 mx-1.5 mb-1 px-2.5 py-2 rounded-md border border-border/30 hover:bg-primary/5 hover:border-primary/30 transition-colors cursor-pointer"
               >
                 <div className="flex-1 min-w-0">
-                  <span className="text-xs font-medium truncate block">
+                  <span className="text-xs font-medium truncate block group-hover:text-primary transition-colors">
                     {tName}
                   </span>
                   <span className="text-[10px] text-muted-foreground">
@@ -154,16 +155,12 @@ export function TemplatePanel({ onUseTemplate, onClose }: TemplatePanelProps) {
                     {formatDate(template.updatedAt)}
                   </span>
                 </div>
-                <div className="flex items-center gap-1 flex-shrink-0">
+                <div className="flex items-center gap-0.5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                   <button
-                    onClick={() => handleUse(template)}
-                    className="h-6 px-2 rounded-md text-[10px] font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors flex items-center gap-1"
-                  >
-                    <Play className="h-2.5 w-2.5" />
-                    {t("templates.use")}
-                  </button>
-                  <button
-                    onClick={() => handleExport(template)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleExport(template);
+                    }}
                     className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
                     title={t("templates.export")}
                   >

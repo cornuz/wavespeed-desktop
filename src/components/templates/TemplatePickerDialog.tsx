@@ -1,8 +1,10 @@
 /**
  * TemplatePickerDialog — modal dialog for browsing templates.
  * Simple list view matching TemplatesPage style, no category sidebar.
+ * Click a row to use the template. Hover to see action buttons.
+ * Keyboard: arrow keys to navigate, Enter to use, Escape to close.
  */
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import {
   TemplateDialog,
@@ -10,14 +12,7 @@ import {
 } from "@/components/templates/TemplateDialog";
 import { useTemplateStore } from "@/stores/templateStore";
 import { toast } from "@/hooks/useToast";
-import {
-  Search,
-  Play,
-  Pencil,
-  Trash2,
-  Download,
-  FolderOpen,
-} from "lucide-react";
+import { Search, Pencil, Trash2, Download, FolderOpen } from "lucide-react";
 import type { Template } from "@/types/template";
 
 interface TemplatePickerDialogProps {
@@ -42,17 +37,26 @@ export function TemplatePickerDialog({
   );
   const [searchQuery, setSearchQuery] = useState("");
   const [localTemplates, setLocalTemplates] = useState<Template[]>([]);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
   // Load templates when dialog opens
   useEffect(() => {
     if (!open) return;
     setSearchQuery("");
+    setSelectedIndex(0);
     let cancelled = false;
     loadTemplates({ templateType }).then(() => {
       if (!cancelled) {
-        setLocalTemplates(useTemplateStore.getState().templates);
+        const storeTemplates = useTemplateStore.getState().templates;
+        setLocalTemplates(
+          storeTemplates.filter((t) => t.templateType === templateType),
+        );
       }
     });
+    // Focus search input when dialog opens
+    setTimeout(() => searchInputRef.current?.focus(), 50);
     return () => {
       cancelled = true;
     };
@@ -83,9 +87,17 @@ export function TemplatePickerDialog({
     });
   }, [localTemplates, searchQuery, t]);
 
+  // Reset selection when filtered results change
+  useEffect(() => {
+    setSelectedIndex(0);
+  }, [filteredTemplates.length]);
+
   const reload = useCallback(() => {
     loadTemplates({ templateType }).then(() => {
-      setLocalTemplates(useTemplateStore.getState().templates);
+      const storeTemplates = useTemplateStore.getState().templates;
+      setLocalTemplates(
+        storeTemplates.filter((t) => t.templateType === templateType),
+      );
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [templateType]);
@@ -162,18 +174,41 @@ export function TemplatePickerDialog({
     [exportTemplates, t],
   );
 
-  // Close on Escape key
-  useEffect(() => {
-    if (!open) return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
+  // Keyboard navigation: arrows, Enter, Escape
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (editingTemplate || deletingTemplate) return;
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setSelectedIndex((i) => Math.min(i + 1, filteredTemplates.length - 1));
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setSelectedIndex((i) => Math.max(i - 1, 0));
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        const tpl = filteredTemplates[selectedIndex];
+        if (tpl) handleUse(tpl);
+      } else if (e.key === "Escape") {
         e.preventDefault();
         onOpenChange(false);
       }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open, onOpenChange]);
+    },
+    [
+      filteredTemplates,
+      selectedIndex,
+      handleUse,
+      onOpenChange,
+      editingTemplate,
+      deletingTemplate,
+    ],
+  );
+
+  // Scroll selected item into view
+  useEffect(() => {
+    if (!listRef.current) return;
+    const el = listRef.current.querySelector(`[data-index="${selectedIndex}"]`);
+    el?.scrollIntoView({ block: "nearest" });
+  }, [selectedIndex]);
 
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr);
@@ -190,6 +225,7 @@ export function TemplatePickerDialog({
       <div
         className="w-[70vw] max-w-[800px] h-[70vh] rounded-xl border border-border bg-card shadow-2xl flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
+        onKeyDown={handleKeyDown}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-border">
@@ -207,6 +243,7 @@ export function TemplatePickerDialog({
           <div className="relative max-w-sm">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <input
+              ref={searchInputRef}
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -217,7 +254,7 @@ export function TemplatePickerDialog({
         </div>
 
         {/* Template List */}
-        <div className="flex-1 overflow-y-auto px-5 py-3">
+        <div ref={listRef} className="flex-1 overflow-y-auto px-5 py-3">
           {filteredTemplates.length === 0 && (
             <div className="flex flex-col items-center justify-center h-40 text-muted-foreground">
               <FolderOpen className="h-10 w-10 mb-2 opacity-40" />
@@ -225,37 +262,43 @@ export function TemplatePickerDialog({
             </div>
           )}
 
-          {filteredTemplates.map((tpl) => {
+          {filteredTemplates.map((tpl, index) => {
             const displayName = tpl.i18nKey
               ? t(`presetTemplates.${tpl.i18nKey}.name`, {
                   defaultValue: tpl.name,
                 })
               : tpl.name;
             const isCustom = tpl.type === "custom";
+            const isSelected = index === selectedIndex;
             return (
               <div
                 key={tpl.id}
-                className="flex items-center gap-3 mb-2 px-3 py-2.5 rounded-md border border-border/30 hover:bg-accent/30 transition-colors"
+                data-index={index}
+                onClick={() => handleUse(tpl)}
+                onMouseEnter={() => setSelectedIndex(index)}
+                className={`group flex items-center gap-3 mb-1 px-3 py-2.5 rounded-md border transition-colors cursor-pointer ${
+                  isSelected
+                    ? "border-primary/40 bg-primary/5"
+                    : "border-transparent hover:bg-primary/5"
+                }`}
               >
                 <div className="flex-1 min-w-0">
-                  <span className="text-sm font-medium truncate block">
+                  <span
+                    className={`text-sm font-medium truncate block transition-colors ${isSelected ? "text-primary" : "group-hover:text-primary"}`}
+                  >
                     {displayName}
                   </span>
                   <span className="text-xs text-muted-foreground">
                     {t("templates.lastUpdated")}: {formatDate(tpl.updatedAt)}
                   </span>
                 </div>
-                <div className="flex items-center gap-1.5 flex-shrink-0">
-                  <button
-                    onClick={() => handleUse(tpl)}
-                    className="h-7 px-3 rounded-md text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors flex items-center gap-1"
-                  >
-                    <Play className="h-3 w-3" />
-                    {t("templates.use")}
-                  </button>
+                <div className="flex items-center gap-0.5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                   {isCustom && (
                     <button
-                      onClick={() => setEditingTemplate(tpl)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingTemplate(tpl);
+                      }}
                       className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
                       title={t("common.edit")}
                     >
@@ -263,7 +306,10 @@ export function TemplatePickerDialog({
                     </button>
                   )}
                   <button
-                    onClick={() => handleExport(tpl)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleExport(tpl);
+                    }}
                     className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
                     title={t("templates.export")}
                   >
@@ -271,7 +317,10 @@ export function TemplatePickerDialog({
                   </button>
                   {isCustom && (
                     <button
-                      onClick={() => setDeletingTemplate(tpl)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDeletingTemplate(tpl);
+                      }}
                       className="p-1.5 rounded-md text-destructive/70 hover:text-destructive hover:bg-destructive/10 transition-colors"
                       title={t("common.delete")}
                     >

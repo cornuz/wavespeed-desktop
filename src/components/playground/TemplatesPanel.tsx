@@ -1,4 +1,4 @@
-import { useCallback, useState, useEffect, useMemo } from "react";
+import { useCallback, useState, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import {
   TemplateDialog,
@@ -8,7 +8,6 @@ import { useTemplateStore } from "@/stores/templateStore";
 import { toast } from "@/hooks/useToast";
 import {
   Search,
-  Play,
   Pencil,
   Trash2,
   Download,
@@ -34,6 +33,8 @@ export function TemplatesPanel({ onUseTemplate }: TemplatesPanelProps) {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
     new Set(),
   );
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const listRef = useRef<HTMLDivElement>(null);
 
   const [localTemplates, setLocalTemplates] = useState<Template[]>([]);
   const [loadCounter, setLoadCounter] = useState(0);
@@ -43,7 +44,12 @@ export function TemplatesPanel({ onUseTemplate }: TemplatesPanelProps) {
     let cancelled = false;
     loadTemplates({ templateType: "playground" }).then(() => {
       if (!cancelled) {
-        setLocalTemplates(useTemplateStore.getState().templates);
+        // Read templates immediately after load completes
+        const storeTemplates = useTemplateStore.getState().templates;
+        // Filter to playground only in case another load overwrote the store
+        setLocalTemplates(
+          storeTemplates.filter((t) => t.templateType === "playground"),
+        );
       }
     });
     return () => {
@@ -81,6 +87,55 @@ export function TemplatesPanel({ onUseTemplate }: TemplatesPanelProps) {
     }
     return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
   }, [filteredTemplates]);
+
+  // Flat list of visible (non-collapsed) templates for keyboard navigation
+  const visibleTemplates = useMemo(() => {
+    const result: Template[] = [];
+    for (const [groupKey, groupTemplates] of grouped) {
+      if (!collapsedGroups.has(groupKey)) {
+        result.push(...groupTemplates);
+      }
+    }
+    return result;
+  }, [grouped, collapsedGroups]);
+
+  // Reset selection when results change
+  useEffect(() => {
+    setSelectedIndex(0);
+  }, [visibleTemplates.length, searchQuery]);
+
+  // Scroll selected item into view
+  useEffect(() => {
+    if (!listRef.current) return;
+    const el = listRef.current.querySelector(
+      `[data-tpl-index="${selectedIndex}"]`,
+    );
+    el?.scrollIntoView({ block: "nearest" });
+  }, [selectedIndex]);
+
+  const handleSearchKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (editingTemplate || deletingTemplate) return;
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setSelectedIndex((i) => Math.min(i + 1, visibleTemplates.length - 1));
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setSelectedIndex((i) => Math.max(i - 1, 0));
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        const tpl = visibleTemplates[selectedIndex];
+        if (tpl) onUseTemplate(tpl);
+      }
+    },
+    [
+      visibleTemplates,
+      selectedIndex,
+      onUseTemplate,
+      editingTemplate,
+      deletingTemplate,
+    ],
+  );
 
   const toggleGroup = (groupKey: string) => {
     setCollapsedGroups((prev) => {
@@ -170,6 +225,7 @@ export function TemplatesPanel({ onUseTemplate }: TemplatesPanelProps) {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={handleSearchKeyDown}
             placeholder={t("templates.searchPlaceholder")}
             className="w-full pl-8 pr-3 py-1.5 text-sm rounded-md border border-border bg-background focus:outline-none focus:ring-1 focus:ring-primary/50"
           />
@@ -177,7 +233,7 @@ export function TemplatesPanel({ onUseTemplate }: TemplatesPanelProps) {
       </div>
 
       {/* Template List */}
-      <div className="flex-1 overflow-y-auto">
+      <div ref={listRef} className="flex-1 overflow-y-auto">
         {filteredTemplates.length === 0 && (
           <div className="flex flex-col items-center justify-center h-40 text-muted-foreground">
             <FolderOpen className="h-10 w-10 mb-2 opacity-40" />
@@ -219,13 +275,26 @@ export function TemplatesPanel({ onUseTemplate }: TemplatesPanelProps) {
                       })
                     : tpl.name;
                   const isCustom = tpl.type === "custom";
+                  const flatIndex = visibleTemplates.indexOf(tpl);
+                  const isSelected = flatIndex === selectedIndex;
                   return (
                     <div
                       key={tpl.id}
-                      className="flex items-center gap-2 mx-2 mb-1.5 px-2.5 py-2 rounded-md border border-border/30 hover:bg-accent/30 transition-colors"
+                      data-tpl-index={flatIndex}
+                      onClick={() => onUseTemplate(tpl)}
+                      onMouseEnter={() => {
+                        if (flatIndex >= 0) setSelectedIndex(flatIndex);
+                      }}
+                      className={`group flex items-center gap-2 mx-2 mb-1.5 px-2.5 py-2 rounded-md border transition-colors cursor-pointer ${
+                        isSelected
+                          ? "border-primary/40 bg-primary/5"
+                          : "border-border/30 hover:bg-primary/5 hover:border-primary/30"
+                      }`}
                     >
                       <div className="flex-1 min-w-0">
-                        <span className="text-sm font-medium truncate block">
+                        <span
+                          className={`text-sm font-medium truncate block transition-colors ${isSelected ? "text-primary" : "group-hover:text-primary"}`}
+                        >
                           {displayName}
                         </span>
                         <span className="text-xs text-muted-foreground">
@@ -233,17 +302,13 @@ export function TemplatesPanel({ onUseTemplate }: TemplatesPanelProps) {
                           {formatDate(tpl.updatedAt)}
                         </span>
                       </div>
-                      <div className="flex items-center gap-1 flex-shrink-0">
-                        <button
-                          onClick={() => onUseTemplate(tpl)}
-                          className="h-7 px-2.5 rounded-md text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors flex items-center gap-1"
-                        >
-                          <Play className="h-3 w-3" />
-                          {t("templates.use")}
-                        </button>
+                      <div className="flex items-center gap-0.5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                         {isCustom && (
                           <button
-                            onClick={() => setEditingTemplate(tpl)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingTemplate(tpl);
+                            }}
                             className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
                             title={t("common.edit")}
                           >
@@ -251,7 +316,10 @@ export function TemplatesPanel({ onUseTemplate }: TemplatesPanelProps) {
                           </button>
                         )}
                         <button
-                          onClick={() => handleExport(tpl)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleExport(tpl);
+                          }}
                           className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
                           title={t("templates.export")}
                         >
@@ -259,7 +327,10 @@ export function TemplatesPanel({ onUseTemplate }: TemplatesPanelProps) {
                         </button>
                         {isCustom && (
                           <button
-                            onClick={() => setDeletingTemplate(tpl)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDeletingTemplate(tpl);
+                            }}
                             className="p-1.5 rounded-md text-destructive/70 hover:text-destructive hover:bg-destructive/10 transition-colors"
                             title={t("common.delete")}
                           >
