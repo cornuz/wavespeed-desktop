@@ -28,7 +28,7 @@ import {
   ChevronRight,
   ChevronDown,
 } from "lucide-react";
-import type { Template, TemplateExport } from "@/types/template";
+import type { Template } from "@/types/template";
 
 export function TemplatesPage() {
   const { t } = useTranslation();
@@ -38,12 +38,10 @@ export function TemplatesPage() {
     updateTemplate,
     deleteTemplate,
     deleteTemplates,
-    exportTemplates,
     exportSingleTemplate,
     exportBatchTemplates,
     exportMergedTemplates,
     importTemplates,
-    pickAndImportTemplates,
     useTemplate,
     queryTemplateNames,
   } = useTemplateStore();

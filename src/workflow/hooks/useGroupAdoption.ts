@@ -15,8 +15,6 @@ import { useUIStore } from "../stores/ui.store";
 
 /* ── constants ─────────────────────────────────────────────────────── */
 
-const RELEASE_THRESHOLD = 30; // px beyond the iterator edge to trigger release
-
 /* ── hook ──────────────────────────────────────────────────────────── */
 
 export function useGroupAdoption() {

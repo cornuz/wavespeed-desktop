@@ -16,7 +16,13 @@ import React, {
   useEffect,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { Handle, Position, useReactFlow, type NodeProps } from "reactflow";
+import {
+  Handle,
+  Position,
+  useReactFlow,
+  useUpdateNodeInternals,
+  type NodeProps,
+} from "reactflow";
 import { useExecutionStore } from "../../../stores/execution.store";
 import { useWorkflowStore } from "../../../stores/workflow.store";
 import { useUIStore } from "../../../stores/ui.store";
@@ -69,6 +75,7 @@ function CustomNodeComponent({
   const openPreview = useUIStore((s) => s.openPreview);
   const allNodes = useWorkflowStore((s) => s.nodes);
   const allLastResults = useExecutionStore((s) => s.lastResults);
+  const allSelectedOutputIndex = useExecutionStore((s) => s.selectedOutputIndex);
   const [hovered, setHovered] = useState(false);
   const [segmentPointPickerOpen, setSegmentPointPickerOpen] = useState(false);
   const [resultsExpanded, setResultsExpanded] = useState(false);
@@ -85,6 +92,7 @@ function CustomNodeComponent({
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [resizing, setResizing] = useState(false);
   const { getViewport, setNodes } = useReactFlow();
+  const updateNodeInternals = useUpdateNodeInternals();
   const shortId = id.slice(0, 8);
   const collapsed =
     (data.params?.__nodeCollapsed as boolean | undefined) ?? false;
@@ -429,6 +437,11 @@ function CustomNodeComponent({
     if (resultGroups.length > 0) setResultsExpanded(true);
   }, [resultGroups.length]);
 
+  // Tell React Flow to re-measure handle positions when node size changes
+  useEffect(() => {
+    requestAnimationFrame(() => updateNodeInternals(id));
+  }, [collapsed, resultsExpanded, resultGroups.length, schema.length, formFields.length, id, updateNodeInternals]);
+
   const saveWorkflow = useWorkflowStore((s) => s.saveWorkflow);
   const removeNode = useWorkflowStore((s) => s.removeNode);
   const { continueFrom } = useExecutionStore();
@@ -478,7 +491,8 @@ function CustomNodeComponent({
       /^file:\/\//i.test(u);
 
     const pickFromSourceNode = (sourceNodeId: string): string => {
-      const latest = allLastResults[sourceNodeId]?.[0]?.urls?.[0] ?? "";
+      const selIdx = allSelectedOutputIndex[sourceNodeId] ?? 0;
+      const latest = allLastResults[sourceNodeId]?.[selIdx]?.urls?.[0] ?? "";
       if (latest && isMediaLike(latest)) return latest;
 
       const sourceNode = allNodes.find((n) => n.id === sourceNodeId);
@@ -512,6 +526,7 @@ function CustomNodeComponent({
     return "";
   }, [
     allLastResults,
+    allSelectedOutputIndex,
     allNodes,
     data.params,
     edges,

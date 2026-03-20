@@ -3,7 +3,16 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import type { Model } from "@/types/model";
 
-const FEATURED_MODEL_FAMILIES = [
+const FEATURED_MODEL_FAMILIES: Array<{
+  name: string;
+  provider: string;
+  description: string;
+  poster: string;
+  primaryVariant: string;
+  tags: string[];
+  ratio: "poster" | "square";
+  isNew?: boolean;
+}> = [
   // ── Top row: poster cards (3:4) ──
   {
     name: "Nano Banana 2",

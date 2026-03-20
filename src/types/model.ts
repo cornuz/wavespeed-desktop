@@ -18,6 +18,9 @@ export interface SchemaProperty {
     maxItems?: number;
     properties?: Record<string, SchemaProperty>;
     required?: string[];
+    enum?: string[];
+    "x-enum"?: string[];
+    "x-order-properties"?: string[];
   };
   minItems?: number;
   maxItems?: number;
@@ -28,11 +31,12 @@ export interface SchemaProperty {
   }>;
   // Extended UI hints
   step?: number;
-  "x-ui-component"?: "slider" | "uploader" | "loras" | "select";
+  "x-ui-component"?: "slider" | "uploader" | "uploaders" | "loras" | "select" | "array";
   "x-accept"?: string;
   "x-placeholder"?: string;
   "x-hidden"?: boolean;
   nullable?: boolean;
+  "x-enum"?: string[];
 }
 
 export interface Model {
