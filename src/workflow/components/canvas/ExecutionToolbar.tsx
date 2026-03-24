@@ -59,6 +59,7 @@ export function ExecutionToolbar() {
         onClick={() => {
           const browserNodes = nodes.map((n) => ({
             id: n.id,
+            parentNode: (n as { parentNode?: string }).parentNode,
             data: {
               nodeType: n.data?.nodeType ?? "",
               params: {

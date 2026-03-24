@@ -223,6 +223,8 @@ export function WorkflowPage() {
   const { cancelAll, activeExecutions } = useExecutionStore();
   const initListeners = useExecutionStore((s) => s.initListeners);
   const wasRunning = useExecutionStore((s) => s._wasRunning);
+  const lastRunType = useExecutionStore((s) => s._lastRunType);
+  const lastRunNodeLabel = useExecutionStore((s) => s._lastRunNodeLabel);
   const nodeStatuses = useExecutionStore((s) => s.nodeStatuses);
   const isRunning = activeExecutions.size > 0;
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
@@ -281,7 +283,9 @@ export function WorkflowPage() {
       ? blobMediaType
       : previewTypeBase;
   const previewIsImage = previewType === "image";
-  const canNavigatePreview = previewIsImage && previewItems.length > 1;
+  const previewIsVideo = previewType === "video";
+  const canNavigatePreview =
+    (previewIsImage || previewIsVideo) && previewItems.length > 1;
 
   useEffect(() => {
     if (!previewSrc || !isActive) return;
@@ -381,6 +385,8 @@ export function WorkflowPage() {
         >["edges"],
         isDirty: target.isDirty,
       });
+      // Exit subgraph editing when switching tabs
+      useUIStore.getState().exitGroupEdit();
       setActiveTabId(tabId);
     },
     [activeTabId, tabs, saveCurrentTabSnapshot],
@@ -420,6 +426,8 @@ export function WorkflowPage() {
       edges,
       isDirty: false,
     });
+    // Exit subgraph editing when creating a new tab
+    useUIStore.getState().exitGroupEdit();
     setActiveTabId(newTabId);
     // Auto-scroll to show the newly created tab
     requestAnimationFrame(() => {
@@ -646,6 +654,8 @@ export function WorkflowPage() {
           edges,
           isDirty: false,
         });
+        // Exit subgraph editing when closing the last tab
+        useUIStore.getState().exitGroupEdit();
         setTabs([
           {
             tabId: newTabId,
@@ -675,6 +685,8 @@ export function WorkflowPage() {
           >["edges"],
           isDirty: target.isDirty,
         });
+        // Exit subgraph editing when closing the active tab
+        useUIStore.getState().exitGroupEdit();
         setActiveTabId(target.tabId);
       }
     },
@@ -735,6 +747,8 @@ export function WorkflowPage() {
           >["edges"],
           isDirty: target.isDirty,
         });
+        // Exit subgraph editing when closing multiple tabs including the active one
+        useUIStore.getState().exitGroupEdit();
         setActiveTabId(target.tabId);
       }
     },
@@ -1047,16 +1061,33 @@ export function WorkflowPage() {
   useEffect(() => {
     if (prevWasRunning.current && !wasRunning && !isRunning) {
       const hasError = Object.values(nodeStatuses).some((s) => s === "error");
+      const nodeName =
+        lastRunType === "single" && lastRunNodeLabel ? lastRunNodeLabel : null;
       setExecToast({
         type: hasError ? "error" : "success",
         msg: hasError
-          ? "Workflow completed with errors"
-          : "All nodes executed successfully",
+          ? nodeName
+            ? `${nodeName} executed with errors`
+            : "Workflow completed with errors"
+          : nodeName
+            ? `${nodeName} executed successfully`
+            : "All nodes executed successfully",
       });
       setTimeout(() => setExecToast(null), 4000);
     }
     prevWasRunning.current = wasRunning;
-  }, [wasRunning, isRunning, nodeStatuses]);
+  }, [wasRunning, isRunning, nodeStatuses, lastRunType, lastRunNodeLabel]);
+
+  // Listen for workflow:toast events dispatched from the store (e.g. cycle detection)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { type, msg } = (e as CustomEvent).detail;
+      setExecToast({ type, msg });
+      setTimeout(() => setExecToast(null), 4000);
+    };
+    window.addEventListener("workflow:toast", handler);
+    return () => window.removeEventListener("workflow:toast", handler);
+  }, []);
 
   // Model loading state
   const [modelSyncStatus, setModelSyncStatus] =
@@ -1246,6 +1277,7 @@ export function WorkflowPage() {
     const runAllInBrowser = useExecutionStore.getState().runAllInBrowser;
     const browserNodes = latestNodes.map((n) => ({
       id: n.id,
+      parentNode: n.parentNode,
       data: {
         nodeType: n.data?.nodeType ?? "",
         params: {
@@ -1802,7 +1834,7 @@ export function WorkflowPage() {
                 <TooltipContent side="bottom">
                   {nodes.length === 0
                     ? t("workflow.addNodesToRun", "Add nodes to run")
-                    : t("workflow.runWorkflow", "Run")}
+                    : t("workflow.runWorkflowHint", "Run Workflow")}
                 </TooltipContent>
               </Tooltip>
               {/* Run count */}
@@ -1827,7 +1859,7 @@ export function WorkflowPage() {
                   </div>
                 </TooltipTrigger>
                 <TooltipContent side="bottom">
-                  {t("workflow.runCount", "Run count")}
+                  {t("workflow.runCount", "Run Count")}
                 </TooltipContent>
               </Tooltip>
             </div>
@@ -1839,7 +1871,7 @@ export function WorkflowPage() {
                     className="h-7 w-7 rounded-lg flex items-center justify-center bg-red-900/60 text-red-300 hover:bg-red-800/70 transition-colors"
                     onClick={() => {
                       runCancelRef.current = true;
-                      if (workflowId) cancelAll(workflowId);
+                      cancelAll(workflowId || "browser");
                     }}
                   >
                     <svg
@@ -2117,13 +2149,54 @@ export function WorkflowPage() {
             {previewType === "3d" ? (
               <ModelViewerOverlay src={previewSrc} />
             ) : previewType === "video" ? (
-              <video
-                src={previewSrc}
-                controls
-                autoPlay
-                className="max-w-[80%] max-h-full rounded-xl shadow-2xl"
+              <div
+                className="relative max-w-[80%] max-h-full flex items-center justify-center"
                 onClick={(e) => e.stopPropagation()}
-              />
+              >
+                {canNavigatePreview && (
+                  <button
+                    className="absolute left-2 top-1/2 -translate-y-1/2 z-10 w-9 h-9 rounded-full bg-black/45 text-white hover:bg-black/65 transition-colors"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      prevPreview();
+                    }}
+                    title={t("workflow.previousImage", "Previous image")}
+                  >
+                    ←
+                  </button>
+                )}
+                <video
+                  src={previewSrc}
+                  controls
+                  autoPlay
+                  className="max-w-full max-h-full rounded-xl shadow-2xl"
+                  style={{
+                    maxHeight: canNavigatePreview
+                      ? "calc(100vh - 180px)"
+                      : "calc(100vh - 120px)",
+                  }}
+                />
+                {canNavigatePreview && previewItems.length > 1 && (
+                  <div className="absolute bottom-3 right-3 z-20">
+                    <PreviewSelectAsOutput
+                      previewItems={previewItems}
+                      previewIndex={previewIndex}
+                    />
+                  </div>
+                )}
+                {canNavigatePreview && (
+                  <button
+                    className="absolute right-2 top-1/2 -translate-y-1/2 z-10 w-9 h-9 rounded-full bg-black/45 text-white hover:bg-black/65 transition-colors"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      nextPreview();
+                    }}
+                    title={t("workflow.nextImage", "Next image")}
+                  >
+                    →
+                  </button>
+                )}
+              </div>
             ) : previewType === "audio" ? (
               <div
                 className="w-[80%] max-w-[700px] rounded-xl shadow-2xl bg-[hsl(var(--card))] p-6"
@@ -2152,8 +2225,21 @@ export function WorkflowPage() {
                   src={previewSrc}
                   alt="Preview"
                   className="max-w-full rounded-xl shadow-2xl object-contain"
-                  style={{ maxHeight: "calc(100vh - 120px)" }}
+                  style={{
+                    maxHeight: canNavigatePreview
+                      ? "calc(100vh - 180px)"
+                      : "calc(100vh - 120px)",
+                  }}
                 />
+                {/* Select as Output — bottom-right corner of image */}
+                {canNavigatePreview && previewItems.length > 1 && (
+                  <div className="absolute bottom-3 right-3 z-20">
+                    <PreviewSelectAsOutput
+                      previewItems={previewItems}
+                      previewIndex={previewIndex}
+                    />
+                  </div>
+                )}
                 {canNavigatePreview && (
                   <button
                     className="absolute right-2 top-1/2 -translate-y-1/2 z-10 w-9 h-9 rounded-full bg-black/45 text-white hover:bg-black/65 transition-colors"
@@ -2169,16 +2255,28 @@ export function WorkflowPage() {
               </div>
             )}
           </div>
-          <div className="py-3 text-center text-white/40 text-xs select-none flex-shrink-0">
-            {canNavigatePreview
-              ? t("workflow.previewNavHint", {
-                  current: previewIndex + 1,
-                  total: previewItems.length,
-                  defaultValue:
-                    "Use ← / → to navigate images ({{current}}/{{total}})",
-                })
-              : t("workflow.clickAnywhereToClose", "Click anywhere to close")}
-          </div>
+          {/* Bottom: thumbnail strip or hint text */}
+          {canNavigatePreview && previewItems.length > 1 ? (
+            <div
+              className="flex-shrink-0 pb-3 pt-1"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <PreviewThumbnailStrip
+                items={previewItems}
+                currentIndex={previewIndex}
+                onSelect={(idx) => {
+                  useUIStore.setState({
+                    previewIndex: idx,
+                    previewSrc: previewItems[idx],
+                  });
+                }}
+              />
+            </div>
+          ) : (
+            <div className="py-3 text-center text-white/40 text-xs select-none flex-shrink-0">
+              {t("workflow.clickAnywhereToClose", "Click anywhere to close")}
+            </div>
+          )}
         </div>
       )}
 
@@ -2900,5 +2998,130 @@ function ModelViewerOverlay({ src }: { src: string }) {
       onClick={(e) => e.stopPropagation()}
       className="w-[80%] max-w-[800px] h-[70vh] rounded-xl shadow-2xl overflow-hidden"
     />
+  );
+}
+
+/* ── Preview Thumbnail Strip ───────────────────────────────────────── */
+function PreviewThumbnailStrip({
+  items,
+  currentIndex,
+  onSelect,
+}: {
+  items: string[];
+  currentIndex: number;
+  onSelect: (index: number) => void;
+}) {
+  const stripRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to keep the active thumbnail visible
+  useEffect(() => {
+    const el = stripRef.current;
+    if (!el) return;
+    const thumb = el.children[currentIndex] as HTMLElement | undefined;
+    if (thumb) {
+      thumb.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+        inline: "center",
+      });
+    }
+  }, [currentIndex]);
+
+  return (
+    <div className="flex justify-center px-4">
+      <div
+        ref={stripRef}
+        className="flex gap-1.5 overflow-x-auto max-w-[80vw] py-1 px-1 scrollbar-thin scrollbar-thumb-white/20"
+      >
+        {items.map((url, idx) => {
+          const itemType = getOutputItemType(url);
+          return (
+            <button
+              key={idx}
+              onClick={() => onSelect(idx)}
+              className={`flex-shrink-0 w-14 h-14 rounded-lg overflow-hidden border-2 transition-all ${
+                idx === currentIndex
+                  ? "border-blue-500 ring-1 ring-blue-500/50 scale-105"
+                  : "border-white/10 hover:border-white/30 opacity-60 hover:opacity-90"
+              }`}
+            >
+              {itemType === "video" ? (
+                <video
+                  src={url}
+                  muted
+                  preload="metadata"
+                  className="w-full h-full object-cover pointer-events-none"
+                />
+              ) : (
+                <img
+                  src={url}
+                  alt=""
+                  className="w-full h-full object-cover"
+                  loading="lazy"
+                />
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ── Preview Select As Output Button ───────────────────────────────── */
+function PreviewSelectAsOutput({
+  previewItems,
+  previewIndex,
+}: {
+  previewItems: string[];
+  previewIndex: number;
+}) {
+  const { t } = useTranslation();
+  const selectedNodeId = useUIStore((s) => s.selectedNodeId);
+  const lastResults = useExecutionStore((s) =>
+    selectedNodeId ? s.lastResults[selectedNodeId] : undefined,
+  );
+  const selectedIdx = useExecutionStore((s) =>
+    selectedNodeId ? (s.selectedOutputIndex[selectedNodeId] ?? 0) : 0,
+  );
+  const currentUrl = previewItems[previewIndex];
+
+  // Find which lastResults group this preview URL belongs to
+  const groupIndex = useMemo(() => {
+    if (!lastResults || !currentUrl) return 0;
+    const idx = lastResults.findIndex((g) => g.urls.includes(currentUrl));
+    return idx >= 0 ? idx : 0;
+  }, [lastResults, currentUrl]);
+
+  const isCurrentOutput = selectedIdx === groupIndex;
+
+  const handleSelect = useCallback(() => {
+    if (!selectedNodeId || !lastResults || !currentUrl) return;
+    useExecutionStore.setState((s) => ({
+      selectedOutputIndex: {
+        ...s.selectedOutputIndex,
+        [selectedNodeId]: groupIndex,
+      },
+    }));
+  }, [selectedNodeId, lastResults, currentUrl, groupIndex]);
+
+  if (!selectedNodeId || !lastResults || lastResults.length <= 1) return null;
+
+  return (
+    <button
+      onClick={handleSelect}
+      disabled={isCurrentOutput}
+      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium backdrop-blur-sm transition-all shadow-lg ${
+        isCurrentOutput
+          ? "bg-green-600/80 text-white cursor-default"
+          : "bg-blue-500/90 text-white hover:bg-blue-600 cursor-pointer"
+      }`}
+    >
+      {isCurrentOutput ? (
+        <>✓ {t("workflow.selectedAsOutput", "Selected")}</>
+      ) : (
+        t("workflow.selectAsOutput", "Use as output")
+      )}
+    </button>
   );
 }

@@ -86,6 +86,38 @@ const migrations: NamedMigration[] = [
       }
     },
   },
+  {
+    id: "004_add_iterator_support",
+    apply: (db: SqlJsDatabase) => {
+      console.log("[Schema] Applying migration: 004_add_iterator_support");
+      // Add parent_node_id to nodes
+      const nodeCols = db.exec("PRAGMA table_info(nodes)");
+      const hasParentNodeId = nodeCols[0]?.values?.some(
+        (row) => row[1] === "parent_node_id",
+      );
+      if (!hasParentNodeId) {
+        db.run(
+          "ALTER TABLE nodes ADD COLUMN parent_node_id TEXT REFERENCES nodes(id) ON DELETE SET NULL",
+        );
+        db.run(
+          "CREATE INDEX IF NOT EXISTS idx_nodes_parent ON nodes(parent_node_id)",
+        );
+      }
+      // Add is_internal to edges
+      const edgeCols = db.exec("PRAGMA table_info(edges)");
+      const hasIsInternal = edgeCols[0]?.values?.some(
+        (row) => row[1] === "is_internal",
+      );
+      if (!hasIsInternal) {
+        db.run(
+          "ALTER TABLE edges ADD COLUMN is_internal INTEGER NOT NULL DEFAULT 0 CHECK (is_internal IN (0, 1))",
+        );
+        db.run(
+          "CREATE INDEX IF NOT EXISTS idx_edges_internal ON edges(is_internal)",
+        );
+      }
+    },
+  },
 ];
 
 export function initializeSchema(db: SqlJsDatabase): void {
@@ -112,6 +144,7 @@ export function initializeSchema(db: SqlJsDatabase): void {
     position_y REAL NOT NULL,
     params TEXT NOT NULL DEFAULT '{}',
     current_output_id TEXT,
+    parent_node_id TEXT REFERENCES nodes(id) ON DELETE SET NULL,
     FOREIGN KEY (current_output_id) REFERENCES node_executions(id) ON DELETE SET NULL
   )`);
 
@@ -138,6 +171,7 @@ export function initializeSchema(db: SqlJsDatabase): void {
     source_output_key TEXT NOT NULL,
     target_node_id TEXT NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
     target_input_key TEXT NOT NULL,
+    is_internal INTEGER NOT NULL DEFAULT 0 CHECK (is_internal IN (0, 1)),
     UNIQUE(source_node_id, source_output_key, target_node_id, target_input_key)
   )`);
 
@@ -202,6 +236,10 @@ export function initializeSchema(db: SqlJsDatabase): void {
   db.run(
     "CREATE INDEX IF NOT EXISTS idx_wf_edges_target ON edges(target_node_id)",
   );
+  db.run(
+    "CREATE INDEX IF NOT EXISTS idx_nodes_parent ON nodes(parent_node_id)",
+  );
+  db.run("CREATE INDEX IF NOT EXISTS idx_edges_internal ON edges(is_internal)");
   db.run(
     "CREATE INDEX IF NOT EXISTS idx_wf_daily_spend_date ON daily_spend(date)",
   );

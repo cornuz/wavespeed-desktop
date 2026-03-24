@@ -1147,6 +1147,29 @@
     "zoomOut": "缩小",
     "autoLayout": "整理布局",
     "freeToolModelHint": "首次运行时将自动下载 AI 模型，请耐心等待",
+    "triggerHint": "此触发器每次触发时都会重复运行下游工作流",
+    "dropToAddToGroup": "松开以添加到 Group",
+    "dropToRemoveFromGroup": "松开以从 Group 移出",
+    "editSubgraph": "编辑子图",
+    "mainWorkflow": "主工作流",
+    "exitSubgraph": "退出子图 (ESC)",
+    "editingSubgraph": "正在编辑子图",
+    "childNodesCount": "{{count}} 个子节点",
+    "groupInput": "组输入",
+    "groupOutput": "组输出",
+    "noExposedPorts": "暂无暴露端口",
+    "doubleClickToRename": "双击重命名",
+    "clickToSetAlias": "点击设置显示名称",
+    "setAlias": "设置显示名称...",
+    "aliasPlaceholder": "主图上的显示名称...",
+    "mappedAs": "映射为：",
+    "group": "分组",
+    "importWorkflow": "导入工作流",
+    "importWorkflowAsSubgraph": "导入工作流为子图",
+    "noWorkflowsToImport": "没有其他可导入的工作流",
+    "currentWorkflow": "当前",
+    "importContainsTrigger": "无法导入：工作流包含触发器节点，触发器不能在组内运行。",
+    "nodeCountLabel": "{{count}} 个节点",
     "more": "更多",
     "previousImage": "上一张图片",
     "nextImage": "下一张图片",
@@ -1162,6 +1185,9 @@
     "open": "打开",
     "paste": "粘贴",
     "addNode": "添加节点",
+    "addDownstreamNode": "添加下游节点",
+    "triggerLimitTitle": "只允许一个触发器",
+    "triggerLimitDesc": "每个工作流只能有一个触发器节点，请先删除现有的触发器。",
     "addNote": "添加备注",
     "note": "备注",
     "deleteConnection": "删除连接",
@@ -1176,6 +1202,8 @@
     "modelIdLabel": "模型 ID",
     "selectNode": "选择节点进行配置",
     "noExecutions": "暂无执行记录",
+    "selectAsOutput": "选为输出",
+    "selectedAsOutput": "已选为输出",
     "budgetExceeded": "超出预算",
     "dailySpend": "今日花费",
     "perExecutionLimit": "单次执行限额",
@@ -1211,6 +1239,11 @@
     "hideRun": "隐藏本次运行",
     "output": "输出",
     "outputLowercase": "输出",
+    "httpTriggerFields": "API 输入字段",
+    "httpResponseFields": "API 响应字段",
+    "addField": "添加",
+    "noFieldsHint": "暂无字段，点击添加创建。",
+    "statusCode": "状态码",
     "expandNode": "展开",
     "collapseNode": "收起",
     "collapseAll": "全部收起",
@@ -1226,6 +1259,7 @@
     "noNodesAvailable": "暂无可用节点",
     "nodeCategory": {
       "recent": "最近使用",
+      "trigger": "触发器",
       "input": "输入",
       "ai-task": "AI 任务",
       "free-tool": "免费工具",
@@ -1234,6 +1268,14 @@
       "control": "控制"
     },
     "nodeDefs": {
+      "trigger/directory": {
+        "label": "目录触发器",
+        "hint": "扫描本地文件夹，每个文件执行一次工作流"
+      },
+      "trigger/http": {
+        "label": "HTTP 触发",
+        "hint": "将工作流发布为 HTTP API，定义调用方需要提供的输入字段"
+      },
       "ai-task/run": {
         "label": "WaveSpeed API",
         "hint": "运行平台上的任意 AI 模型——图像、视频、音频等",
@@ -1320,6 +1362,10 @@
           }
         }
       },
+      "output/http-response": {
+        "label": "HTTP 响应",
+        "hint": "定义工作流通过 HTTP 返回的内容"
+      },
       "free-tool/image-enhancer": {
         "label": "图片增强",
         "hint": "免费放大和锐化图片（2×–4×）"
@@ -1388,6 +1434,14 @@
       "processing/select": {
         "label": "选择",
         "hint": "按索引从数组中取出一个元素"
+      },
+      "control/iterator": {
+        "label": "分组",
+        "hint": "将节点分组为子工作流，便于组织管理"
+      },
+      "control/group": {
+        "label": "分组",
+        "hint": "将节点分组为子工作流，便于组织管理"
       }
     },
     "modelSelector": {
@@ -1471,6 +1525,18 @@
       "concat": {
         "title": "Concat 节点 — 合并多个输出",
         "desc": "需要将多张图片传入「images」参数？使用 Concat 节点：\n\n1. 将每个上游节点的 image 输出分别连接到 Concat 的 value1、value2、value3 等输入口\n2. 将 Concat 的 output（此时为数组）连接到下游节点的 images 参数\n\n示例：\n[上传 A] → image → Concat → output（数组）→ [AI 任务].images\n[上传 B] → image ↗\n\n适用于任何类型的输出——图片、视频、文本——只要你需要将多个单值合并为一个数组输入。"
+      },
+      "directoryTrigger": {
+        "title": "目录触发器 — 批量处理本地文件",
+        "desc": "自动扫描本地文件夹，对每个文件执行一次工作流：\n\n• 选择目录和文件类型（图片、视频、音频或全部）\n• 触发器会找到所有匹配的文件，逐个送入下游流水线\n• 非常适合批量处理——例如增强文件夹中的每张照片、转换所有视频等\n\n每次执行只接收一个文件，下游节点的工作方式与手动上传完全一致。"
+      },
+      "httpTrigger": {
+        "title": "HTTP 触发器 — 通过 API 运行工作流",
+        "desc": "将任意工作流变成 HTTP API 端点：\n\n• 定义输出字段（如 image、prompt）——每个字段会成为画布上的一个输出端口\n• 当 POST 请求到达时，JSON body 中的字段会被提取并传递给下游节点\n• 搭配 HTTP Response 节点可将结果返回给调用方\n\n这样你就可以通过发送 HTTP 请求，将工作流集成到外部应用、脚本或自动化工具中。"
+      },
+      "group": {
+        "title": "Group 节点 — 组织子工作流",
+        "desc": "将多个节点归入一个可折叠的容器：\n\n• 将节点拖入 Group 以封装子工作流\n• 在 Group 表面暴露选定的输入/输出，供外部节点连接\n• 点击「编辑子图」进入 Group 内部编辑节点\n• 可导入已有工作流到 Group 中作为构建模块复用\n\nGroup 让复杂工作流保持整洁和模块化——可以把它们看作可以互相连接的函数。"
       },
       "canvas": {
         "title": "画布操作",

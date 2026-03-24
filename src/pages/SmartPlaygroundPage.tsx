@@ -825,7 +825,6 @@ export function SmartPlaygroundPage() {
               error={error}
               isLoading={isRunning}
               modelId={resolvedVariantId}
-              gridLayout={outputs.length > 1}
             />
           </div>
         </div>

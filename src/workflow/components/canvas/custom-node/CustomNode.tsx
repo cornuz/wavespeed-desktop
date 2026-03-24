@@ -16,7 +16,13 @@ import React, {
   useEffect,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { Handle, Position, useReactFlow, type NodeProps } from "reactflow";
+import {
+  Handle,
+  Position,
+  useReactFlow,
+  useUpdateNodeInternals,
+  type NodeProps,
+} from "reactflow";
 import { useExecutionStore } from "../../../stores/execution.store";
 import { useWorkflowStore } from "../../../stores/workflow.store";
 import { useUIStore } from "../../../stores/ui.store";
@@ -60,15 +66,20 @@ function CustomNodeComponent({
   const edges = useWorkflowStore((s) => s.edges);
   const updateNodeParams = useWorkflowStore((s) => s.updateNodeParams);
   const updateNodeData = useWorkflowStore((s) => s.updateNodeData);
+  const syncExposedParamsOnModelSwitch = useWorkflowStore(
+    (s) => s.syncExposedParamsOnModelSwitch,
+  );
   const workflowId = useWorkflowStore((s) => s.workflowId);
   const isDirty = useWorkflowStore((s) => s.isDirty);
   const { runNode, cancelNode, retryNode } = useExecutionStore();
   const openPreview = useUIStore((s) => s.openPreview);
   const allNodes = useWorkflowStore((s) => s.nodes);
   const allLastResults = useExecutionStore((s) => s.lastResults);
+  const allSelectedOutputIndex = useExecutionStore((s) => s.selectedOutputIndex);
   const [hovered, setHovered] = useState(false);
   const [segmentPointPickerOpen, setSegmentPointPickerOpen] = useState(false);
   const [resultsExpanded, setResultsExpanded] = useState(false);
+  const [showRunCountPicker, setShowRunCountPicker] = useState(false);
   const storeModels = useModelsStore((s) => s.models);
   const getModelById = useModelsStore((s) => s.getModelById);
   const fetchModels = useModelsStore((s) => s.fetchModels);
@@ -78,8 +89,10 @@ function CustomNodeComponent({
   const savedHeight =
     (data.params.__nodeHeight as number | undefined) ?? undefined;
   const nodeRef = useRef<HTMLDivElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const [resizing, setResizing] = useState(false);
   const { getViewport, setNodes } = useReactFlow();
+  const updateNodeInternals = useUpdateNodeInternals();
   const shortId = id.slice(0, 8);
   const collapsed =
     (data.params?.__nodeCollapsed as boolean | undefined) ?? false;
@@ -134,7 +147,8 @@ function CustomNodeComponent({
       e.stopPropagation();
       e.preventDefault();
       const el = nodeRef.current;
-      if (!el) return;
+      const wrapper = wrapperRef.current;
+      if (!el || !wrapper) return;
       setResizing(true);
 
       const startX = e.clientX;
@@ -155,14 +169,14 @@ function CustomNodeComponent({
         if (xDir === -1 || yDir === -1) {
           const tx = xDir === -1 ? dx : 0;
           const ty = yDir === -1 ? dy : 0;
-          el.style.transform = `translate(${tx}px, ${ty}px)`;
+          wrapper.style.transform = `translate(${tx}px, ${ty}px)`;
         }
       };
 
       const onUp = (ev: MouseEvent) => {
         document.removeEventListener("mousemove", onMove);
         document.removeEventListener("mouseup", onUp);
-        el.style.transform = "";
+        wrapper.style.transform = "";
         el.style.width = "";
         el.style.minHeight = "";
         setResizing(false);
@@ -202,6 +216,7 @@ function CustomNodeComponent({
   );
 
   const running = status === "running";
+  const runCount = (data.params.__runCount as number) || 1;
 
   const connectedSet = useMemo(() => {
     const s = new Set<string>();
@@ -299,6 +314,17 @@ function CustomNodeComponent({
         label: finalLabel,
       });
 
+      // Sync iterator exposed params if this node is inside an iterator
+      // - Remove exposed inputs whose param keys no longer exist in the new model
+      // - Update labels/namespacedKeys for params that still exist (label changed)
+      // - Keep output exposed params (output handle is always "output")
+      // Include both model schema fields and static input port keys
+      const newInputKeys = [
+        ...inputSchemaForNode.map((p) => p.name),
+        ...(data.inputDefinitions ?? []).map((d: { key: string }) => d.key),
+      ];
+      syncExposedParamsOnModelSwitch(id, finalLabel, newInputKeys);
+
       const execStore = useExecutionStore.getState();
       execStore.updateNodeStatus(id, "idle");
       useExecutionStore.setState((s) => {
@@ -316,6 +342,7 @@ function CustomNodeComponent({
       id,
       updateNodeData,
       updateNodeParams,
+      syncExposedParamsOnModelSwitch,
       removeEdgesByIds,
       allNodes,
     ],
@@ -410,9 +437,23 @@ function CustomNodeComponent({
     if (resultGroups.length > 0) setResultsExpanded(true);
   }, [resultGroups.length]);
 
+  // Tell React Flow to re-measure handle positions when node size changes
+  useEffect(() => {
+    requestAnimationFrame(() => updateNodeInternals(id));
+  }, [collapsed, resultsExpanded, resultGroups.length, schema.length, formFields.length, id, updateNodeInternals]);
+
   const saveWorkflow = useWorkflowStore((s) => s.saveWorkflow);
   const removeNode = useWorkflowStore((s) => s.removeNode);
   const { continueFrom } = useExecutionStore();
+
+  // Detect if this node is inside an Iterator container
+  const parentIteratorId = useMemo(() => {
+    const thisNode = allNodes.find((n) => n.id === id);
+    return (
+      (thisNode as { parentNode?: string } | undefined)?.parentNode ?? null
+    );
+  }, [allNodes, id]);
+  const isInsideIterator = !!parentIteratorId;
 
   const ensureWorkflowId = async () => {
     let wfId = workflowId;
@@ -450,7 +491,8 @@ function CustomNodeComponent({
       /^file:\/\//i.test(u);
 
     const pickFromSourceNode = (sourceNodeId: string): string => {
-      const latest = allLastResults[sourceNodeId]?.[0]?.urls?.[0] ?? "";
+      const selIdx = allSelectedOutputIndex[sourceNodeId] ?? 0;
+      const latest = allLastResults[sourceNodeId]?.[selIdx]?.urls?.[0] ?? "";
       if (latest && isMediaLike(latest)) return latest;
 
       const sourceNode = allNodes.find((n) => n.id === sourceNodeId);
@@ -484,6 +526,7 @@ function CustomNodeComponent({
     return "";
   }, [
     allLastResults,
+    allSelectedOutputIndex,
     allNodes,
     data.params,
     edges,
@@ -573,10 +616,30 @@ function CustomNodeComponent({
     if (running) {
       cancelNode(wfId, id);
     } else if (data.nodeType?.startsWith("output/")) {
-      // Output nodes (File Export, Preview) should reuse upstream results, not re-run them
       continueFrom(wfId, id);
     } else {
-      runNode(wfId, id);
+      if (runCount > 1) {
+        // Multi-run (gacha): run N times sequentially with seed perturbation
+        const baseSeed =
+          typeof data.params.seed === "number"
+            ? data.params.seed
+            : Math.floor(Math.random() * 2147483647);
+        for (let i = 0; i < runCount; i++) {
+          const newSeed =
+            (baseSeed + i * 1000 + Math.floor(Math.random() * 999) + 1) %
+            2147483647;
+          updateNodeParams(id, {
+            ...useWorkflowStore.getState().nodes.find((n) => n.id === id)?.data
+              .params,
+            seed: newSeed,
+          });
+          // Small delay to let store update propagate
+          await new Promise((r) => setTimeout(r, 50));
+          await runNode(wfId, id);
+        }
+      } else {
+        runNode(wfId, id);
+      }
     }
   };
 
@@ -606,8 +669,12 @@ function CustomNodeComponent({
 
   return (
     <div
+      ref={wrapperRef}
       onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      onMouseLeave={() => {
+        setHovered(false);
+        setShowRunCountPicker(false);
+      }}
       onWheel={onWheel}
       className="relative"
     >
@@ -634,58 +701,128 @@ function CustomNodeComponent({
             </button>
           ) : (
             <>
-              <button
-                onClick={onRun}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-medium shadow-lg backdrop-blur-sm bg-blue-500 text-white hover:bg-blue-600 transition-all whitespace-nowrap"
-                title={t("workflow.runNode", "Run Node")}
-              >
-                <svg
-                  width="12"
-                  height="12"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                >
-                  <polygon points="6,3 20,12 6,21" />
-                </svg>{" "}
-                {t("workflow.run", "Run")}
-              </button>
-              <button
-                onClick={onRunFromHere}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-medium shadow-lg backdrop-blur-sm bg-green-600 text-white hover:bg-green-700 transition-all whitespace-nowrap"
-                title={t("workflow.continueFrom", "Continue From")}
-              >
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                >
-                  <polygon points="4,4 14,12 4,20" />
-                  <polygon points="12,4 22,12 12,20" />
-                </svg>{" "}
-                {t("workflow.runFromHere", "Run from here")}
-              </button>
-              <button
-                onClick={onDelete}
-                className="flex items-center justify-center w-8 h-8 rounded-full shadow-lg backdrop-blur-sm bg-[hsl(var(--muted))] text-muted-foreground hover:bg-red-500/20 hover:text-red-400 transition-all"
-                title={t("workflow.delete", "Delete")}
-              >
-                <svg
-                  width="13"
-                  height="13"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <polyline points="3 6 5 6 21 6" />
-                  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                  <line x1="10" y1="11" x2="10" y2="17" />
-                  <line x1="14" y1="11" x2="14" y2="17" />
-                </svg>
-              </button>
+              {/* Split Run button: main area runs, chevron opens count picker */}
+              <div className="relative flex items-stretch">
+                <Tooltip delayDuration={0}>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={onRun}
+                      className="flex items-center gap-1 pl-3 pr-2 rounded-l-full text-[11px] font-medium shadow-lg backdrop-blur-sm bg-blue-600 text-white hover:bg-blue-700 transition-all whitespace-nowrap h-[30px]"
+                    >
+                      <svg
+                        width="10"
+                        height="10"
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                      >
+                        <polygon points="6,3 20,12 6,21" />
+                      </svg>{" "}
+                      {t("workflow.run", "Run")}
+                      {runCount > 1 && (
+                        <span className="ml-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-white/20 border border-white/30">
+                          ×{runCount}
+                        </span>
+                      )}
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">
+                    {t("workflow.runNode", "Run Node")}
+                  </TooltipContent>
+                </Tooltip>
+                <Tooltip delayDuration={0}>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowRunCountPicker((v) => !v);
+                      }}
+                      className="flex items-center justify-center w-[24px] rounded-r-full shadow-lg backdrop-blur-sm bg-blue-600 text-white hover:bg-blue-700 transition-all border-l border-white/20 h-[30px]"
+                    >
+                      <svg
+                        width="8"
+                        height="8"
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                      >
+                        <polygon points="4,8 12,18 20,8" />
+                      </svg>
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">
+                    {t("workflow.runCount", "Run Count")}
+                  </TooltipContent>
+                </Tooltip>
+                {showRunCountPicker && (
+                  <div className="absolute top-full mt-1 left-1/2 -translate-x-1/2 bg-[hsl(var(--popover))] border border-[hsl(var(--border))] rounded-lg shadow-xl p-1 flex gap-0.5 z-50">
+                    {[1, 2, 3, 4, 5, 8, 10].map((n) => (
+                      <button
+                        key={n}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setParam("__runCount", n);
+                          setShowRunCountPicker(false);
+                        }}
+                        className={`w-7 h-7 rounded text-[11px] font-medium transition-colors ${
+                          runCount === n
+                            ? "bg-blue-500 text-white"
+                            : "hover:bg-accent text-foreground"
+                        }`}
+                      >
+                        {n}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <Tooltip delayDuration={0}>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={onRunFromHere}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-medium shadow-lg backdrop-blur-sm bg-green-600 text-white hover:bg-green-700 transition-all whitespace-nowrap"
+                  >
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                    >
+                      <polygon points="4,4 14,12 4,20" />
+                      <polygon points="12,4 22,12 12,20" />
+                    </svg>{" "}
+                    {t("workflow.runFromHere", "Run from here")}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="bg-green-600 text-white">
+                  {t("workflow.continueFrom", "Continue From")}
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip delayDuration={0}>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={onDelete}
+                    className="flex items-center justify-center w-8 h-8 rounded-full shadow-lg backdrop-blur-sm bg-[hsl(var(--muted))] text-muted-foreground hover:bg-red-500/20 hover:text-red-400 transition-all"
+                  >
+                    <svg
+                      width="13"
+                      height="13"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <polyline points="3 6 5 6 21 6" />
+                      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                      <line x1="10" y1="11" x2="10" y2="17" />
+                      <line x1="14" y1="11" x2="14" y2="17" />
+                    </svg>
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="bg-red-500 text-white">
+                  {t("workflow.delete", "Delete")}
+                </TooltipContent>
+              </Tooltip>
             </>
           )}
         </div>
@@ -699,25 +836,28 @@ function CustomNodeComponent({
           bg-[hsl(var(--card))] text-[hsl(var(--card-foreground))]
           border-2
           ${resizing ? "" : "transition-all duration-300"}
-          ${running ? "border-blue-500 animate-pulse-subtle" : ""}
-          ${!running && selected ? "border-blue-500 shadow-[0_0_20px_rgba(96,165,250,.25)] ring-1 ring-blue-500/30" : ""}
+          ${running ? (isInsideIterator ? "border-blue-500 animate-pulse-subtle" : "border-blue-500 animate-pulse-subtle") : ""}
+          ${!running && selected ? (isInsideIterator ? "border-blue-500 shadow-[0_0_20px_rgba(96,165,250,.25)] ring-1 ring-blue-500/30" : "border-blue-500 shadow-[0_0_20px_rgba(96,165,250,.25)] ring-1 ring-blue-500/30") : ""}
           ${!running && !selected && status === "confirmed" ? "border-green-500/70" : ""}
           ${!running && !selected && status === "unconfirmed" ? "border-orange-500/70" : ""}
           ${!running && !selected && status === "error" ? "border-red-500/70" : ""}
           ${!running && !selected && status === "idle" ? (hovered ? "border-[hsl(var(--border))] shadow-lg" : "border-[hsl(var(--border))] shadow-md") : ""}
+          ${isInsideIterator && !running && !selected && status === "idle" ? "ring-1 ring-blue-500/20" : ""}
         `}
         style={{ width: savedWidth, minHeight: savedHeight, fontSize: 13 }}
       >
         {/* ── Title bar ──────────── */}
         <div
           className={`flex items-center gap-1.5 px-3 py-2 select-none
-        ${running ? "bg-blue-500/10" : status === "confirmed" ? "bg-green-500/8" : status === "error" ? "bg-red-500/8" : ""}`}
+        ${running ? (isInsideIterator ? "bg-blue-500/10" : "bg-blue-500/10") : status === "confirmed" ? "bg-green-500/8" : status === "error" ? "bg-red-500/8" : ""}`}
         >
           <span
             className={`w-2 h-2 rounded-full flex-shrink-0
           ${
             running
-              ? "bg-blue-500 animate-pulse"
+              ? isInsideIterator
+                ? "bg-blue-500 animate-pulse"
+                : "bg-blue-500 animate-pulse"
               : status === "confirmed"
                 ? "bg-green-500"
                 : status === "error"
@@ -920,17 +1060,76 @@ function CustomNodeComponent({
         )}
       </div>
 
-      {/* ── Output handle — placed on outer div so React Flow positions it correctly ───── */}
-      <Handle
-        type="source"
-        position={Position.Right}
-        id="output"
-        style={{ ...handleRight(), top: 22 }}
-        title={t("workflow.output", "Output")}
-      />
-      <div className="absolute top-[15px] right-5 text-[10px] font-medium text-primary/60 select-none">
-        {t("workflow.outputLowercase", "output")}
-      </div>
+      {/* ── Output handles — one per outputDefinition, or single default ───── */}
+      {(() => {
+        // HTTP Response has no outputs
+        if (data.nodeType === "output/http-response") return null;
+        // HTTP Trigger: handles are rendered inline by DynamicFieldsEditor
+        if (data.nodeType === "trigger/http") return null;
+
+        const outputDefs = (data.outputDefinitions ?? []) as Array<{
+          key: string;
+          label?: string;
+        }>;
+        if (outputDefs.length > 1) {
+          // Multiple output ports (e.g. HTTP Trigger with dynamic mappings)
+          return outputDefs.map((def, idx) => {
+            const spacing = 30;
+            const startY = 22;
+            const y = startY + idx * spacing;
+            return (
+              <div key={def.key}>
+                <Handle
+                  type="source"
+                  position={Position.Right}
+                  id={def.key}
+                  style={{ ...handleRight(), top: y }}
+                  title={def.label ?? def.key}
+                />
+                <div
+                  className="absolute right-5 text-[10px] font-medium text-primary/60 select-none"
+                  style={{ top: y - 7 }}
+                >
+                  {def.label ?? def.key}
+                </div>
+              </div>
+            );
+          });
+        }
+        if (outputDefs.length === 1) {
+          // Single dynamic output port — use its key/label
+          const def = outputDefs[0];
+          return (
+            <>
+              <Handle
+                type="source"
+                position={Position.Right}
+                id={def.key}
+                style={{ ...handleRight(), top: 22 }}
+                title={def.label ?? def.key}
+              />
+              <div className="absolute top-[15px] right-5 text-[10px] font-medium text-primary/60 select-none">
+                {def.label ?? def.key}
+              </div>
+            </>
+          );
+        }
+        // Default: single output handle
+        return (
+          <>
+            <Handle
+              type="source"
+              position={Position.Right}
+              id="output"
+              style={{ ...handleRight(), top: 22 }}
+              title={t("workflow.output", "Output")}
+            />
+            <div className="absolute top-[15px] right-5 text-[10px] font-medium text-primary/60 select-none">
+              {t("workflow.outputLowercase", "output")}
+            </div>
+          </>
+        );
+      })()}
 
       {/* ── Side "Add Node" button — right side only, visible on hover / selected ───── */}
       {(hovered || selected) && (
@@ -938,7 +1137,17 @@ function CustomNodeComponent({
           <TooltipTrigger asChild>
             <button
               type="button"
-              className="nodrag nopan absolute top-1/2 -translate-y-1/2 -right-3 z-40 flex items-center justify-center w-6 h-6 rounded-full shadow-lg backdrop-blur-sm bg-blue-500 text-white hover:bg-blue-600 hover:scale-110 transition-all duration-150"
+              className={`nodrag nopan absolute z-40 flex items-center justify-center w-6 h-6 rounded-full shadow-lg backdrop-blur-sm text-white hover:scale-110 transition-all duration-150 ${
+                isInsideIterator
+                  ? "bg-blue-500 hover:bg-blue-600"
+                  : "bg-blue-500 hover:bg-blue-600"
+              }`}
+              style={
+                data.nodeType === "trigger/http" ||
+                data.nodeType === "control/iterator"
+                  ? { top: 15, right: -12 }
+                  : { top: "50%", right: -12, transform: "translateY(-50%)" }
+              }
               onClick={(e) => {
                 e.stopPropagation();
                 const rect = (

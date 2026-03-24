@@ -27,6 +27,8 @@ import {
   RANDOM_SEED_MAX,
   NODE_INPUT_ACCEPT_RULES,
   formatLabel,
+  inputCls,
+  selectCls,
 } from "./CustomNodeTypes";
 import { HandleAnchor } from "./CustomNodeHandleAnchor";
 import {
@@ -81,11 +83,6 @@ export function ParamRow({
   const handleId = `param-${schema.name}`;
   const cur = value ?? schema.default;
   const showEditor = !connected;
-
-  const inputCls =
-    "w-full rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-2 py-1.5 text-xs text-[hsl(var(--foreground))] focus:outline-none focus:ring-1 focus:ring-blue-500/50 focus:border-blue-500 placeholder:text-[hsl(var(--muted-foreground))]";
-  const selectCls =
-    "rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-2 py-1.5 text-xs text-[hsl(var(--foreground))] focus:outline-none focus:ring-1 focus:ring-blue-500/50";
 
   // ── Textarea: full-width below label ──
   if (ft === "textarea") {
@@ -848,8 +845,6 @@ export function DefParamControl({
   onChange: (v: unknown) => void;
 }) {
   const { t } = useTranslation();
-  const cls =
-    "rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-2 py-1.5 text-xs text-[hsl(var(--foreground))] focus:outline-none focus:ring-1 focus:ring-blue-500/50";
   const cur = value ?? param.default;
   const workflowId = useWorkflowStore((s) => s.workflowId);
   const saveWorkflow = useWorkflowStore((s) => s.saveWorkflow);
@@ -906,7 +901,7 @@ export function DefParamControl({
     };
 
     return (
-      <div className="w-full max-w-[260px] space-y-1.5">
+      <div className="w-full space-y-1">
         <div className="flex items-center gap-1.5">
           <CompInput
             type="text"
@@ -916,43 +911,53 @@ export function DefParamControl({
               "workflow.nodeDefs.output/file.params.outputDir.placeholder",
               "Leave empty to use workflow default output directory",
             )}
-            className={`${cls} flex-1`}
+            className={`${inputCls} flex-1`}
             onClick={(e) => e.stopPropagation()}
           />
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              handlePickDirectory();
-            }}
-            title={t("workflow.selectDirectory", "Select directory")}
-            className={`flex-shrink-0 flex items-center justify-center w-8 h-8 rounded-md border border-[hsl(var(--border))] transition-colors ${
-              selectingDir
-                ? "bg-blue-500/25 animate-pulse text-blue-300"
-                : "bg-blue-500/15 text-blue-400 hover:bg-blue-500/25"
-            }`}
-          >
-            📂
-          </button>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleOpenDirectory();
-            }}
-            title={
-              textVal.trim()
+          <Tooltip delayDuration={0}>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handlePickDirectory();
+                }}
+                className={`flex-shrink-0 flex items-center justify-center w-8 h-8 rounded-md border border-[hsl(var(--border))] transition-colors ${
+                  selectingDir
+                    ? "bg-blue-500/25 animate-pulse text-blue-300"
+                    : "bg-blue-500/15 text-blue-400 hover:bg-blue-500/25"
+                }`}
+              >
+                📂
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top">
+              {t("workflow.selectDirectory", "Select directory")}
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip delayDuration={0}>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleOpenDirectory();
+                }}
+                className={`flex-shrink-0 flex items-center justify-center w-8 h-8 rounded-md border border-[hsl(var(--border))] transition-colors ${
+                  openingDir
+                    ? "bg-blue-500/25 animate-pulse text-blue-300"
+                    : "bg-blue-500/15 text-blue-400 hover:bg-blue-500/25"
+                }`}
+              >
+                ↗
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top">
+              {textVal.trim()
                 ? t("workflow.openFolder", "Open folder")
-                : t("workflow.openWorkflowFolder", "Open workflow folder")
-            }
-            className={`flex-shrink-0 flex items-center justify-center w-8 h-8 rounded-md border border-[hsl(var(--border))] transition-colors ${
-              openingDir
-                ? "bg-blue-500/25 animate-pulse text-blue-300"
-                : "bg-blue-500/15 text-blue-400 hover:bg-blue-500/25"
-            }`}
-          >
-            ↗
-          </button>
+                : t("workflow.openWorkflowFolder", "Open workflow folder")}
+            </TooltipContent>
+          </Tooltip>
         </div>
         <div
           className="text-[10px] text-muted-foreground truncate"
@@ -979,7 +984,7 @@ export function DefParamControl({
       <select
         value={String(cur ?? "")}
         onChange={(e) => onChange(e.target.value)}
-        className={`nodrag ${cls} max-w-[160px]`}
+        className={`nodrag ${selectCls} max-w-[160px]`}
         onClick={(e) => e.stopPropagation()}
       >
         {param.options.map((o) => (
@@ -1022,7 +1027,7 @@ export function DefParamControl({
           value={textVal}
           onChange={(e) => onChange(e.target.value)}
           placeholder={t("workflow.localFileOrUrl", "Local file or URL")}
-          className={`${cls} flex-1`}
+          className={`${inputCls} flex-1`}
           onClick={(e) => e.stopPropagation()}
         />
         <label
@@ -1095,7 +1100,7 @@ export function DefParamControl({
       <CompTextarea
         value={String(cur ?? "")}
         onChange={(e) => onChange(e.target.value)}
-        className={`nodrag ${cls} w-full min-h-[40px] resize-y max-h-[300px]`}
+        className={`nodrag ${inputCls} w-full min-h-[40px] resize-y max-h-[300px]`}
         onClick={(e) => e.stopPropagation()}
       />
     );
@@ -1104,7 +1109,7 @@ export function DefParamControl({
       type="text"
       value={String(cur ?? "")}
       onChange={(e) => onChange(e.target.value)}
-      className={`${cls} max-w-[160px]`}
+      className={`${inputCls} max-w-[160px]`}
       onClick={(e) => e.stopPropagation()}
     />
   );
@@ -1146,8 +1151,6 @@ export function InputPortControl({
   const [maskEditorOpen, setMaskEditorOpen] = useState(false);
   const [drawingMask, setDrawingMask] = useState(false);
   const textVal = String(value ?? "");
-  const cls =
-    "rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-2 py-1.5 text-xs text-[hsl(var(--foreground))] focus:outline-none focus:ring-1 focus:ring-blue-500/50";
 
   const detectSource = textVal
     ? (/^local-asset:\/\//i.test(textVal)
@@ -1282,7 +1285,7 @@ export function InputPortControl({
           value={textVal}
           onChange={(e) => onChange(e.target.value)}
           placeholder={t("workflow.localFileOrUrl", "Local file or URL")}
-          className={`${cls} flex-1`}
+          className={`${inputCls} flex-1`}
           onClick={(e) => e.stopPropagation()}
         />
         {showDrawMaskButton && (

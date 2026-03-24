@@ -1137,7 +1137,7 @@
     "runTarget": "Run target",
     "runTargetAll": "Run All Nodes",
     "runTargetSelected": "Run Selected Node",
-    "runCount": "Run count",
+    "runCount": "Run Count",
     "stop": "Stop",
     "running": "Running...",
     "cancelAll": "Cancel All",
@@ -1154,6 +1154,29 @@
     "zoomOut": "Zoom out",
     "autoLayout": "Auto Layout",
     "freeToolModelHint": "First run will auto-download the AI model, please wait",
+    "triggerHint": "This trigger will repeatedly run the downstream workflow each time it fires",
+    "dropToAddToGroup": "Release to add to Group",
+    "dropToRemoveFromGroup": "Release to remove from Group",
+    "editSubgraph": "Edit Subgraph",
+    "mainWorkflow": "Main Workflow",
+    "exitSubgraph": "Exit subgraph (ESC)",
+    "editingSubgraph": "Editing subgraph",
+    "childNodesCount": "{{count}} child node(s)",
+    "groupInput": "Group Input",
+    "groupOutput": "Group Output",
+    "noExposedPorts": "No exposed ports",
+    "doubleClickToRename": "Double-click to rename",
+    "clickToSetAlias": "Click to set display name",
+    "setAlias": "Set display name...",
+    "aliasPlaceholder": "Display name on main graph...",
+    "mappedAs": "Mapped as:",
+    "group": "Group",
+    "importWorkflow": "Import Workflow",
+    "importWorkflowAsSubgraph": "Import Workflow as Subgraph",
+    "noWorkflowsToImport": "No other workflows available",
+    "currentWorkflow": "current",
+    "importContainsTrigger": "Cannot import: workflow contains trigger nodes. Triggers are not allowed inside groups.",
+    "nodeCountLabel": "{{count}} nodes",
     "more": "More",
     "previousImage": "Previous image",
     "nextImage": "Next image",
@@ -1171,6 +1194,9 @@
     "open": "Open",
     "paste": "Paste",
     "addNode": "Add Node",
+    "addDownstreamNode": "Add Downstream Node",
+    "triggerLimitTitle": "Only one trigger allowed",
+    "triggerLimitDesc": "A workflow can only have one trigger node. Remove the existing trigger first.",
     "addNote": "Add Note",
     "note": "Note",
     "deleteConnection": "Delete Connection",
@@ -1185,6 +1211,8 @@
     "modelIdLabel": "Model ID",
     "selectNode": "Select a node to configure",
     "noExecutions": "No executions yet",
+    "selectAsOutput": "Use as output",
+    "selectedAsOutput": "Selected",
     "budgetExceeded": "Budget exceeded",
     "dailySpend": "Daily Spend",
     "perExecutionLimit": "Per-Execution Limit",
@@ -1220,6 +1248,11 @@
     "hideRun": "Hide this run",
     "output": "Output",
     "outputLowercase": "output",
+    "httpTriggerFields": "API Input Fields",
+    "httpResponseFields": "API Response Fields",
+    "addField": "Add",
+    "noFieldsHint": "No fields defined. Click Add to create one.",
+    "statusCode": "Status Code",
     "expandNode": "Expand",
     "collapseNode": "Collapse",
     "collapseAll": "Collapse All",
@@ -1235,6 +1268,7 @@
     "noNodesAvailable": "No nodes available",
     "nodeCategory": {
       "recent": "Recent",
+      "trigger": "Trigger",
       "input": "Input",
       "ai-task": "AI Model",
       "free-tool": "Free Tools",
@@ -1243,6 +1277,14 @@
       "control": "Control"
     },
     "nodeDefs": {
+      "trigger/directory": {
+        "label": "Directory Trigger",
+        "hint": "Scan a local folder — workflow runs once per file"
+      },
+      "trigger/http": {
+        "label": "HTTP Trigger",
+        "hint": "Expose this workflow as an HTTP API — define input fields that callers provide"
+      },
       "ai-task/run": {
         "label": "WaveSpeed API",
         "hint": "Run any AI model on the platform — image, video, audio, and more",
@@ -1329,6 +1371,10 @@
           }
         }
       },
+      "output/http-response": {
+        "label": "HTTP Response",
+        "hint": "Define what this workflow returns to HTTP callers"
+      },
       "free-tool/image-enhancer": {
         "label": "Image Enhancer",
         "hint": "Upscale and sharpen images (2×–4×) for free"
@@ -1397,6 +1443,14 @@
       "processing/select": {
         "label": "Select",
         "hint": "Pick one item from an array by index"
+      },
+      "control/iterator": {
+        "label": "Group",
+        "hint": "Group nodes into a sub-workflow for organization"
+      },
+      "control/group": {
+        "label": "Group",
+        "hint": "Group nodes into a sub-workflow for organization"
       }
     },
     "modelSelector": {
@@ -1480,6 +1534,18 @@
       "concat": {
         "title": "Concat Node — Merge Multiple Outputs",
         "desc": "Need to pass multiple images into an \"images\" input? Use the Concat node:\n\n1. Connect each upstream node's image output to Concat's value1, value2, value3, etc.\n2. Connect Concat's output (now an array) to the downstream node's images parameter.\n\nExample:\n[Upload A] → image → Concat → output (array) → [AI Task].images\n[Upload B] → image ↗\n\nThis works for any type of output — images, videos, text — whenever you need to combine multiple single values into one array input."
+      },
+      "directoryTrigger": {
+        "title": "Directory Trigger — Batch Process Local Files",
+        "desc": "Automatically scan a local folder and run the workflow once per file:\n\n• Pick a directory and file type (Images, Videos, Audio, or All)\n• The trigger finds all matching files and feeds them one-by-one into the downstream pipeline\n• Great for batch processing — e.g. enhance every photo in a folder, convert all videos, etc.\n\nEach execution receives a single file, so downstream nodes work exactly the same as with a manual upload."
+      },
+      "httpTrigger": {
+        "title": "HTTP Trigger — Run Workflows via API",
+        "desc": "Turn any workflow into an HTTP API endpoint:\n\n• Define output fields (e.g. image, prompt) — each becomes an output port on the canvas\n• When a POST request arrives, the JSON body fields are extracted and passed to downstream nodes\n• Pair with the HTTP Response node to return results back to the caller\n\nThis lets you integrate workflows into external apps, scripts, or automation tools by simply sending an HTTP request."
+      },
+      "group": {
+        "title": "Group Node — Organize Sub-Workflows",
+        "desc": "Group multiple nodes into a single collapsible container:\n\n• Drag nodes into a Group to encapsulate a sub-workflow\n• Expose selected inputs/outputs on the Group's surface so external nodes can connect to them\n• Click \"Edit Subgraph\" to enter the Group and edit its internal nodes\n• Import an existing workflow into a Group to reuse it as a building block\n\nGroups keep complex workflows clean and modular — think of them as functions you can wire together."
       },
       "canvas": {
         "title": "Canvas Interactions",

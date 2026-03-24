@@ -31,6 +31,9 @@ const MAX_SESSIONS = 20;
 /** AbortController for the current in-browser run; Stop calls abort() on it. */
 let browserRunAbortController: AbortController | null = null;
 
+/** Track whether we started an HTTP server so cancelAll can stop it. */
+let httpServerListening = false;
+
 function isAbortError(e: unknown): boolean {
   return (
     (e instanceof DOMException && e.name === "AbortError") ||
@@ -102,7 +105,12 @@ export interface ExecutionState {
     string,
     Array<{ urls: string[]; time: string; cost?: number; durationMs?: number }>
   >;
+  /** Per-node index into lastResults that the user picked as "active output".
+   *  When null/undefined, index 0 (latest) is used. Reset on new execution. */
+  selectedOutputIndex: Record<string, number>;
   _wasRunning: boolean;
+  _lastRunType: "all" | "single" | null;
+  _lastRunNodeLabel: string | null;
   _fetchedNodes: Set<string>;
 
   /** Run sessions for the global monitor panel */
@@ -171,7 +179,10 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
   progressMap: {},
   errorMessages: {},
   lastResults: {},
+  selectedOutputIndex: {},
   _wasRunning: false,
+  _lastRunType: null,
+  _lastRunNodeLabel: null,
   _fetchedNodes: new Set(),
   runSessions: [],
   showRunMonitor: false,
@@ -179,6 +190,7 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
   toggleRunMonitor: () => set((s) => ({ showRunMonitor: !s.showRunMonitor })),
 
   runAllInBrowser: async (nodes, edges) => {
+    set({ _lastRunType: "all", _lastRunNodeLabel: null });
     const nodeLabels: Record<string, string> = {};
     for (const n of nodes) {
       nodeLabels[n.id] =
@@ -213,6 +225,88 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
       ].slice(0, MAX_SESSIONS),
     }));
 
+    // ── HTTP Trigger: start server and wait for requests instead of executing ──
+    const httpTriggerNode = nodes.find(
+      (n) => n.data.nodeType === "trigger/http",
+    );
+    if (httpTriggerNode) {
+      const wapi = (window as unknown as Record<string, unknown>)
+        .workflowAPI as
+        | { invoke: (ch: string, args?: unknown) => Promise<unknown> }
+        | undefined;
+      if (!wapi) {
+        get().updateNodeStatus(
+          httpTriggerNode.id,
+          "error",
+          "HTTP Trigger requires the desktop app.",
+        );
+        set((s) => ({
+          runSessions: s.runSessions.map((rs) =>
+            rs.id === sessionId ? { ...rs, status: "error" as const } : rs,
+          ),
+        }));
+        return;
+      }
+
+      // Save workflow first so the backend can load it
+      let savedWorkflowId: string | null = null;
+      try {
+        const { useWorkflowStore: wfs } = await import("./workflow.store");
+        await wfs.getState().saveWorkflow();
+        savedWorkflowId = wfs.getState().workflowId;
+      } catch {
+        /* user may cancel naming — continue anyway if workflowId exists */
+      }
+      // Get workflowId (may have been set before or after save)
+      if (!savedWorkflowId) {
+        const { useWorkflowStore: wfs2 } = await import("./workflow.store");
+        savedWorkflowId = wfs2.getState().workflowId;
+      }
+      if (!savedWorkflowId) {
+        get().updateNodeStatus(
+          httpTriggerNode.id,
+          "error",
+          "Please save the workflow first before starting the HTTP server.",
+        );
+        set((s) => ({
+          runSessions: s.runSessions.map((rs) =>
+            rs.id === sessionId ? { ...rs, status: "error" as const } : rs,
+          ),
+        }));
+        return;
+      }
+
+      const port = Number(httpTriggerNode.data.params?.port) || 3100;
+      try {
+        const status = (await wapi.invoke("http-server:start", {
+          port,
+          workflowId: savedWorkflowId,
+        })) as {
+          running: boolean;
+          port: number | null;
+          url: string | null;
+        };
+        if (!status.running) throw new Error("Server failed to start");
+        httpServerListening = true;
+        get().updateNodeStatus(httpTriggerNode.id, "running");
+        get().updateProgress(
+          httpTriggerNode.id,
+          0,
+          `Listening on http://localhost:${status.port} — POST / to trigger`,
+        );
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        get().updateNodeStatus(httpTriggerNode.id, "error", msg);
+        set((s) => ({
+          runSessions: s.runSessions.map((rs) =>
+            rs.id === sessionId ? { ...rs, status: "error" as const } : rs,
+          ),
+        }));
+      }
+      // Don't finish the session — it stays "running" until user clicks Stop
+      return;
+    }
+
     const controller = new AbortController();
     browserRunAbortController = controller;
     try {
@@ -237,6 +331,7 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
                     ...existing,
                   ].slice(0, 50),
                 },
+                selectedOutputIndex: { ...s.selectedOutputIndex, [nodeId]: 0 },
               };
             });
             // Auto-save to My Assets
@@ -278,14 +373,28 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
   },
 
   runNodeInBrowser: async (nodes, edges, nodeId) => {
-    const upstream = new Set<string>([nodeId]);
+    const targetNode = nodes.find((n) => n.id === nodeId);
+    const targetLabel =
+      (targetNode?.data?.label as string) ||
+      targetNode?.data?.nodeType ||
+      nodeId.slice(0, 8);
+    set({ _lastRunType: "single", _lastRunNodeLabel: targetLabel });
+
+    // If the target node is inside a group, we need to include the parent
+    // group node and its upstream so the group handler can execute properly.
+    const parentGroupId = (targetNode as { parentNode?: string } | undefined)?.parentNode;
+    const effectiveRootId = parentGroupId ?? nodeId;
+
+    const upstream = new Set<string>([effectiveRootId]);
+    // Also include the original child node so it appears in the session
+    if (parentGroupId) upstream.add(nodeId);
     const reverse = new Map<string, string[]>();
     for (const e of edges) {
       const list = reverse.get(e.target) ?? [];
       list.push(e.source);
       reverse.set(e.target, list);
     }
-    let queue = [nodeId];
+    let queue = [effectiveRootId];
     while (queue.length > 0) {
       const next: string[] = [];
       for (const id of queue) {
@@ -297,6 +406,15 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
         }
       }
       queue = next;
+    }
+    // Also include sibling child nodes of the same group so the group handler
+    // can execute the full sub-workflow
+    if (parentGroupId) {
+      for (const n of nodes) {
+        if ((n as { parentNode?: string }).parentNode === parentGroupId) {
+          upstream.add(n.id);
+        }
+      }
     }
     const nodeIds = nodes.map((n) => n.id).filter((id) => upstream.has(id));
     const nodeLabels: Record<string, string> = {};
@@ -335,9 +453,13 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
     // Use full urls array so concat/multi-output nodes preserve all values
     const existingResults = new Map<string, string[]>();
     const lastResults = get().lastResults;
+    const selIdx = get().selectedOutputIndex;
     for (const [nid, groups] of Object.entries(lastResults)) {
-      if (groups && groups.length > 0 && groups[0].urls.length > 0) {
-        existingResults.set(nid, groups[0].urls);
+      if (groups && groups.length > 0) {
+        const idx = Math.min(selIdx[nid] ?? 0, groups.length - 1);
+        if (groups[idx].urls.length > 0) {
+          existingResults.set(nid, groups[idx].urls);
+        }
       }
     }
 
@@ -365,6 +487,7 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
                     ...existing,
                   ].slice(0, 50),
                 },
+                selectedOutputIndex: { ...s.selectedOutputIndex, [nid]: 0 },
               };
             });
             // Auto-save to My Assets
@@ -410,6 +533,7 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
     const { nodes, edges } = useWorkflowStore.getState();
     const browserNodes = nodes.map((n) => ({
       id: n.id,
+      parentNode: n.parentNode,
       data: {
         nodeType: n.data?.nodeType ?? "",
         params: {
@@ -425,13 +549,14 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
       sourceHandle: e.sourceHandle ?? undefined,
       targetHandle: e.targetHandle ?? undefined,
     }));
-    get().runNodeInBrowser(browserNodes, browserEdges, nodeId);
+    await get().runNodeInBrowser(browserNodes, browserEdges, nodeId);
   },
   continueFrom: async (_workflowId, nodeId) => {
     const { useWorkflowStore } = await import("./workflow.store");
     const { nodes, edges } = useWorkflowStore.getState();
     const browserNodes = nodes.map((n) => ({
       id: n.id,
+      parentNode: n.parentNode,
       data: {
         nodeType: n.data?.nodeType ?? "",
         params: {
@@ -452,9 +577,13 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
     // Use full urls array so concat/multi-output nodes preserve all values
     const existingResults = new Map<string, string[]>();
     const lastResults = get().lastResults;
+    const selIdx2 = get().selectedOutputIndex;
     for (const [nid, groups] of Object.entries(lastResults)) {
-      if (groups && groups.length > 0 && groups[0].urls.length > 0) {
-        existingResults.set(nid, groups[0].urls);
+      if (groups && groups.length > 0) {
+        const idx = Math.min(selIdx2[nid] ?? 0, groups.length - 1);
+        if (groups[idx].urls.length > 0) {
+          existingResults.set(nid, groups[idx].urls);
+        }
       }
     }
 
@@ -511,6 +640,7 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
                     ...existing,
                   ].slice(0, 50),
                 },
+                selectedOutputIndex: { ...s.selectedOutputIndex, [nid]: 0 },
               };
             });
             // Auto-save to My Assets
@@ -566,6 +696,19 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
     if (browserRunAbortController) {
       browserRunAbortController.abort();
     }
+    // Stop HTTP server if it was started by an HTTP Trigger run
+    if (httpServerListening) {
+      httpServerListening = false;
+      try {
+        const wapi = (window as unknown as Record<string, unknown>)
+          .workflowAPI as
+          | { invoke: (ch: string, args?: unknown) => Promise<unknown> }
+          | undefined;
+        await wapi?.invoke("http-server:stop");
+      } catch {
+        /* best effort */
+      }
+    }
     set((s) => ({
       runSessions: s.runSessions.map((rs) =>
         rs.workflowId === workflowId && rs.status === "running"
@@ -573,6 +716,21 @@ export const useExecutionStore = create<ExecutionState>((set, get) => ({
           : rs,
       ),
     }));
+    // Reset all node statuses to idle
+    const currentStatuses = get().nodeStatuses;
+    const resetStatuses: Record<string, NodeStatus> = {};
+    for (const nid of Object.keys(currentStatuses)) {
+      if (currentStatuses[nid] === "running") {
+        resetStatuses[nid] = "idle";
+      }
+    }
+    if (Object.keys(resetStatuses).length > 0) {
+      set((s) => ({
+        nodeStatuses: { ...s.nodeStatuses, ...resetStatuses },
+        activeExecutions: new Set(),
+        progressMap: {},
+      }));
+    }
   },
 
   updateNodeStatus: (nodeId, status, errorMessage) => {

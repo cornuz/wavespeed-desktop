@@ -173,7 +173,7 @@ export function updateWorkflow(
 
     for (const node of uniqueNodes) {
       db.run(
-        `INSERT INTO nodes (id, workflow_id, node_type, position_x, position_y, params, current_output_id) VALUES (?, ?, ?, ?, ?, ?, NULL)`,
+        `INSERT INTO nodes (id, workflow_id, node_type, position_x, position_y, params, current_output_id, parent_node_id) VALUES (?, ?, ?, ?, ?, ?, NULL, ?)`,
         [
           node.id,
           id,
@@ -181,12 +181,13 @@ export function updateWorkflow(
           node.position.x,
           node.position.y,
           JSON.stringify(node.params),
+          node.parentNodeId ?? null,
         ],
       );
     }
     for (const edge of uniqueEdges) {
       db.run(
-        `INSERT INTO edges (id, workflow_id, source_node_id, source_output_key, target_node_id, target_input_key) VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO edges (id, workflow_id, source_node_id, source_output_key, target_node_id, target_input_key, is_internal) VALUES (?, ?, ?, ?, ?, ?, ?)`,
         [
           edge.id,
           id,
@@ -194,6 +195,7 @@ export function updateWorkflow(
           edge.sourceOutputKey,
           edge.targetNodeId,
           edge.targetInputKey,
+          edge.isInternal ? 1 : 0,
         ],
       );
     }
@@ -284,6 +286,9 @@ export function duplicateWorkflow(sourceId: string): Workflow {
       id: nodeIdMap.get(n.id)!,
       workflowId: newWf.id,
       currentOutputId: null,
+      parentNodeId: n.parentNodeId
+        ? (nodeIdMap.get(n.parentNodeId) ?? null)
+        : null,
     }),
   );
 

@@ -29,6 +29,8 @@ import { ModelSelector } from "@/components/playground/ModelSelector";
 import type { FormFieldConfig } from "@/lib/schemaToForm";
 import type { Model } from "@/types/model";
 import { workflowClient } from "@/api/client";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 import {
   type CustomNodeData,
@@ -52,7 +54,12 @@ import {
   DefParamControl,
   InputPortControl,
 } from "./CustomNodeParamControls";
-import { MediaUploadBody, TextInputBody } from "./CustomNodeInputBodies";
+import {
+  MediaUploadBody,
+  TextInputBody,
+  DirectoryImportBody,
+} from "./CustomNodeInputBodies";
+import { DynamicFieldsEditor, type FieldConfig } from "./DynamicFieldsEditor";
 
 export interface CustomNodeBodyProps {
   id: string;
@@ -330,6 +337,35 @@ export function CustomNodeBody(props: CustomNodeBodyProps) {
               </Row>
             );
           })}
+        {/* HTTP Response: dynamic input handles in collapsed mode */}
+        {data.nodeType === "output/http-response" &&
+          (
+            (data.inputDefinitions ?? []) as Array<{
+              key: string;
+              label: string;
+              required?: boolean;
+            }>
+          ).map((inp) => {
+            const hid = `input-${inp.key}`;
+            if (!connectedSet.has(hid)) return null;
+            return (
+              <Row key={inp.key}>
+                <div className="flex items-center justify-between gap-2 w-full">
+                  <span className="text-xs whitespace-nowrap flex-shrink-0 text-green-400 font-semibold">
+                    <HandleAnchor id={hid} type="target" connected media />
+                    {inp.label || inp.key}
+                  </span>
+                  <ConnectedInputControl
+                    nodeId={id}
+                    handleId={hid}
+                    edges={edges}
+                    nodes={useWorkflowStore.getState().nodes}
+                    onPreview={openPreview}
+                  />
+                </div>
+              </Row>
+            );
+          })}
         {data.nodeType !== "input/media-upload" &&
           data.nodeType !== "input/text-input" &&
           paramDefs.map((p) => {
@@ -397,6 +433,32 @@ export function CustomNodeBody(props: CustomNodeBodyProps) {
           </div>
         )}
 
+      {/* Trigger node hint — explains repeated triggering */}
+      {(data.nodeType === "trigger/http" ||
+        data.nodeType === "trigger/directory") && (
+        <div className="mx-3 mb-1 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-blue-500/10 border border-blue-500/20">
+          <svg
+            className="flex-shrink-0 text-blue-400"
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <polygon points="5 3 19 12 5 21 5 3" />
+          </svg>
+          <span className="text-[10px] text-blue-400/90 leading-tight">
+            {t(
+              "workflow.triggerHint",
+              "This trigger will repeatedly run the downstream workflow each time it fires",
+            )}
+          </span>
+        </div>
+      )}
+
       {/* Media Upload node — special UI */}
       {data.nodeType === "input/media-upload" && (
         <>
@@ -450,6 +512,251 @@ export function CustomNodeBody(props: CustomNodeBodyProps) {
             updateNodeParams(id, { ...data.params, ...updates });
           }}
         />
+      )}
+
+      {/* Directory Trigger node — reuse directory picker UI */}
+      {data.nodeType === "trigger/directory" && (
+        <DirectoryImportBody
+          params={data.params}
+          onParamChange={(updates) => {
+            updateNodeParams(id, { ...data.params, ...updates });
+          }}
+        />
+      )}
+
+      {/* HTTP Trigger — port + dynamic output fields editor */}
+      {data.nodeType === "trigger/http" && (
+        <>
+          <div
+            className="px-3 py-1 nodrag"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <Label className="text-xs text-muted-foreground">
+                {t("workflow.port", "Port")}
+              </Label>
+              <Input
+                type="number"
+                value={Number(data.params.port ?? 3100)}
+                onChange={(e) => setParam("port", Number(e.target.value))}
+                className="w-20 h-8 text-xs text-right"
+              />
+            </div>
+          </div>
+          <DynamicFieldsEditor
+            direction="output"
+            fields={(() => {
+              try {
+                const raw = data.params.outputFields;
+                return typeof raw === "string"
+                  ? JSON.parse(raw)
+                  : Array.isArray(raw)
+                    ? raw
+                    : [];
+              } catch {
+                return [];
+              }
+            })()}
+            onChange={(fields: FieldConfig[]) => {
+              // Get old fields to detect key renames
+              let oldFields: FieldConfig[] = [];
+              try {
+                const raw = data.params.outputFields;
+                oldFields =
+                  typeof raw === "string"
+                    ? JSON.parse(raw)
+                    : Array.isArray(raw)
+                      ? raw
+                      : [];
+              } catch {
+                /* ignore */
+              }
+
+              // Detect renamed keys and update edge sourceHandles
+              const { edges: currentEdges } = useWorkflowStore.getState();
+              let updatedEdges = currentEdges;
+              let edgesChanged = false;
+              for (
+                let i = 0;
+                i < Math.min(oldFields.length, fields.length);
+                i++
+              ) {
+                const oldKey = oldFields[i]?.key;
+                const newKey = fields[i]?.key;
+                if (oldKey && newKey && oldKey !== newKey) {
+                  updatedEdges = updatedEdges.map((e) => {
+                    if (e.source === id && e.sourceHandle === oldKey) {
+                      edgesChanged = true;
+                      return { ...e, sourceHandle: newKey };
+                    }
+                    return e;
+                  });
+                }
+              }
+
+              if (edgesChanged) {
+                useWorkflowStore.setState({ edges: updatedEdges });
+              }
+              // Also update outputDefinitions to match the new fields
+              const newOutputDefs = fields.map((f: FieldConfig) => ({
+                key: f.key,
+                label: f.label || f.key,
+                dataType: f.type || "any",
+                required: true,
+              }));
+              updateNodeParams(id, {
+                ...data.params,
+                outputFields: JSON.stringify(fields),
+              });
+              useWorkflowStore.setState((s) => ({
+                nodes: s.nodes.map((n) =>
+                  n.id === id
+                    ? {
+                        ...n,
+                        data: { ...n.data, outputDefinitions: newOutputDefs },
+                      }
+                    : n,
+                ),
+              }));
+            }}
+            renderHandle={(fieldKey) => (
+              <HandleAnchor id={fieldKey} type="source" connected={false} />
+            )}
+          />
+        </>
+      )}
+
+      {/* HTTP Response — dynamic input fields editor + statusCode */}
+      {data.nodeType === "output/http-response" && (
+        <>
+          {/* Dynamic input port rows — each responseField becomes a connectable input */}
+          {(() => {
+            const dynInputDefs = (data.inputDefinitions ?? []) as Array<{
+              key: string;
+              label: string;
+              dataType?: string;
+              required?: boolean;
+            }>;
+            // Only show dynamic inputs for http-response (not the static inputDefs)
+            if (dynInputDefs.length > 0) {
+              return dynInputDefs.map((inp) => {
+                const hid = `input-${inp.key}`;
+                const conn = connectedSet.has(hid);
+                return (
+                  <Row key={inp.key}>
+                    <div className="flex items-center justify-between gap-2 w-full">
+                      <span
+                        className={`text-xs whitespace-nowrap flex-shrink-0 ${conn ? "text-green-400 font-semibold" : "text-[hsl(var(--muted-foreground))]"}`}
+                      >
+                        <HandleAnchor
+                          id={hid}
+                          type="target"
+                          connected={conn}
+                          media
+                        />
+                        {inp.label || inp.key}
+                        {inp.required && (
+                          <span className="text-red-400"> *</span>
+                        )}
+                      </span>
+                      {conn && (
+                        <ConnectedInputControl
+                          nodeId={id}
+                          handleId={hid}
+                          edges={edges}
+                          nodes={useWorkflowStore.getState().nodes}
+                          onPreview={openPreview}
+                        />
+                      )}
+                    </div>
+                  </Row>
+                );
+              });
+            }
+            return null;
+          })()}
+          <DynamicFieldsEditor
+            direction="input"
+            fields={(() => {
+              try {
+                const raw = data.params.responseFields;
+                return typeof raw === "string"
+                  ? JSON.parse(raw)
+                  : Array.isArray(raw)
+                    ? raw
+                    : [];
+              } catch {
+                return [];
+              }
+            })()}
+            onChange={(fields: FieldConfig[]) => {
+              // Get old fields to detect key renames
+              let oldFields: FieldConfig[] = [];
+              try {
+                const raw = data.params.responseFields;
+                oldFields =
+                  typeof raw === "string"
+                    ? JSON.parse(raw)
+                    : Array.isArray(raw)
+                      ? raw
+                      : [];
+              } catch {
+                /* ignore */
+              }
+
+              // Detect renamed keys (same index, different key) and update edge handles
+              const { edges: currentEdges } = useWorkflowStore.getState();
+              let updatedEdges = currentEdges;
+              let edgesChanged = false;
+              for (
+                let i = 0;
+                i < Math.min(oldFields.length, fields.length);
+                i++
+              ) {
+                const oldKey = oldFields[i]?.key;
+                const newKey = fields[i]?.key;
+                if (oldKey && newKey && oldKey !== newKey) {
+                  const oldHandle = `input-${oldKey}`;
+                  const newHandle = `input-${newKey}`;
+                  updatedEdges = updatedEdges.map((e) => {
+                    if (e.target === id && e.targetHandle === oldHandle) {
+                      edgesChanged = true;
+                      return { ...e, targetHandle: newHandle };
+                    }
+                    return e;
+                  });
+                }
+              }
+
+              // Update params + edges together
+              if (edgesChanged) {
+                useWorkflowStore.setState({ edges: updatedEdges });
+              }
+              // Also update inputDefinitions to match the new fields
+              const newInputDefs = fields.map((f: FieldConfig) => ({
+                key: f.key,
+                label: f.label || f.key,
+                dataType: f.type || "any",
+                required: true,
+              }));
+              updateNodeParams(id, {
+                ...data.params,
+                responseFields: JSON.stringify(fields),
+              });
+              // Update node data inputDefinitions directly
+              useWorkflowStore.setState((s) => ({
+                nodes: s.nodes.map((n) =>
+                  n.id === id
+                    ? {
+                        ...n,
+                        data: { ...n.data, inputDefinitions: newInputDefs },
+                      }
+                    : n,
+                ),
+              }));
+            }}
+          />
+        </>
       )}
 
       {isAITask && (
@@ -719,6 +1026,7 @@ export function CustomNodeBody(props: CustomNodeBodyProps) {
 
       {inputDefs.map((inp) => {
         if (data.nodeType === "input/media-upload") return null;
+        if (data.nodeType === "output/http-response") return null;
         const hid = `input-${inp.key}`;
         const conn = connectedSet.has(hid);
         const portFieldConfig = portToFormFieldConfig(inp, data.nodeType);
@@ -933,7 +1241,19 @@ export function CustomNodeBody(props: CustomNodeBodyProps) {
       {/* defParams */}
       {data.nodeType !== "input/media-upload" &&
         data.nodeType !== "input/text-input" &&
+        data.nodeType !== "trigger/directory" &&
         paramDefs.map((p) => {
+          // Skip fields managed by DynamicFieldsEditor
+          if (
+            data.nodeType === "trigger/http" &&
+            (p.key === "outputFields" || p.key === "port")
+          )
+            return null;
+          if (
+            data.nodeType === "output/http-response" &&
+            (p.key === "responseFields" || p.key === "statusCode")
+          )
+            return null;
           const hid = `param-${p.key}`;
           const canConnect =
             p.connectable !== false && p.dataType !== undefined;
@@ -942,19 +1262,37 @@ export function CustomNodeBody(props: CustomNodeBodyProps) {
 
           if (fieldConfig) {
             if (!canConnect) {
+              // Compact inline layout for file export's filename & format
+              const inlineParam = data.nodeType === "output/file" && (p.key === "filename" || p.key === "format");
               return (
                 <div
                   key={p.key}
                   className="px-3 py-1 nodrag"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <FormField
-                    field={fieldConfig}
-                    value={formValues[p.key]}
-                    onChange={(v) => setParam(p.key, v)}
-                    formValues={formValues}
-                    onUploadFile={handleCdnUpload}
-                  />
+                  {inlineParam ? (
+                    <div className="flex items-center gap-4">
+                      <Label className="text-xs flex-shrink-0 w-[110px]">{fieldConfig.label}</Label>
+                      <div className="flex-1 min-w-0 [&_input]:h-7 [&_input]:text-xs [&_button[role=combobox]]:h-7 [&_button[role=combobox]]:text-xs">
+                        <FormField
+                          field={fieldConfig}
+                          value={formValues[p.key]}
+                          onChange={(v) => setParam(p.key, v)}
+                          formValues={formValues}
+                          onUploadFile={handleCdnUpload}
+                          hideLabel
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <FormField
+                      field={fieldConfig}
+                      value={formValues[p.key]}
+                      onChange={(v) => setParam(p.key, v)}
+                      formValues={formValues}
+                      onUploadFile={handleCdnUpload}
+                    />
+                  )}
                 </div>
               );
             }
@@ -1004,6 +1342,26 @@ export function CustomNodeBody(props: CustomNodeBodyProps) {
           }
 
           if (!canConnect) {
+            // Output Directory: stack label above control so hint text has full width
+            if (data.nodeType === "output/file" && p.key === "outputDir") {
+              return (
+                <div key={p.key} className="px-3 py-1">
+                  <div className="flex items-center gap-2 w-full">
+                    <span className="text-xs text-[hsl(var(--muted-foreground))] flex-shrink-0">
+                      {localizeParamLabel(p.key, p.label)}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <DefParamControl
+                        nodeId={id}
+                        param={p}
+                        value={data.params[p.key]}
+                        onChange={(v) => setParam(p.key, v)}
+                      />
+                    </div>
+                  </div>
+                </div>
+              );
+            }
             return (
               <div key={p.key} className="px-3 py-1">
                 <div className="flex items-center justify-between gap-2 w-full">
@@ -1109,11 +1467,11 @@ export function CustomNodeBody(props: CustomNodeBodyProps) {
 
       {/* Results — at bottom of card, collapsed by default */}
       {data.nodeType !== "annotation" && (
-        <div className="nodrag nowheel min-h-0 flex flex-col flex-1 mt-2 border-t border-border/50 pt-2 select-text">
+        <div className="nodrag nowheel min-h-0 flex flex-col flex-1 mt-2 border-t border-border/50 py-2 select-text">
           <button
             type="button"
             onClick={() => setResultsExpanded((prev) => !prev)}
-            className="flex items-center gap-1.5 w-full text-left py-1 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+            className="flex items-center gap-1.5 w-full text-left text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
           >
             {resultsExpanded ? (
               <ChevronDown className="w-3.5 h-3.5 shrink-0" />

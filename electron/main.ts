@@ -671,6 +671,49 @@ ipcMain.handle("select-directory", async () => {
   return { success: true, path: result.filePaths[0] };
 });
 
+// Directory Import node — pick a directory for media scanning
+ipcMain.handle("pick-directory", async () => {
+  const focusedWindow = BrowserWindow.getFocusedWindow();
+  if (!focusedWindow) return { success: false, error: "No focused window" };
+
+  const result = await dialog.showOpenDialog(focusedWindow, {
+    properties: ["openDirectory"],
+    title: "Select Media Directory",
+  });
+
+  if (result.canceled || !result.filePaths[0]) {
+    return { success: false, canceled: true };
+  }
+
+  return { success: true, path: result.filePaths[0] };
+});
+
+// Directory Import node — scan a directory for media files
+ipcMain.handle(
+  "scan-directory",
+  async (_, dirPath: string, allowedExts: string[]) => {
+    const { readdirSync } = require("fs");
+    const { join, extname } = require("path");
+
+    const extSet = new Set(allowedExts.map((e: string) => e.toLowerCase()));
+    const results: string[] = [];
+    try {
+      const entries = readdirSync(dirPath, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isFile()) {
+          const ext = extname(entry.name).toLowerCase();
+          if (extSet.has(ext)) {
+            results.push(join(dirPath, entry.name));
+          }
+        }
+      }
+    } catch {
+      // Skip unreadable
+    }
+    return results;
+  },
+);
+
 ipcMain.handle(
   "save-asset",
   async (_, url: string, _type: string, fileName: string, subDir: string) => {

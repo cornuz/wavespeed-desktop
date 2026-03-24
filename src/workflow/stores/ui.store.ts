@@ -37,6 +37,18 @@ export interface UIState {
   getViewportCenter: () => { x: number; y: number };
   /** Register the getter (called once from WorkflowCanvas onInit) */
   setGetViewportCenter: (fn: () => { x: number; y: number }) => void;
+  /** When set, the next node created from the palette will be adopted by this Iterator */
+  pendingIteratorParentId: string | null;
+  setPendingIteratorParentId: (id: string | null) => void;
+  /** Visual hint for drag-in/out on iterator containers */
+  iteratorDropTarget: { iteratorId: string; mode: "adopt" | "release" } | null;
+  setIteratorDropTarget: (
+    target: { iteratorId: string; mode: "adopt" | "release" } | null,
+  ) => void;
+  /** Subgraph editing: when set, canvas shows only this Group's children */
+  editingGroupId: string | null;
+  enterGroupEdit: (groupId: string) => void;
+  exitGroupEdit: () => void;
 
   selectNode: (nodeId: string | null) => void;
   selectNodes: (nodeIds: string[]) => void;
@@ -84,6 +96,23 @@ export const useUIStore = create<UIState>((set, get) => ({
   interactionMode: "hand",
   getViewportCenter: () => ({ x: 200, y: 150 }),
   setGetViewportCenter: (fn) => set({ getViewportCenter: fn }),
+  pendingIteratorParentId: null,
+  setPendingIteratorParentId: (id) => set({ pendingIteratorParentId: id }),
+  iteratorDropTarget: null,
+  setIteratorDropTarget: (target) => set({ iteratorDropTarget: target }),
+  editingGroupId: null,
+  enterGroupEdit: (groupId) =>
+    set({
+      editingGroupId: groupId,
+      selectedNodeId: null,
+      selectedNodeIds: new Set(),
+    }),
+  exitGroupEdit: () =>
+    set({
+      editingGroupId: null,
+      selectedNodeId: null,
+      selectedNodeIds: new Set(),
+    }),
 
   selectNode: (nodeId) =>
     set({
@@ -117,6 +146,8 @@ export const useUIStore = create<UIState>((set, get) => ({
     set((s) => ({
       showNodePalette: !s.showNodePalette,
       showWorkflowPanel: false,
+      // Clear pending iterator parent when closing the palette
+      ...(!s.showNodePalette ? {} : { pendingIteratorParentId: null }),
     })),
   toggleWorkflowPanel: () =>
     set((s) => ({

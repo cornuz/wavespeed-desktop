@@ -22,6 +22,10 @@ import {
   Download,
   GitMerge,
   ListFilter,
+  Repeat,
+  FolderSearch,
+  Globe,
+  Send,
   type LucideIcon,
 } from "lucide-react";
 
@@ -42,6 +46,7 @@ const NODE_ICON_MAP: Record<string, LucideIcon> = {
   // Input
   "input/media-upload": Upload,
   "input/text-input": Type,
+
   // AI Task
   "ai-task/run": Cpu,
   // Output
@@ -50,6 +55,13 @@ const NODE_ICON_MAP: Record<string, LucideIcon> = {
   // Processing
   "processing/concat": GitMerge,
   "processing/select": ListFilter,
+  // Control
+  "control/iterator": Repeat,
+  // Trigger
+  "trigger/directory": FolderSearch,
+  "trigger/http": Globe,
+  // Output
+  "output/http-response": Send,
 };
 
 export function getNodeIcon(nodeType: string): LucideIcon | null {

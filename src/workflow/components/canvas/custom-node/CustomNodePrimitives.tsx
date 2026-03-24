@@ -144,6 +144,7 @@ export function ConnectedInputControl({
   showPreview?: boolean;
 }) {
   const lastResults = useExecutionStore((s) => s.lastResults);
+  const selectedOutputIndex = useExecutionStore((s) => s.selectedOutputIndex);
 
   if (!nodeId || !handleId || !edges || !nodes) {
     return <LinkedBadge />;
@@ -156,7 +157,8 @@ export function ConnectedInputControl({
 
   const sourceNode = nodes.find((n) => n.id === edge.source);
   const sourceParams = sourceNode?.data?.params ?? {};
-  const latestResultUrls = lastResults[edge.source]?.[0]?.urls ?? [];
+  const selIdx = selectedOutputIndex[edge.source] ?? 0;
+  const latestResultUrls = lastResults[edge.source]?.[selIdx]?.urls ?? [];
 
   const isMediaLike = (u: string) =>
     /^https?:\/\//i.test(u) ||

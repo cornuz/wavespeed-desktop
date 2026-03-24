@@ -10,6 +10,16 @@ import { workflowClient } from "@/api/client";
 import { WorkflowPromptOptimizer } from "../WorkflowPromptOptimizer";
 import { CompInput } from "../composition-input";
 import { FormField } from "@/components/playground/FormField";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 /* ══════════════════════════════════════════════════════════════════════
    MediaUploadBody
@@ -744,6 +754,225 @@ export function TextInputBody({
         formValues={params}
         hideLabel
       />
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   DirectoryImportBody
+   ══════════════════════════════════════════════════════════════════════ */
+
+const MEDIA_TYPE_OPTIONS: Array<{
+  value: string;
+  label: string;
+  exts: string;
+}> = [
+  { value: "image", label: "Images", exts: ".jpg .png .webp .gif .bmp .svg" },
+  { value: "video", label: "Videos", exts: ".mp4 .webm .mov .avi .mkv" },
+  { value: "audio", label: "Audio", exts: ".mp3 .wav .flac .m4a .ogg" },
+  { value: "all", label: "All Media", exts: "all types" },
+];
+
+const MEDIA_EXTS: Record<string, string[]> = {
+  image: [
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".webp",
+    ".gif",
+    ".bmp",
+    ".tiff",
+    ".svg",
+    ".avif",
+  ],
+  video: [".mp4", ".webm", ".mov", ".avi", ".mkv", ".flv", ".wmv", ".m4v"],
+  audio: [".mp3", ".wav", ".flac", ".m4a", ".ogg", ".aac", ".wma"],
+  all: [],
+};
+MEDIA_EXTS.all = [
+  ...MEDIA_EXTS.image,
+  ...MEDIA_EXTS.video,
+  ...MEDIA_EXTS.audio,
+];
+
+export function DirectoryImportBody({
+  params,
+  onParamChange,
+}: {
+  params: Record<string, unknown>;
+  onParamChange: (updates: Record<string, unknown>) => void;
+}) {
+  const { t } = useTranslation();
+  const dirPath = String(params.directoryPath ?? "");
+  const mediaType = String(params.mediaType ?? "image");
+  const [files, setFiles] = useState<string[]>(
+    Array.isArray(params.__cachedFiles)
+      ? (params.__cachedFiles as string[])
+      : [],
+  );
+  const [scanning, setScanning] = useState(false);
+
+  const handlePickDirectory = async () => {
+    try {
+      const api = (window as unknown as Record<string, unknown>).electronAPI as
+        | { pickDirectory?: () => Promise<{ success: boolean; path?: string }> }
+        | undefined;
+      if (!api?.pickDirectory) return;
+      const result = await api.pickDirectory();
+      if (result.success && result.path) {
+        // Set path + trigger scan; scanDir will batch the file results together with the path
+        scanDir(result.path, mediaType, true);
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  const scanDir = async (dir: string, type: string, updatePath = false) => {
+    if (!dir) return;
+    setScanning(true);
+    try {
+      const api = (window as unknown as Record<string, unknown>).electronAPI as
+        | {
+            scanDirectory?: (path: string, exts: string[]) => Promise<string[]>;
+          }
+        | undefined;
+      if (api?.scanDirectory) {
+        const result = await api.scanDirectory(
+          dir,
+          MEDIA_EXTS[type] ?? MEDIA_EXTS.all,
+        );
+        setFiles(result);
+        // Batch all updates in a single call so the store merges them atomically
+        const updates: Record<string, unknown> = {
+          __cachedFileCount: result.length,
+          __cachedFiles: result,
+        };
+        if (updatePath) updates.directoryPath = dir;
+        onParamChange(updates);
+      } else if (updatePath) {
+        onParamChange({ directoryPath: dir });
+      }
+    } catch {
+      setFiles([]);
+      if (updatePath) onParamChange({ directoryPath: dir });
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  // Re-scan when mediaType changes
+  useEffect(() => {
+    if (dirPath) scanDir(dirPath, mediaType);
+  }, [mediaType]);
+
+  return (
+    <div className="nodrag nopan" onClick={(e) => e.stopPropagation()}>
+      {/* Row 1: Directory */}
+      <div className="min-h-[32px] px-3 py-1">
+        <div className="flex items-center justify-between gap-2 w-full">
+          <Label className="text-xs text-muted-foreground flex-shrink-0">
+            {t("workflow.directoryImport.directory", "Directory")}
+          </Label>
+          <div className="flex items-center gap-1.5 flex-1 min-w-0 max-w-[200px]">
+            <Input
+              type="text"
+              value={dirPath}
+              onChange={(e) => {
+                onParamChange({ directoryPath: e.target.value });
+                setFiles([]);
+              }}
+              onBlur={() => {
+                if (dirPath) scanDir(dirPath, mediaType);
+              }}
+              placeholder={t(
+                "workflow.directoryImport.enterPath",
+                "Path or browse...",
+              )}
+              className="flex-1 min-w-0 h-8 text-xs"
+              onClick={(e) => e.stopPropagation()}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              onClick={handlePickDirectory}
+              title={t("workflow.directoryImport.browse", "Browse")}
+              className="h-8 w-8 flex-shrink-0"
+            >
+              📂
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Row 2: File Type */}
+      <div className="min-h-[32px] px-3 py-1">
+        <div className="flex items-center justify-between gap-2 w-full">
+          <Label className="text-xs text-muted-foreground flex-shrink-0">
+            {t("workflow.directoryImport.fileType", "File Type")}
+          </Label>
+          <Select
+            value={mediaType}
+            onValueChange={(v) => onParamChange({ mediaType: v })}
+          >
+            <SelectTrigger className="nodrag max-w-[200px] h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {MEDIA_TYPE_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {opt.label} ({opt.exts})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {/* Scan status row */}
+      <div className="min-h-[32px] px-3 py-1">
+        <div className="flex items-center justify-between gap-2 w-full">
+          <Label className="text-xs text-muted-foreground flex-shrink-0">
+            {t("workflow.directoryImport.status", "Status")}
+          </Label>
+          <span className="text-sm text-foreground">
+            {scanning ? (
+              <span className="flex items-center gap-1.5 text-muted-foreground animate-pulse">
+                <svg
+                  className="animate-spin w-3 h-3"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <circle
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    strokeDasharray="60"
+                    strokeDashoffset="20"
+                  />
+                </svg>
+                {t("workflow.directoryImport.scanning", "Scanning...")}
+              </span>
+            ) : dirPath && files.length > 0 ? (
+              <span className="text-green-500">
+                {files.length}{" "}
+                {t("workflow.directoryImport.filesFound", "file(s) matched")}
+              </span>
+            ) : dirPath ? (
+              <span className="text-muted-foreground">
+                {t("workflow.directoryImport.noFiles", "No matching files")}
+              </span>
+            ) : (
+              <span className="text-muted-foreground text-xs italic">
+                {t("workflow.directoryImport.awaitingDirectory", "Awaiting directory")}
+              </span>
+            )}
+          </span>
+        </div>
+      </div>
     </div>
   );
 }

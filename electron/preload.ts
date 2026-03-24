@@ -139,6 +139,10 @@ const electronAPI = {
     ipcRenderer.invoke("get-zimage-output-path"),
   selectDirectory: (): Promise<SelectDirectoryResult> =>
     ipcRenderer.invoke("select-directory"),
+  pickDirectory: (): Promise<SelectDirectoryResult> =>
+    ipcRenderer.invoke("pick-directory"),
+  scanDirectory: (dirPath: string, allowedExts: string[]): Promise<string[]> =>
+    ipcRenderer.invoke("scan-directory", dirPath, allowedExts),
   saveAsset: (
     url: string,
     type: string,
