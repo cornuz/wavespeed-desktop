@@ -1,22 +1,22 @@
 # WaveSpeed
 
-Open-source, cross-platform application for running 100+ AI models — image generation, video generation, face swap, digital human, motion control, and more. Includes a visual workflow editor for building AI pipelines and 12 free creative tools. Available for **Windows**, **macOS**, **Linux**, and **Android**.
+Open-source, cross-platform application for running 600+ AI models — image generation, video generation, face swap, digital human, motion control, and more. Features a visual workflow editor for building AI pipelines, Featured Models with smart variant switching, and 12 free creative tools. Available for **Windows**, **macOS**, **Linux**, and **Android**.
 
 [![GitHub Release](https://img.shields.io/github/v/release/WaveSpeedAI/wavespeed-desktop?style=flat-square&label=Latest)](https://github.com/WaveSpeedAI/wavespeed-desktop/releases/latest)
 [![License](https://img.shields.io/github/license/WaveSpeedAI/wavespeed-desktop?style=flat-square)](LICENSE)
 [![Stars](https://img.shields.io/github/stars/WaveSpeedAI/wavespeed-desktop?style=flat-square)](https://github.com/WaveSpeedAI/wavespeed-desktop/stargazers)
 
-[![Windows](https://img.shields.io/badge/Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/WaveSpeedAI/wavespeed-desktop/releases/latest/download/WaveSpeed-Desktop-win-x64.exe)
+[![Windows](https://img.shields.io/badge/Windows-0078D6?style=for-the-badge&logo=data:image/svg%2bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiPjxwYXRoIGQ9Ik0wIDMuNWw5LjktMS40djkuNUgwem0xMS4xLTEuNUwyNCAwdjExLjVIMTEuMXpNMCAxMi42aDkuOXY5LjVMMCAyMC43em0xMS4xLS4xSDI0VjI0bC0xMi45LTEuOHoiLz48L3N2Zz4=&logoColor=white)](https://github.com/WaveSpeedAI/wavespeed-desktop/releases/latest/download/WaveSpeed-Desktop-win-x64.exe)
 [![macOS Intel](https://img.shields.io/badge/macOS_Intel-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/WaveSpeedAI/wavespeed-desktop/releases/latest/download/WaveSpeed-Desktop-mac-x64.dmg)
 [![macOS Apple Silicon](https://img.shields.io/badge/macOS_Silicon-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/WaveSpeedAI/wavespeed-desktop/releases/latest/download/WaveSpeed-Desktop-mac-arm64.dmg)
 [![Linux](https://img.shields.io/badge/Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/WaveSpeedAI/wavespeed-desktop/releases/latest/download/WaveSpeed-Desktop-linux-x86_64.AppImage)
 [![Android](https://img.shields.io/badge/Android-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://github.com/WaveSpeedAI/wavespeed-desktop/releases/latest/download/WaveSpeed-Mobile.apk)
 
-![Playground Screenshot](https://github.com/user-attachments/assets/7bd45689-5b24-40ab-9495-2296533e3b5a)
+![Playground Screenshot](https://github.com/user-attachments/assets/054a45d8-9bbc-4f1b-8cc1-b6fa4b3b2aac)
 
 ## Android App
 
-The Android app shares the same React codebase as the desktop version, giving you access to the AI Playground, Featured Models, Creative Studio, and all 100+ models from your phone.
+The Android app shares the same React codebase as the desktop version, giving you access to the AI Playground, Featured Models, Creative Studio, and all 600+ models from your phone.
 
 - Full AI Playground with multi-tab support and all input types including camera capture
 - Featured Models with smart variant switching
@@ -49,60 +49,33 @@ The Android app shares the same React codebase as the desktop version, giving yo
 | **Media Trimmer**      | Trim video and audio by selecting start and end times                                             |
 | **Media Merger**       | Merge multiple video or audio files into one                                                      |
 
-![WaveSpeed Creative Studio](https://github.com/user-attachments/assets/67359fa7-8ff4-4001-a982-eb4802e5b841)
+![WaveSpeed Creative Studio](https://github.com/user-attachments/assets/2265a42b-4686-4eb4-87b5-5f70e8a99852)
 
 ## Visual Workflow Editor
 
 Node-based pipeline builder for designing and executing complex AI workflows. Chain any combination of AI models, free tools, and media processing steps into automated pipelines.
 
-![WaveSpeed Visual Workflow Editor](https://github.com/user-attachments/assets/e1243d57-8d7b-4d42-bed3-94bf8adfa6f5)
+![WaveSpeed Visual Workflow Editor](https://github.com/user-attachments/assets/31f6889a-aeff-41a9-ab15-c16f7c828712)
 
 ## Features
 
-- **Model Browser**: Browse and search available AI models with fuzzy search, sortable by popularity, name, price, or type
-- **Favorites**: Star your favorite models for quick access with a dedicated filter
-- **Multi-Tab Playground**: Run predictions with multiple models simultaneously in separate tabs
-- **Abort Execution**: Cancel running predictions with a smooth abort button (0.5s safety delay)
-- **Batch Processing**: Run the same prediction multiple times (2-16) with auto-randomized seeds for variations
-- **Dynamic Forms**: Auto-generated forms from model schemas with validation
-- **Mask Drawing**: Interactive canvas-based mask editor for models that accept mask inputs, with brush, eraser, and bucket fill tools
-- **Templates**: Save and reuse playground configurations as templates for quick access
-- **LoRA Support**: Full support for LoRAs including high-noise and low-noise LoRAs for Wan 2.2 models
-- **Visual Workflow Editor**: Node-based editor for building and executing AI/processing pipelines
-  - **Node Types**: Media upload, text input, AI task (any WaveSpeedAI model), 12 free tool nodes, file export, preview display, and annotation notes
-  - **Canvas Interaction**: Drag & drop nodes, connect handles, zoom/pan, context menus, copy/paste, duplicate, and keyboard shortcuts (Ctrl+Z/Y, Ctrl+C/V, Ctrl+S, Delete)
-  - **Execution Control**: Run all, run selected node, continue from any node, retry failed nodes, cancel individual or all, and batch runs (1-99x with auto-randomized seeds)
-  - **Execution Monitor**: Real-time progress panel with per-node status, progress bars, cost tracking, and I/O data inspection
-  - **Multi-Tab**: Chrome-style tabs with session persistence, tab renaming (double-click), unsaved changes indicator, and auto-restore on restart
-  - **Results Management**: Per-node execution history, fullscreen preview (images, videos, 3D models, audio), arrow key navigation, download, and clear results
-  - **Cost Estimation & Budget**: Real-time cost estimate per run, daily budget tracking, per-execution limits, and cost breakdown per node
-  - **Import/Export**: Save and load workflows as JSON with SQLite-backed persistence
-  - **Undo/Redo**: Snapshot-based (up to 50 states) with debounced text input support
-- **Free Tools**: Free AI-powered image and video tools (no API key required)
-  - **Image Enhancer**: Upscale images 2x-4x with ESRGAN models (slim, medium, thick quality options)
-  - **Video Enhancer**: Frame-by-frame video upscaling with real-time progress and ETA
-  - **Face Enhancer**: Enhance and restore face quality using YOLO v8 for detection and GFPGAN v1.4 for enhancement (WebGPU accelerated)
-  - **Face Swapper**: Swap faces between images using InsightFace models (SCRFD detection, ArcFace embedding, Inswapper) with optional GFPGAN enhancement
-  - **Background Remover**: Remove image backgrounds instantly using AI, displaying foreground, background, and mask outputs simultaneously with individual download buttons
-  - **Image Eraser**: Remove unwanted objects from images using LaMa inpainting model with smart crop and blend (WebGPU accelerated)
-  - **Segment Anything**: Interactive object segmentation with point prompts using SlimSAM model
-  - **Video Converter**: Convert videos between formats (MP4, WebM, AVI, MOV, MKV) with codec and quality options
-  - **Audio Converter**: Convert audio between formats (MP3, WAV, AAC, FLAC, OGG) with bitrate control
-  - **Image Converter**: Batch convert images between formats (JPG, PNG, WebP, GIF, BMP) with quality settings
-  - **Media Trimmer**: Trim video/audio files by selecting start and end times
-  - **Media Merger**: Merge multiple video/audio files into one
-- **Z-Image (Local)**: Run local image generation via stable-diffusion.cpp with model/aux downloads, progress, and logs
-- **Multi-Phase Progress**: Compact progress bars with phase indicators, real-time status, and ETA for all Free Tools
-- **History**: View your recent predictions (last 24 hours) with detailed view, download, and copy prediction ID
-- **My Assets**: Save, browse, and manage generated outputs (images, videos, audio) with tags, favorites, and search
-- **Auto-Save**: Automatically save generated outputs to your local assets folder (enabled by default) with error reporting
-- **File Upload**: Support for image, video, and audio file inputs with drag & drop
-- **Media Capture**: Built-in camera capture, video recording with audio waveform, and audio recording
-- **View Documentation**: Quick access to model webpage and documentation from the titlebar (context-aware links when a model is selected)
-- **Account Balance**: View your current WaveSpeed account balance in Settings with one-click refresh
-- **Theme Support**: Auto (system), dark, and light theme options
-- **Multi-Language**: Support for 18 languages including English, Chinese, Japanese, Korean, and more
-- **Auto Updates**: Automatic update checking with stable and nightly channels
+- **AI Playground**: Multi-tab playground with dynamic forms, batch processing (2-16x), mask drawing, LoRA support, abort control, and auto-randomized seeds
+- **Featured Models**: Curated model families with smart variant switching — auto-selects the best variant based on inputs and toggles (Seedream 4.5, Seedance 1.5 Pro, Wan Spicy, InfiniteTalk, Kling 2.6, Nano Banana Pro, etc.)
+- **Model Browser**: Fuzzy search, sort by popularity/name/price/type, favorites filter
+- **Visual Workflow Editor**: Node-based pipeline builder with 20+ node types
+  - Triggers (directory scan, HTTP API), AI tasks, 12 free tool nodes, processing (concat, select), group/subgraph, I/O nodes
+  - Run all / run node / continue / retry / cancel / batch runs (1-99x), real-time execution monitor with cost tracking
+  - Group/subgraph containers with exposed I/O, breadcrumb navigation, and workflow import
+  - HTTP API mode: expose workflows as REST endpoints via built-in HTTP server
+  - Directory batch processing: auto-execute per media file in a folder
+  - Prompt optimizer, guided tour, result caching, circuit breaker, cycle detection
+  - Cost estimation & daily budget, import/export (JSON + SQLite), multi-tab, undo/redo, customizable output naming
+- **Free Tools**: 12 AI-powered creative tools (no API key) — see [Creative Studio](#creative-studio) above
+- **Z-Image**: Local image generation via stable-diffusion.cpp with model downloads, progress, and logs
+- **Templates**: Playground + workflow templates with presets, i18n search, import/export, and usage tracking
+- **History & Assets**: Recent predictions (24h), saved outputs with tags/favorites/search, auto-save to local folder
+- **Media Input**: File upload (drag & drop), camera capture, video/audio recording
+- **18 languages**, dark/light/auto theme, auto updates (stable + nightly), cross-platform (Windows, macOS, Linux, Android)
 - **Cross-Platform**: Available for Windows, macOS, Linux, and Android
 
 ## Installation
@@ -111,7 +84,7 @@ Node-based pipeline builder for designing and executing complex AI workflows. Ch
 
 #### Desktop
 
-[![Windows](https://img.shields.io/badge/Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/WaveSpeedAI/wavespeed-desktop/releases/latest/download/WaveSpeed-Desktop-win-x64.exe)
+[![Windows](https://img.shields.io/badge/Windows-0078D6?style=for-the-badge&logo=data:image/svg%2bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiPjxwYXRoIGQ9Ik0wIDMuNWw5LjktMS40djkuNUgwem0xMS4xLTEuNUwyNCAwdjExLjVIMTEuMXpNMCAxMi42aDkuOXY5LjVMMCAyMC43em0xMS4xLS4xSDI0VjI0bC0xMi45LTEuOHoiLz48L3N2Zz4=&logoColor=white)](https://github.com/WaveSpeedAI/wavespeed-desktop/releases/latest/download/WaveSpeed-Desktop-win-x64.exe)
 [![macOS Intel](https://img.shields.io/badge/macOS_Intel-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/WaveSpeedAI/wavespeed-desktop/releases/latest/download/WaveSpeed-Desktop-mac-x64.dmg)
 [![macOS Apple Silicon](https://img.shields.io/badge/macOS_Silicon-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/WaveSpeedAI/wavespeed-desktop/releases/latest/download/WaveSpeed-Desktop-mac-arm64.dmg)
 [![Linux](https://img.shields.io/badge/Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/WaveSpeedAI/wavespeed-desktop/releases/latest/download/WaveSpeed-Desktop-linux-x86_64.AppImage)
@@ -190,17 +163,19 @@ npm run dev
 
 ### Scripts
 
-| Script                 | Description                              |
-| ---------------------- | ---------------------------------------- |
-| `npm run dev`          | Start development server with hot reload |
-| `npx vite`             | Start web-only dev server (no Electron)  |
-| `npm run build`        | Build the application                    |
-| `npm run build:win`    | Build for Windows                        |
-| `npm run build:mac`    | Build for macOS                          |
-| `npm run build:linux`  | Build for Linux                          |
-| `npm run build:all`    | Build for all platforms                  |
-| `npm run format`       | Format code with Prettier                |
-| `npm run format:check` | Check code formatting                    |
+| Script                 | Description                                |
+| ---------------------- | ------------------------------------------ |
+| `npm run dev`          | Start development server with hot reload   |
+| `npm run dev:web`      | Start web-only dev server (no Electron)    |
+| `npm run build`        | Build the application                      |
+| `npm run build:web`    | Build web-only version (no Electron)       |
+| `npm run build:win`    | Build for Windows                          |
+| `npm run build:mac`    | Build for macOS                            |
+| `npm run build:linux`  | Build for Linux                            |
+| `npm run build:all`    | Build for all platforms                    |
+| `npm run dist`         | Build and package for distribution         |
+| `npm run format`       | Format code with Prettier                  |
+| `npm run format:check` | Check code formatting                      |
 
 ### Mobile Development
 
@@ -229,41 +204,48 @@ See [mobile/README.md](mobile/README.md) for detailed mobile development guide.
 
 ```
 wavespeed-desktop/
-├── electron/              # Electron main process
-│   ├── main.ts            # Main process entry
-│   ├── preload.ts         # Preload script (IPC bridge)
-│   └── workflow/          # Workflow backend
-│       ├── db/            # SQLite database (workflow, node, edge, execution repos)
-│       ├── ipc/           # IPC handlers (workflow, execution, history, cost, storage)
-│       ├── nodes/         # Node type definitions & handlers (AI task, free tools, I/O)
-│       ├── engine/        # Execution engine (DAG runner, scheduler)
-│       └── utils/         # File storage, cost estimation
+├── data/templates/         # Preset workflow templates (AI generation, image/video/audio processing)
+├── electron/               # Electron main process
+│   ├── main.ts             # Main process entry
+│   ├── preload.ts          # Preload script (IPC bridge)
+│   ├── lib/                # Local generation (sdGenerator for stable-diffusion.cpp)
+│   └── workflow/           # Workflow backend
+│       ├── db/             # SQLite database (workflow, node, edge, execution, budget, template repos)
+│       ├── engine/         # Execution engine (DAG runner, scheduler, cache, circuit breaker)
+│       ├── ipc/            # IPC handlers (workflow, execution, history, cost, storage, http-server)
+│       ├── nodes/          # Node handlers (AI task, free tools, I/O, triggers, processing, control)
+│       ├── services/       # HTTP server, model list, retry, service locator, template loader
+│       └── utils/          # File storage, hashing, save-to-assets
 ├── src/
-│   ├── api/               # API client
-│   ├── components/        # React components
-│   │   ├── layout/        # Layout components
-│   │   ├── playground/    # Playground components
-│   │   ├── shared/        # Shared components
-│   │   └── ui/            # shadcn/ui components
-│   ├── hooks/             # Custom React hooks
-│   ├── i18n/              # Internationalization (18 languages)
-│   ├── lib/               # Utility functions
-│   ├── pages/             # Page components
-│   ├── stores/            # Zustand stores
-│   ├── types/             # TypeScript types
-│   ├── workers/           # Web Workers (upscaler, background remover, image eraser, ffmpeg)
-│   └── workflow/          # Workflow frontend
-│       ├── components/    # Canvas, node palette, config panel, results panel, run monitor
-│       ├── stores/        # Workflow, execution, UI stores (Zustand)
-│       ├── hooks/         # Workflow-specific hooks
-│       ├── ipc/           # Type-safe IPC client
-│       └── types/         # Workflow type definitions
-├── mobile/                # Mobile app (Android)
-│   ├── src/               # Mobile-specific overrides
-│   ├── android/           # Android native project
+│   ├── api/                # API client
+│   ├── components/         # React components
+│   │   ├── ffmpeg/         # FFmpeg components
+│   │   ├── layout/         # Layout components
+│   │   ├── playground/     # Playground components
+│   │   ├── shared/         # Shared components
+│   │   ├── templates/      # Template components
+│   │   └── ui/             # shadcn/ui components
+│   ├── hooks/              # Custom React hooks
+│   ├── i18n/               # Internationalization (18 languages)
+│   ├── lib/                # Utilities (fuzzy search, schema-to-form, smart form config, etc.)
+│   ├── pages/              # Page components
+│   ├── stores/             # Zustand stores
+│   ├── types/              # TypeScript types
+│   ├── workers/            # Web Workers (upscaler, face enhancer/swapper, background remover, image eraser, segmentation, ffmpeg)
+│   └── workflow/           # Workflow frontend
+│       ├── browser/        # Browser-only workflow API (web mode without Electron)
+│       ├── components/     # Canvas, node palette, config panel, results panel, run monitor, prompt optimizer
+│       ├── hooks/          # Workflow-specific hooks (undo/redo, group adoption, free tool listener)
+│       ├── ipc/            # Type-safe IPC client
+│       ├── lib/            # Cycle detection, free tool runner, model converter, topological sort
+│       ├── stores/         # Workflow, execution, UI stores (Zustand)
+│       └── types/          # Workflow type definitions
+├── mobile/                 # Mobile app (Android)
+│   ├── src/                # Mobile-specific overrides
+│   ├── android/            # Android native project
 │   └── capacitor.config.ts
-├── .github/workflows/     # GitHub Actions (desktop + mobile)
-└── build/                 # Build resources
+├── .github/workflows/      # GitHub Actions (desktop + mobile)
+└── build/                  # Build resources
 ```
 
 ## Tech Stack
@@ -277,6 +259,10 @@ wavespeed-desktop/
 - **HTTP Client**: Axios
 - **Workflow Canvas**: React Flow
 - **Workflow Database**: sql.js (SQLite in-process)
+- **AI/ML (Free Tools)**: @huggingface/transformers, onnxruntime-web, @tensorflow/tfjs, upscaler (ESRGAN)
+- **Media Processing**: @ffmpeg/core, mp4-muxer, webm-muxer
+- **3D Preview**: @google/model-viewer
+- **Local Generation**: stable-diffusion.cpp (via sdGenerator)
 
 ### Mobile
 
@@ -298,14 +284,21 @@ Get your API key from [WaveSpeedAI](https://wavespeed.ai)
 
 The application uses the WaveSpeedAI API v3:
 
-| Endpoint                          | Method | Description            |
-| --------------------------------- | ------ | ---------------------- |
-| `/api/v3/models`                  | GET    | List available models  |
-| `/api/v3/{model}`                 | POST   | Run a prediction       |
-| `/api/v3/predictions/{id}/result` | GET    | Get prediction result  |
-| `/api/v3/predictions`             | POST   | Get prediction history |
-| `/api/v3/media/upload/binary`     | POST   | Upload files           |
-| `/api/v3/balance`                 | GET    | Get account balance    |
+| Endpoint                          | Method | Description                          |
+| --------------------------------- | ------ | ------------------------------------ |
+| `/api/v3/models`                  | GET    | List available models                |
+| `/api/v3/{model}`                 | POST   | Run a prediction                     |
+| `/api/v3/predictions/{id}/result` | GET    | Get prediction result                |
+| `/api/v3/predictions`             | POST   | Get prediction history               |
+| `/api/v3/media/upload/binary`     | POST   | Upload files                         |
+| `/api/v3/balance`                 | GET    | Get account balance                  |
+
+The built-in workflow HTTP server also exposes:
+
+| Endpoint                          | Method | Description                          |
+| --------------------------------- | ------ | ------------------------------------ |
+| `/api/workflows/{id}/run`         | POST   | Trigger a workflow execution via API |
+| `/api/workflows/{id}/schema`      | GET    | Get workflow input schema            |
 
 ## Contributing
 

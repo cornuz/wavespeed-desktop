@@ -277,18 +277,22 @@ function IteratorNodeContainerComponent({
 
   /* ── Inline name editing ───────────────────────────────────────── */
   const startEditingName = useCallback(() => {
-    setNameValue(data.label || "");
+    const displayLabel = data.params?.__userRenamed
+      ? (data.label || t("workflow.nodeDefs.control/iterator.label", "Group"))
+      : t("workflow.nodeDefs.control/iterator.label", "Group");
+    setNameValue(displayLabel);
     setEditingName(true);
     setTimeout(() => nameInputRef.current?.select(), 0);
-  }, [data.label]);
+  }, [data.label, data.params?.__userRenamed, t]);
 
   const commitName = useCallback(() => {
     setEditingName(false);
     const trimmed = nameValue.trim();
     if (trimmed && trimmed !== data.label) {
       updateNodeData(id, { label: trimmed });
+      updateNodeParams(id, { ...data.params, __userRenamed: true });
     }
-  }, [nameValue, data.label, id, updateNodeData]);
+  }, [nameValue, data.label, id, data.params, updateNodeData, updateNodeParams]);
 
   const cancelEditingName = useCallback(() => {
     setEditingName(false);
@@ -511,7 +515,9 @@ function IteratorNodeContainerComponent({
                 "Double-click to rename",
               )}
             >
-              {data.label || t("workflow.group", "Group")}
+              {data.params?.__userRenamed
+                ? (data.label || t("workflow.nodeDefs.control/iterator.label", "Group"))
+                : t("workflow.nodeDefs.control/iterator.label", "Group")}
             </span>
           )}
           <span className="text-[10px] text-[hsl(var(--muted-foreground))] opacity-50 font-mono flex-shrink-0">
