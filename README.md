@@ -49,7 +49,7 @@ The Android app shares the same React codebase as the desktop version, giving yo
 | **Media Trimmer**      | Trim video and audio by selecting start and end times                                             |
 | **Media Merger**       | Merge multiple video or audio files into one                                                      |
 
-![WaveSpeed Creative Studio](https://github.com/user-attachments/assets/2265a42b-4686-4eb4-87b5-5f70e8a99852)
+![WaveSpeed Creative Studio](https://github.com/user-attachments/assets/dea6a526-ec08-408a-810d-7f88cc28797a)
 
 ## Visual Workflow Editor
 
