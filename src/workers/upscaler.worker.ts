@@ -23,6 +23,38 @@ class MultiplyBeta extends tf.layers.Layer {
 }
 tf.serialization.registerClass(MultiplyBeta);
 
+// PixelShuffle layer used by ESRGAN thick models — does depth-to-space rearrangement
+function createPixelShuffleClass(scale: number) {
+  class PixelShuffle extends tf.layers.Layer {
+    static className = `PixelShuffle${scale}x`;
+    private scale: number;
+
+    constructor(config: Record<string, unknown> = {}) {
+      super(config);
+      this.scale = scale;
+    }
+
+    computeOutputShape(inputShape: Array<number | null>): Array<number | null> {
+      return [inputShape[0], inputShape[1], inputShape[2], 3];
+    }
+
+    call(inputs: tf.Tensor | tf.Tensor[]): tf.Tensor {
+      const input = Array.isArray(inputs) ? inputs[0] : inputs;
+      return tf.depthToSpace(input as tf.Tensor4D, this.scale, "NHWC");
+    }
+
+    getConfig() {
+      return { ...super.getConfig(), scale: this.scale };
+    }
+  }
+  return PixelShuffle;
+}
+
+// Register PixelShuffle for all supported scales
+[2, 3, 4].forEach((s) => {
+  tf.serialization.registerClass(createPixelShuffleClass(s));
+});
+
 type ModelType = "slim" | "medium" | "thick";
 type ScaleType = "2x" | "3x" | "4x";
 
