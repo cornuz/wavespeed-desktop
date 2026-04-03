@@ -109,6 +109,11 @@ const LazyHistoryPage = lazy(() =>
 const LazyAssetsPage = lazy(() =>
   import("@/pages/AssetsPage").then((m) => ({ default: m.AssetsPage })),
 );
+const LazyComposerPage = lazy(() =>
+  import("@/composer/ComposerPage").then((m) => ({
+    default: m.ComposerPage,
+  })),
+);
 const LazyWorkflowPage = lazy(() =>
   import("@/workflow/WorkflowPage").then((m) => ({ default: m.WorkflowPage })),
 );
@@ -139,6 +144,7 @@ const PERSISTENT_PATHS = [
   "/free-tools/media-merger",
   "/z-image",
   "/workflow",
+  "/composer",
   "/playground",
 ] as const;
 const PERSISTENT_PATHS_SET = new Set<string>(PERSISTENT_PATHS);
@@ -690,6 +696,33 @@ export function Layout() {
                       key={pageKeys["/free-tools/media-merger"] || 0}
                     />
                   </PersistentPage>
+                  {/* Persistent Composer page — overflow hidden (timeline) */}
+                  {hasVisited("/composer") && (
+                    <div
+                      className={
+                        location.pathname === "/composer"
+                          ? "h-full overflow-hidden"
+                          : "hidden"
+                      }
+                      style={
+                        location.pathname === "/composer"
+                          ? undefined
+                          : { contentVisibility: "hidden" }
+                      }
+                    >
+                      <Suspense
+                        fallback={
+                          location.pathname === "/composer" ? (
+                            <div className="flex h-full items-center justify-center">
+                              <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" />
+                            </div>
+                          ) : null
+                        }
+                      >
+                        <LazyComposerPage key={pageKeys["/composer"] || 0} />
+                      </Suspense>
+                    </div>
+                  )}
                   {/* Persistent Workflow page — overflow hidden (canvas) */}
                   {hasVisited("/workflow") && (
                     <div

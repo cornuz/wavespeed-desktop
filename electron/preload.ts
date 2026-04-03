@@ -405,10 +405,30 @@ const workflowAPI = {
   },
 };
 
+// ─── Composer API (isolated namespace for Composer module IPC) ───────────────
+const composerAPI = {
+  invoke: (channel: string, args?: unknown): Promise<unknown> =>
+    ipcRenderer.invoke(channel, args),
+  on: (channel: string, callback: (...args: unknown[]) => void): void => {
+    const handler = (_event: unknown, ...rest: unknown[]) => callback(...rest);
+    ipcRenderer.on(channel, handler);
+    (composerAPI as Record<string, unknown>)[
+      `__handler_${channel}_${callback.toString().slice(0, 50)}`
+    ] = handler;
+  },
+  removeListener: (
+    channel: string,
+    _callback: (...args: unknown[]) => void,
+  ): void => {
+    ipcRenderer.removeAllListeners(channel);
+  },
+};
+
 if (process.contextIsolated) {
   try {
     contextBridge.exposeInMainWorld("electronAPI", electronAPI);
     contextBridge.exposeInMainWorld("workflowAPI", workflowAPI);
+    contextBridge.exposeInMainWorld("composerAPI", composerAPI);
   } catch (error) {
     console.error(error);
   }
@@ -417,4 +437,6 @@ if (process.contextIsolated) {
   window.electronAPI = electronAPI;
   // @ts-ignore
   window.workflowAPI = workflowAPI;
+  // @ts-ignore
+  window.composerAPI = composerAPI;
 }

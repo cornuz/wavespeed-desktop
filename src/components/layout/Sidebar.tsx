@@ -22,6 +22,7 @@ import {
   Sparkles,
   GitBranch,
   Layers,
+  Film,
   X,
 } from "lucide-react";
 
@@ -51,6 +52,11 @@ const manageItems: NavItem[] = [
 ];
 
 const toolsItems: NavItem[] = [
+  {
+    titleKey: "nav.composer",
+    href: "/composer",
+    icon: Film,
+  },
   {
     titleKey: "nav.workflow",
     href: "/workflow",

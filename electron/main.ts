@@ -32,6 +32,7 @@ import { pathToFileURL } from "url";
 import { SDGenerator } from "./lib/sdGenerator";
 import log from "electron-log";
 import { initWorkflowModule, closeWorkflowDatabase } from "./workflow";
+import { initComposerModule, closeComposerDatabases } from "./composer";
 
 /**
  * Download a URL to a local file using Electron's net.fetch (Chromium network stack).
@@ -2047,6 +2048,11 @@ app.whenReady().then(() => {
     console.error("[Workflow] Failed to initialize:", err);
   });
 
+  // Initialize Composer module (IPC handlers + project registry)
+  initComposerModule().catch((err) => {
+    console.error("[Composer] Failed to initialize:", err);
+  });
+
   // Setup auto-updater after window is created
   setupAutoUpdater();
 
@@ -2079,6 +2085,7 @@ app.on("before-quit", () => {
 
 app.on("window-all-closed", () => {
   closeWorkflowDatabase();
+  closeComposerDatabases();
   if (process.platform !== "darwin") {
     app.quit();
   }

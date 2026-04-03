@@ -216,5 +216,8 @@
       "repo": "wavespeed-desktop",
       "releaseType": "release"
     }
+  },
+  "volta": {
+    "node": "20.20.2"
   }
 }
