@@ -2,6 +2,9 @@
 
 Open-source, cross-platform application for running 600+ AI models — image generation, video generation, face swap, digital human, motion control, and more. Features a visual workflow editor for building AI pipelines, Featured Models with smart variant switching, and 12 free creative tools. Available for **Windows**, **macOS**, **Linux**, and **Android**.
 
+> Fork note:
+> This fork is used for ongoing Composer integration work, a timeline mode layered into WaveSpeed Desktop. The fork stays intentionally close to upstream and keeps Composer-specific product changes as narrow as possible.
+
 [![GitHub Release](https://img.shields.io/github/v/release/WaveSpeedAI/wavespeed-desktop?style=flat-square&label=Latest)](https://github.com/WaveSpeedAI/wavespeed-desktop/releases/latest)
 [![License](https://img.shields.io/github/license/WaveSpeedAI/wavespeed-desktop?style=flat-square)](LICENSE)
 [![Stars](https://img.shields.io/github/stars/WaveSpeedAI/wavespeed-desktop?style=flat-square)](https://github.com/WaveSpeedAI/wavespeed-desktop/stargazers)
