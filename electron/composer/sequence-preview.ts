@@ -1024,7 +1024,7 @@ async function renderProjectSequencePreview(
     .filter((entry): entry is { clip: Clip; track: Track } => entry.track != null)
     .sort((left, right) => {
       if (left.track.order !== right.track.order) {
-        return left.track.order - right.track.order;
+        return right.track.order - left.track.order;
       }
       if (left.clip.startTime !== right.clip.startTime) {
         return left.clip.startTime - right.clip.startTime;
