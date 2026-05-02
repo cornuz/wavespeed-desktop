@@ -1195,7 +1195,6 @@ export function PlayerPanel() {
                         top: layer.rect.y,
                         width: layer.rect.width,
                         height: layer.rect.height,
-                        ...layer.rotationStyle,
                       }}
                     >
                       <div
@@ -1209,6 +1208,7 @@ export function PlayerPanel() {
                           className="relative h-full w-full"
                           style={{
                             filter: layer.adjustmentFilter,
+                            ...layer.rotationStyle,
                           }}
                         >
                           {isImagePath(layer.clip.sourcePath) ? (
