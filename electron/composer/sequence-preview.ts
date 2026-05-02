@@ -1131,6 +1131,8 @@ async function renderProjectSequencePreview(
       const blendMode = getFfmpegBlendMode(clipAdjustments.blendMode);
       if (blendMode) {
         const clipCanvasLabel = `layer${currentInputIndex}`;
+        const compositeRgbLabel = `baseRgb${currentInputIndex}`;
+        const clipRgbLabel = `clipRgb${currentInputIndex}`;
         const blendLabel = `blend${currentInputIndex}`;
         const blendedLayerLabel = `blendLayer${currentInputIndex}`;
         const maskLabel = `mask${currentInputIndex}`;
@@ -1142,7 +1144,13 @@ async function renderProjectSequencePreview(
         );
         filterLines.push(`[${clipCanvasLabel}]alphaextract[${maskLabel}]`);
         filterLines.push(
-          `[${videoCompositeLabel}][${clipCanvasLabel}]blend=all_mode=${blendMode},format=rgb24[${blendLabel}]`,
+          `[${videoCompositeLabel}]format=rgb24[${compositeRgbLabel}]`,
+        );
+        filterLines.push(
+          `[${clipCanvasLabel}]format=rgb24[${clipRgbLabel}]`,
+        );
+        filterLines.push(
+          `[${compositeRgbLabel}][${clipRgbLabel}]blend=all_mode=${blendMode}[${blendLabel}]`,
         );
         filterLines.push(
           `[${blendLabel}][${maskLabel}]alphamerge[${blendedLayerLabel}]`,
