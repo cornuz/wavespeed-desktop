@@ -93,6 +93,9 @@ type UndoEntry =
       createdClipId: string;
     };
 
+type AddTrackPlacement = "start" | "end";
+type TrackReorderPlacement = "before" | "after";
+
 interface ComposerRuntimeContextValue {
   project: ComposerProject;
   tracks: Track[];
@@ -119,11 +122,16 @@ interface ComposerRuntimeContextValue {
   selectClip: (clipId: string | null) => void;
   previewLibraryAsset: (asset: ComposerAsset | null) => void;
   setZoom: (value: number) => void;
-  addTrack: (type: Track["type"]) => Promise<void>;
+  addTrack: (type: Track["type"], placement?: AddTrackPlacement) => Promise<void>;
   deleteTrack: (trackId: string) => Promise<void>;
   updateTrack: (
     trackId: string,
     patch: Partial<Pick<Track, "muted" | "locked" | "visible" | "name" | "order">>,
+  ) => Promise<void>;
+  reorderTrack: (
+    trackId: string,
+    targetTrackId: string,
+    placement: TrackReorderPlacement,
   ) => Promise<void>;
   addAssetToTrack: (
     trackId: string,
@@ -211,6 +219,72 @@ function getTrackForType(tracks: Track[], type: ComposerAssetType): Track | null
     return tracks.find((track) => track.type === "audio") ?? null;
   }
   return tracks.find((track) => track.type === "video") ?? null;
+}
+
+function sortTracksByOrder(tracks: Track[]): Track[] {
+  return [...tracks].sort((left, right) => left.order - right.order);
+}
+
+function normalizeTrackOrders(videoTracks: Track[], audioTracks: Track[]): Track[] {
+  return [...videoTracks, ...audioTracks].map((track, index) => ({
+    ...track,
+    order: index,
+  }));
+}
+
+function insertTrackIntoGroupedOrder(
+  tracks: Track[],
+  createdTrack: Track,
+  placement: AddTrackPlacement,
+): Track[] {
+  const sortedTracks = sortTracksByOrder(tracks);
+  const videoTracks = sortedTracks.filter((track) => track.type === "video");
+  const audioTracks = sortedTracks.filter((track) => track.type === "audio");
+
+  if (createdTrack.type === "video") {
+    const nextVideoTracks =
+      placement === "start"
+        ? [createdTrack, ...videoTracks.filter((track) => track.id !== createdTrack.id)]
+        : [...videoTracks.filter((track) => track.id !== createdTrack.id), createdTrack];
+    return normalizeTrackOrders(nextVideoTracks, audioTracks);
+  }
+
+  const nextAudioTracks =
+    placement === "start"
+      ? [createdTrack, ...audioTracks.filter((track) => track.id !== createdTrack.id)]
+      : [...audioTracks.filter((track) => track.id !== createdTrack.id), createdTrack];
+  return normalizeTrackOrders(videoTracks, nextAudioTracks);
+}
+
+function reorderTrackWithinType(
+  tracks: Track[],
+  trackId: string,
+  targetTrackId: string,
+  placement: TrackReorderPlacement,
+): Track[] {
+  const sortedTracks = sortTracksByOrder(tracks);
+  const draggedTrack = sortedTracks.find((track) => track.id === trackId);
+  const targetTrack = sortedTracks.find((track) => track.id === targetTrackId);
+  if (!draggedTrack || !targetTrack || draggedTrack.type !== targetTrack.type) {
+    return sortedTracks;
+  }
+
+  const videoTracks = sortedTracks.filter((track) => track.type === "video");
+  const audioTracks = sortedTracks.filter((track) => track.type === "audio");
+  const sourceTracks = draggedTrack.type === "video" ? videoTracks : audioTracks;
+  const remainingTracks = sourceTracks.filter((track) => track.id !== trackId);
+  const targetIndex = remainingTracks.findIndex((track) => track.id === targetTrackId);
+  if (targetIndex < 0) {
+    return sortedTracks;
+  }
+
+  const insertIndex = placement === "before" ? targetIndex : targetIndex + 1;
+  const nextTracks = [...remainingTracks];
+  nextTracks.splice(insertIndex, 0, draggedTrack);
+
+  return draggedTrack.type === "video"
+    ? normalizeTrackOrders(nextTracks, audioTracks)
+    : normalizeTrackOrders(videoTracks, nextTracks);
 }
 
 function getActiveClipAtTime(
@@ -318,6 +392,33 @@ export function ComposerRuntimeProvider({
       setTracks([...nextTracks].sort((left, right) => left.order - right.order));
     },
     [setTracks],
+  );
+
+  const persistTrackOrder = useCallback(
+    async (nextTracks: Track[], previousTracks: Track[] = getLiveProject().tracks) => {
+      const changedTracks = nextTracks.filter((track) => {
+        const previousTrack = previousTracks.find((candidate) => candidate.id === track.id);
+        return previousTrack && previousTrack.order !== track.order;
+      });
+
+      if (changedTracks.length === 0) {
+        updateTrackList(nextTracks);
+        return;
+      }
+
+      const updatedTracks = await Promise.all(
+        changedTracks.map((track) =>
+          composerTrackIpc.update({
+            projectId: project.id,
+            trackId: track.id,
+            order: track.order,
+          }),
+        ),
+      );
+      const updatedTrackMap = new Map(updatedTracks.map((track) => [track.id, track]));
+      updateTrackList(nextTracks.map((track) => updatedTrackMap.get(track.id) ?? track));
+    },
+    [getLiveProject, project.id, updateTrackList],
   );
 
   const refreshSequencePreview = useCallback(async () => {
@@ -602,7 +703,7 @@ export function ComposerRuntimeProvider({
   );
 
   const addTrack = useCallback(
-    async (type: Track["type"]) => {
+    async (type: Track["type"], placement: AddTrackPlacement = "end") => {
       const currentTracks = getLiveProject().tracks;
       const prefix = type === "audio" ? "Audio" : "Video";
       const nextIndex =
@@ -619,9 +720,20 @@ export function ComposerRuntimeProvider({
         name: `${prefix} ${nextIndex}`,
       });
 
-      updateTrackList([...getLiveProject().tracks, createdTrack]);
+      const nextTracks = insertTrackIntoGroupedOrder(
+        [...currentTracks, createdTrack],
+        createdTrack,
+        placement,
+      );
+
+      try {
+        await persistTrackOrder(nextTracks, [...currentTracks, createdTrack]);
+      } catch (error) {
+        updateTrackList([...currentTracks, createdTrack]);
+        throw error;
+      }
     },
-    [getLiveProject, project.id, updateTrackList],
+    [getLiveProject, persistTrackOrder, project.id, updateTrackList],
   );
 
   const deleteTrack = useCallback(
@@ -633,6 +745,19 @@ export function ComposerRuntimeProvider({
       updateTrackList(getLiveProject().tracks.filter((track) => track.id !== trackId));
     },
     [getLiveProject, project.id, updateTrackList],
+  );
+
+  const reorderTrack = useCallback(
+    async (trackId: string, targetTrackId: string, placement: TrackReorderPlacement) => {
+      if (trackId === targetTrackId) {
+        return;
+      }
+
+      const currentTracks = getLiveProject().tracks;
+      const nextTracks = reorderTrackWithinType(currentTracks, trackId, targetTrackId, placement);
+      await persistTrackOrder(nextTracks, currentTracks);
+    },
+    [getLiveProject, persistTrackOrder],
   );
 
   const updateClip = useCallback(
@@ -1182,6 +1307,7 @@ export function ComposerRuntimeProvider({
       setZoom,
       addTrack,
       deleteTrack,
+      reorderTrack,
       updateTrack,
       addAssetToTrack,
       moveClip,
@@ -1211,6 +1337,7 @@ export function ComposerRuntimeProvider({
       previewAsset,
       previewLibraryAsset,
       project,
+      reorderTrack,
       seek,
       setPlaybackClockSource,
       selectClip,

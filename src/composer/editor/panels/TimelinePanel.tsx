@@ -3,8 +3,10 @@ import {
   Eye,
   EyeOff,
   Film,
+  GripVertical,
   Layers,
   Lock,
+  MoreVertical,
   Music2,
   Plus,
   Ruler,
@@ -17,12 +19,22 @@ import {
   ZoomOut,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Slider } from "@/components/ui/slider";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/useToast";
 import type { Clip, ComposerAsset, Track } from "@/composer/types/project";
 import { useComposerRuntime } from "../context/ComposerRuntimeContext";
+import {
+  getInstanceGhostStyle,
+  getInstanceGhostWidth,
+} from "../utils/instanceDragGhost";
 import {
   formatTimelineTime,
   getClipEnd,
@@ -34,6 +46,8 @@ import {
 
 const RULER_HEIGHT = 34;
 const TRACK_ROW_HEIGHT = 60;
+const ADD_TRACK_TARGET_HEIGHT = 15;
+const CROSS_TRACK_DRAG_TOLERANCE = 15;
 const MIN_VIEWPORT_WIDTH = 720;
 const MIN_FRAME_PIXEL_WIDTH = 32;
 const MAX_FRAME_PIXEL_WIDTH = 128;
@@ -56,6 +70,16 @@ type Interaction =
       clip: Clip;
       originX: number;
     };
+
+type TrackDropTarget = {
+  trackId: string;
+  placement: "before" | "after";
+};
+
+type PointerPosition = {
+  x: number;
+  y: number;
+};
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -181,6 +205,7 @@ export function TimelinePanel() {
     setZoom,
     addTrack,
     deleteTrack,
+    reorderTrack,
     updateTrack,
     addAssetToTrack,
     getMediaDuration,
@@ -194,6 +219,10 @@ export function TimelinePanel() {
   const [interaction, setInteraction] = useState<Interaction | null>(null);
   const [draftClip, setDraftClip] = useState<Clip | null>(null);
   const [isDraggingPlayhead, setIsDraggingPlayhead] = useState(false);
+  const [draggingTrackId, setDraggingTrackId] = useState<string | null>(null);
+  const [trackDropTarget, setTrackDropTarget] = useState<TrackDropTarget | null>(null);
+  const [moveGhostPointer, setMoveGhostPointer] = useState<PointerPosition | null>(null);
+  const [isCrossTrackDrag, setIsCrossTrackDrag] = useState(false);
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const rulerRef = useRef<HTMLDivElement | null>(null);
   const trackRowsRef = useRef<HTMLDivElement | null>(null);
@@ -338,6 +367,24 @@ export function TimelinePanel() {
     return candidate ?? tracksById.get(fallbackTrackId) ?? null;
   };
 
+  const isWithinSourceTrackDragZone = (clientY: number, sourceTrackId: string): boolean => {
+    const rowsElement = trackRowsRef.current;
+    const viewportElement = viewportRef.current;
+    const sourceTrackIndex = tracks.findIndex((track) => track.id === sourceTrackId);
+    if (!rowsElement || !viewportElement || sourceTrackIndex < 0) {
+      return true;
+    }
+
+    const rect = rowsElement.getBoundingClientRect();
+    const relativeY = clientY - rect.top + viewportElement.scrollTop;
+    const rowTop = ADD_TRACK_TARGET_HEIGHT + sourceTrackIndex * TRACK_ROW_HEIGHT;
+    const rowBottom = rowTop + TRACK_ROW_HEIGHT;
+    return (
+      relativeY >= rowTop - CROSS_TRACK_DRAG_TOLERANCE &&
+      relativeY <= rowBottom + CROSS_TRACK_DRAG_TOLERANCE
+    );
+  };
+
   useEffect(() => {
     if (!interaction) {
       return;
@@ -355,15 +402,23 @@ export function TimelinePanel() {
       const nextClip = trackClips.find((clip) => clip.startTime >= getClipEnd(baseClip));
 
       if (interaction.type === "move") {
+        setMoveGhostPointer({ x: event.clientX, y: event.clientY });
         const sourceTrack = tracksById.get(baseClip.trackId);
+        const withinSourceTrackZone = isWithinSourceTrackDragZone(
+          event.clientY,
+          baseClip.trackId,
+        );
         const hoveredTrack = resolveTrackFromClientY(event.clientY, baseClip.trackId);
         const targetTrack =
+          !withinSourceTrackZone &&
           sourceTrack &&
           hoveredTrack &&
+          hoveredTrack.id !== sourceTrack.id &&
           hoveredTrack.type === sourceTrack.type &&
           !hoveredTrack.locked
             ? hoveredTrack
             : sourceTrack;
+        setIsCrossTrackDrag(Boolean(targetTrack && sourceTrack && targetTrack.id !== sourceTrack.id));
         if (!targetTrack) {
           return;
         }
@@ -449,6 +504,8 @@ export function TimelinePanel() {
       const currentDraft = draftClip;
       setInteraction(null);
       setDraftClip(null);
+      setMoveGhostPointer(null);
+      setIsCrossTrackDrag(false);
 
       if (!currentDraft) {
         return;
@@ -584,45 +641,131 @@ export function TimelinePanel() {
     return byTrack;
   }, [clips, tracks]);
 
+  const moveGhostModel = useMemo(() => {
+    if (
+      !moveGhostPointer ||
+      !isCrossTrackDrag ||
+      interaction?.type !== "move" ||
+      !draftClip
+    ) {
+      return null;
+    }
+
+    return {
+      label: draftClip.sourcePath?.split(/[\\/]/).pop() ?? "Clip",
+      detail: `${draftClip.duration.toFixed(2)}s · ${Math.round(draftClip.duration * project.fps)}f`,
+      trackType: tracksById.get(draftClip.trackId)?.type ?? "video",
+      width: getInstanceGhostWidth(draftClip.duration, zoom),
+    } as const;
+  }, [
+    draftClip,
+    interaction?.type,
+    isCrossTrackDrag,
+    moveGhostPointer,
+    project.fps,
+    tracksById,
+    zoom,
+  ]);
+
+  const handleAddTrack = (type: Track["type"], placement: "start" | "end") => {
+    const label = type === "audio" ? "audio" : "video";
+    void addTrack(type, placement).catch((error: unknown) => {
+      toast({
+        title: `Couldn't add ${label} track`,
+        description: error instanceof Error ? error.message : "Try again.",
+        variant: "destructive",
+      });
+    });
+  };
+
+  const handleDeleteTrack = (track: Track) => {
+    const sameTypeTracks = tracks.filter((candidate) => candidate.type === track.type);
+    const clipCount = clips.filter((clip) => clip.trackId === track.id).length;
+    if (clipCount > 0) {
+      toast({
+        title: "Track is not empty",
+        description: `Move or delete the ${clipCount} clip${clipCount === 1 ? "" : "s"} on ${track.name} before removing the track.`,
+        variant: "destructive",
+      });
+      return;
+    }
+    if (sameTypeTracks.length <= 1) {
+      toast({
+        title: "Track can't be deleted",
+        description: `Keep at least one ${track.type} track in the timeline.`,
+      });
+      return;
+    }
+    void deleteTrack(track.id).catch((error: unknown) => {
+      toast({
+        title: "Couldn't delete track",
+        description: error instanceof Error ? error.message : "Try again.",
+        variant: "destructive",
+      });
+    });
+  };
+
+  const handleTrackDragStart = (event: DragEvent<HTMLButtonElement>, track: Track) => {
+    event.stopPropagation();
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", track.id);
+    setDraggingTrackId(track.id);
+    setTrackDropTarget(null);
+  };
+
+  const handleTrackDragOver = (event: DragEvent<HTMLDivElement>, track: Track) => {
+    if (!draggingTrackId || draggingTrackId === track.id) {
+      return;
+    }
+
+    const draggingTrack = tracksById.get(draggingTrackId);
+    if (!draggingTrack || draggingTrack.type !== track.type) {
+      setTrackDropTarget(null);
+      return;
+    }
+
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const placement = event.clientY - bounds.top < bounds.height / 2 ? "before" : "after";
+    setTrackDropTarget({ trackId: track.id, placement });
+  };
+
+  const handleTrackDrop = (event: DragEvent<HTMLDivElement>, track: Track) => {
+    event.preventDefault();
+    if (!draggingTrackId || !trackDropTarget || trackDropTarget.trackId !== track.id) {
+      return;
+    }
+
+    const draggingTrack = tracksById.get(draggingTrackId);
+    if (!draggingTrack || draggingTrack.type !== track.type) {
+      setDraggingTrackId(null);
+      setTrackDropTarget(null);
+      return;
+    }
+
+    void reorderTrack(draggingTrackId, track.id, trackDropTarget.placement).catch((error: unknown) => {
+      toast({
+        title: "Couldn't reorder track",
+        description:
+          error instanceof Error ? error.message : "Try again.",
+        variant: "destructive",
+      });
+    });
+    setDraggingTrackId(null);
+    setTrackDropTarget(null);
+  };
+
+  const handleTrackDragEnd = () => {
+    setDraggingTrackId(null);
+    setTrackDropTarget(null);
+  };
+
   return (
     <div className="flex h-full w-full flex-col border-t border-border bg-background">
       <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
         <Layers className="h-4 w-4 text-muted-foreground" />
         <span className="flex-1 text-sm font-medium text-muted-foreground">Timeline</span>
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-7 gap-1 px-2 text-[11px]"
-          onClick={() =>
-            void addTrack("video").catch((error: unknown) => {
-              toast({
-                title: "Couldn't add video track",
-                description: error instanceof Error ? error.message : "Try again.",
-                variant: "destructive",
-              });
-            })
-          }
-        >
-          <Plus className="h-3.5 w-3.5" />
-          Video track
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-7 gap-1 px-2 text-[11px]"
-          onClick={() =>
-            void addTrack("audio").catch((error: unknown) => {
-              toast({
-                title: "Couldn't add audio track",
-                description: error instanceof Error ? error.message : "Try again.",
-                variant: "destructive",
-              });
-            })
-          }
-        >
-          <Plus className="h-3.5 w-3.5" />
-          Audio track
-        </Button>
         <div className="text-[11px] text-muted-foreground">
           {Math.round(playhead * project.fps)}f - {playhead.toFixed(2)}s / {project.duration.toFixed(2)}s
         </div>
@@ -740,125 +883,148 @@ export function TimelinePanel() {
               Tracks
             </div>
             <div className="min-h-0">
-               {tracks.map((track) => {
-                 const sameTypeTracks = tracks.filter((candidate) => candidate.type === track.type);
-                 return (
-                 <div
-                   key={track.id}
-                   className={cn(
-                    "relative flex items-center border-b border-border px-2 text-sm",
-                    isTrackDimmed(track) && "bg-muted/30",
-                  )}
-                  style={{ height: TRACK_ROW_HEIGHT }}
-                >
-                  {track.locked ? (
-                    <div
-                      className="pointer-events-none absolute inset-0 opacity-40"
-                      style={{
-                        backgroundImage:
-                          "repeating-linear-gradient(135deg, rgba(255,255,255,0.08) 0px, rgba(255,255,255,0.08) 6px, transparent 6px, transparent 12px)",
-                      }}
-                    />
-                  ) : null}
-                  <div className="relative z-10 flex w-full items-center justify-between gap-1">
-                    <div className="flex h-6 w-6 items-center justify-center text-muted-foreground">
-                      {(() => {
-                        const TrackIcon = getTrackTypeIcon(track.type);
-                        return <TrackIcon className="h-4 w-4" />;
-                      })()}
+              <button
+                type="button"
+                className="flex w-full items-center justify-center border-b border-border/70 bg-background/35 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+                style={{ height: ADD_TRACK_TARGET_HEIGHT }}
+                onClick={() => handleAddTrack("video", "start")}
+                aria-label="Add video track"
+              >
+                <Plus className="h-2.5 w-2.5" />
+              </button>
+              {tracks.map((track) => {
+                const TrackIcon = getTrackTypeIcon(track.type);
+                const dropBefore =
+                  trackDropTarget?.trackId === track.id && trackDropTarget.placement === "before";
+                const dropAfter =
+                  trackDropTarget?.trackId === track.id && trackDropTarget.placement === "after";
+                return (
+                  <div
+                    key={track.id}
+                    className={cn(
+                      "relative flex items-center border-b border-border text-sm transition-colors",
+                      isTrackDimmed(track) && "bg-muted/30",
+                      draggingTrackId === track.id && "opacity-70",
+                    )}
+                    style={{ height: TRACK_ROW_HEIGHT }}
+                    onDragOver={(event) => handleTrackDragOver(event, track)}
+                    onDrop={(event) => handleTrackDrop(event, track)}
+                    onDragLeave={() => {
+                      if (trackDropTarget?.trackId === track.id) {
+                        setTrackDropTarget(null);
+                      }
+                    }}
+                  >
+                    {dropBefore ? (
+                      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-primary" />
+                    ) : null}
+                    {dropAfter ? (
+                      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-primary" />
+                    ) : null}
+                    {track.locked ? (
+                      <div
+                        className="pointer-events-none absolute inset-0 opacity-40"
+                        style={{
+                          backgroundImage:
+                            "repeating-linear-gradient(135deg, rgba(255,255,255,0.08) 0px, rgba(255,255,255,0.08) 6px, transparent 6px, transparent 12px)",
+                        }}
+                      />
+                    ) : null}
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          draggable
+                          className="relative z-10 flex h-full w-5 shrink-0 cursor-grab items-center justify-center border-r border-border/70 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground active:cursor-grabbing"
+                          onDragStart={(event) => handleTrackDragStart(event, track)}
+                          onDragEnd={handleTrackDragEnd}
+                          aria-label={`Reorder ${track.name}`}
+                        >
+                          <GripVertical className="h-3.5 w-3.5" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent>Drag to reorder {track.type} tracks</TooltipContent>
+                    </Tooltip>
+                    <div className="relative z-10 flex min-w-0 flex-1 items-center justify-between gap-1 px-2">
+                      <div className="flex h-6 w-6 items-center justify-center text-muted-foreground">
+                        <TrackIcon className="h-4 w-4" />
+                      </div>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className={cn(
+                              "h-6 w-6",
+                              track.locked && "bg-foreground/10 text-foreground hover:bg-foreground/15",
+                            )}
+                            onClick={() => void updateTrack(track.id, { locked: !track.locked })}
+                          >
+                            <Lock className="h-3.5 w-3.5" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>{track.locked ? "Unlock track" : "Lock track"}</TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className={cn(
+                              "h-6 w-6",
+                              track.type === "audio" && "pointer-events-none invisible",
+                              !track.visible && "bg-foreground/10 text-foreground hover:bg-foreground/15",
+                            )}
+                            onClick={() => void updateTrack(track.id, { visible: !track.visible })}
+                          >
+                            {track.visible ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>{track.visible ? "Hide track" : "Show track"}</TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className={cn(
+                              "h-6 w-6",
+                              track.muted && "bg-foreground/10 text-foreground hover:bg-foreground/15",
+                            )}
+                            onClick={() => void updateTrack(track.id, { muted: !track.muted })}
+                          >
+                            {track.muted ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>{track.muted ? "Unmute track" : "Mute track"}</TooltipContent>
+                      </Tooltip>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-6 w-6">
+                            <MoreVertical className="h-3.5 w-3.5" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => handleDeleteTrack(track)}>
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className={cn(
-                            "h-6 w-6",
-                            track.locked && "text-foreground bg-foreground/10 hover:bg-foreground/15",
-                          )}
-                          onClick={() => void updateTrack(track.id, { locked: !track.locked })}
-                        >
-                          <Lock className="h-3.5 w-3.5" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>{track.locked ? "Unlock track" : "Lock track"}</TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className={cn(
-                            "h-6 w-6",
-                            track.type === "audio" && "invisible pointer-events-none",
-                            !track.visible && "text-foreground bg-foreground/10 hover:bg-foreground/15",
-                          )}
-                          onClick={() => void updateTrack(track.id, { visible: !track.visible })}
-                        >
-                          {track.visible ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>{track.visible ? "Hide track" : "Show track"}</TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className={cn(
-                            "h-6 w-6",
-                            track.muted && "text-foreground bg-foreground/10 hover:bg-foreground/15",
-                          )}
-                          onClick={() => void updateTrack(track.id, { muted: !track.muted })}
-                        >
-                          {track.muted ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>{track.muted ? "Unmute track" : "Mute track"}</TooltipContent>
-                    </Tooltip>
-                     <Tooltip>
-                       <TooltipTrigger asChild>
-                         <Button
-                           variant="ghost"
-                           size="icon"
-                           className="h-6 w-6"
-                           onClick={() => {
-                             const clipCount = clips.filter((clip) => clip.trackId === track.id).length;
-                             if (clipCount > 0) {
-                               toast({
-                                 title: "Track is not empty",
-                                 description: `Move or delete the ${clipCount} clip${clipCount === 1 ? "" : "s"} on ${track.name} before removing the track.`,
-                                 variant: "destructive",
-                               });
-                               return;
-                             }
-                             if (sameTypeTracks.length <= 1) {
-                               toast({
-                                 title: "Track can't be deleted",
-                                 description: `Keep at least one ${track.type} track in the timeline.`,
-                               });
-                               return;
-                             }
-                             void deleteTrack(track.id).catch((error: unknown) => {
-                               toast({
-                                 title: "Couldn't delete track",
-                                 description:
-                                   error instanceof Error ? error.message : "Try again.",
-                                 variant: "destructive",
-                               });
-                             });
-                           }}
-                         >
-                           <Trash2 className="h-3.5 w-3.5" />
-                         </Button>
-                       </TooltipTrigger>
-                       <TooltipContent>Delete empty track</TooltipContent>
-                     </Tooltip>
-                   </div>
-                 </div>
-               )})}
-             </div>
-           </div>
+                  </div>
+                );
+              })}
+              <button
+                type="button"
+                className="flex w-full items-center justify-center border-b border-border/70 bg-background/35 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+                style={{ height: ADD_TRACK_TARGET_HEIGHT }}
+                onClick={() => handleAddTrack("audio", "end")}
+                aria-label="Add audio track"
+              >
+                <Plus className="h-2.5 w-2.5" />
+              </button>
+            </div>
+          </div>
 
           <div ref={viewportRef} className="min-w-0 min-h-0 overflow-auto">
             <div className="relative" style={{ width: timelineWidth }}>
@@ -915,30 +1081,40 @@ export function TimelinePanel() {
                 </div>
               </div>
 
-               <div ref={trackRowsRef} className="relative">
-                <div
-                  className="absolute bottom-0 top-0 z-30 w-px bg-primary"
-                  style={{ left: playhead * zoom }}
-                />
-                <div
-                  className="absolute bottom-0 top-0 z-20 w-px border-l border-dashed border-primary/70"
-                  style={{ left: project.duration * zoom }}
-                />
-                {timelineWidth > project.duration * zoom ? (
+                <div ref={trackRowsRef} className="relative">
                   <div
-                    className="pointer-events-none absolute bottom-0 top-0 z-10 bg-background/45"
-                    style={{
-                      left: project.duration * zoom,
-                      width: timelineWidth - project.duration * zoom,
-                    }}
+                    className="absolute bottom-0 top-0 z-30 w-px bg-primary"
+                    style={{ left: playhead * zoom }}
                   />
-                ) : null}
-
-                {tracks.map((track) => {
-                  const trackClips = visibleClipsByTrack.get(track.id) ?? [];
-                  return (
+                  <div
+                    className="absolute bottom-0 top-0 z-20 w-px border-l border-dashed border-primary/70"
+                    style={{ left: project.duration * zoom }}
+                  />
+                  {timelineWidth > project.duration * zoom ? (
                     <div
-                      key={track.id}
+                      className="pointer-events-none absolute bottom-0 top-0 z-10 bg-background/45"
+                      style={{
+                        left: project.duration * zoom,
+                        width: timelineWidth - project.duration * zoom,
+                      }}
+                    />
+                  ) : null}
+
+                  <div
+                    className="border-b border-border/70 bg-background/20"
+                    style={{ height: ADD_TRACK_TARGET_HEIGHT }}
+                  />
+
+                  {tracks.map((track) => {
+                    const trackClips = visibleClipsByTrack.get(track.id) ?? [];
+                    const dropBefore =
+                      trackDropTarget?.trackId === track.id && trackDropTarget.placement === "before";
+                    const dropAfter =
+                      trackDropTarget?.trackId === track.id && trackDropTarget.placement === "after";
+
+                    return (
+                      <div
+                        key={track.id}
                         className={cn(
                           "relative border-b border-border transition-colors",
                           dragOverTrackId === track.id && "bg-primary/10",
@@ -946,125 +1122,166 @@ export function TimelinePanel() {
                           isTrackDimmed(track) && "bg-muted/25",
                           track.locked && "cursor-not-allowed",
                         )}
-                      style={{ height: TRACK_ROW_HEIGHT }}
-                      onMouseDown={(event) =>
-                        handleTimelineSeek(event, event.currentTarget as HTMLDivElement)
-                      }
-                      onDragOver={(event) => {
-                        if (
-                          track.locked ||
-                          !Array.from(event.dataTransfer.types).includes(
-                            "application/x-composer-asset-present",
-                          )
-                        ) {
-                          return;
+                        style={{ height: TRACK_ROW_HEIGHT }}
+                        onMouseDown={(event) =>
+                          handleTimelineSeek(event, event.currentTarget as HTMLDivElement)
                         }
-                        event.preventDefault();
-                        event.dataTransfer.dropEffect = "copy";
-                        setDragOverTrackId(track.id);
-                      }}
-                      onDragLeave={() => {
-                        if (dragOverTrackId === track.id) {
-                          setDragOverTrackId(null);
-                        }
-                      }}
-                      onDrop={(event) => void handleAssetDrop(event, track)}
-                    >
-                      {trackClips.length === 0 ? (
-                        <div className="flex h-full items-center px-3 text-xs text-muted-foreground">
-                          Drop {track.type === "audio" ? "audio" : "video or image"} assets here
-                        </div>
-                      ) : null}
-                      {track.locked ? (
-                        <div
-                          className="pointer-events-none absolute inset-0 z-10 opacity-50"
-                          style={{
-                            backgroundImage:
-                              "repeating-linear-gradient(135deg, rgba(255,255,255,0.06) 0px, rgba(255,255,255,0.06) 6px, transparent 6px, transparent 12px)",
-                          }}
-                        />
-                      ) : null}
-
-                      {trackClips.map((clip) => {
-                        const renderedClip = draftClip?.id === clip.id ? draftClip : clip;
-                        const selected = renderedClip.id === selectedClipId;
-                        return (
-                          <div
-                            key={renderedClip.id}
-                            className={cn(
-                              "absolute top-2 flex h-[44px] items-stretch overflow-hidden rounded-md border shadow-sm",
-                              getClipFill(track.type, selected),
-                              isTrackDimmed(track) && "opacity-40",
-                            )}
-                            style={{
-                              left: renderedClip.startTime * zoom,
-                              width: Math.max(renderedClip.duration * zoom, 18),
-                            }}
-                            onMouseDown={(event) => {
-                              if (track.locked) {
-                                return;
-                              }
-                              event.stopPropagation();
-                              selectClip(renderedClip.id);
-                              setInteraction({
-                                type: "move",
-                                clip,
-                                originX: event.clientX,
-                              });
-                              setDraftClip(clip);
-                            }}
-                          >
-                            <button
-                              type="button"
-                              className="w-2 shrink-0 cursor-ew-resize bg-black/20 hover:bg-black/30"
-                              onMouseDown={(event) => {
-                                if (track.locked) {
-                                  return;
-                                }
-                                event.stopPropagation();
-                                selectClip(renderedClip.id);
-                                setInteraction({
-                                  type: "trim-left",
-                                  clip,
-                                  originX: event.clientX,
-                                });
-                                setDraftClip(clip);
-                              }}
-                              aria-label="Trim clip start"
-                            />
-                            <div className="flex min-w-0 flex-1 flex-col justify-center px-2 text-left">
-                              <div className="truncate text-xs font-medium text-white">
-                                {clip.sourcePath?.split(/[\\/]/).pop() ?? "Clip"}
-                              </div>
-                              <div className="text-[10px] text-white/80">
-                                {renderedClip.duration.toFixed(2)}s · {Math.round(renderedClip.duration * project.fps)}f
-                              </div>
-                            </div>
-                            <button
-                              type="button"
-                              className="w-2 shrink-0 cursor-ew-resize bg-black/20 hover:bg-black/30"
-                              onMouseDown={(event) => {
-                                if (track.locked) {
-                                  return;
-                                }
-                                event.stopPropagation();
-                                selectClip(renderedClip.id);
-                                setInteraction({
-                                  type: "trim-right",
-                                  clip,
-                                  originX: event.clientX,
-                                });
-                                setDraftClip(clip);
-                              }}
-                              aria-label="Trim clip end"
-                            />
+                        onDragOver={(event) => {
+                          if (
+                            track.locked ||
+                            !Array.from(event.dataTransfer.types).includes(
+                              "application/x-composer-asset-present",
+                            )
+                          ) {
+                            return;
+                          }
+                          event.preventDefault();
+                          event.dataTransfer.dropEffect = "copy";
+                          setDragOverTrackId(track.id);
+                        }}
+                        onDragLeave={() => {
+                          if (dragOverTrackId === track.id) {
+                            setDragOverTrackId(null);
+                          }
+                        }}
+                        onDrop={(event) => void handleAssetDrop(event, track)}
+                      >
+                        {dropBefore ? (
+                          <div className="pointer-events-none absolute inset-x-0 top-0 z-20 h-px bg-primary" />
+                        ) : null}
+                        {dropAfter ? (
+                          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-px bg-primary" />
+                        ) : null}
+                        {trackClips.length === 0 ? (
+                          <div className="flex h-full items-center px-3 text-xs text-muted-foreground">
+                            Drop {track.type === "audio" ? "audio" : "video or image"} assets here
                           </div>
-                        );
-                      })}
+                        ) : null}
+                        {track.locked ? (
+                          <div
+                            className="pointer-events-none absolute inset-0 z-10 opacity-50"
+                            style={{
+                              backgroundImage:
+                                "repeating-linear-gradient(135deg, rgba(255,255,255,0.06) 0px, rgba(255,255,255,0.06) 6px, transparent 6px, transparent 12px)",
+                            }}
+                          />
+                        ) : null}
+
+                        {trackClips.map((clip) => {
+                          if (isCrossTrackDrag && draftClip?.id === clip.id) {
+                            return null;
+                          }
+                          const renderedClip = draftClip?.id === clip.id ? draftClip : clip;
+                          const selected = renderedClip.id === selectedClipId;
+                          return (
+                            <div
+                              key={renderedClip.id}
+                              className={cn(
+                                "absolute top-2 flex h-[44px] items-stretch overflow-hidden rounded-md border shadow-sm",
+                                getClipFill(track.type, selected),
+                                isTrackDimmed(track) && "opacity-40",
+                              )}
+                              style={{
+                                left: renderedClip.startTime * zoom,
+                                width: Math.max(renderedClip.duration * zoom, 18),
+                              }}
+                              onMouseDown={(event) => {
+                                if (track.locked) {
+                                  return;
+                                }
+                                event.stopPropagation();
+                                selectClip(renderedClip.id);
+                                setMoveGhostPointer({
+                                  x: event.clientX,
+                                  y: event.clientY,
+                                });
+                                setIsCrossTrackDrag(false);
+                                setInteraction({
+                                  type: "move",
+                                  clip,
+                                  originX: event.clientX,
+                                });
+                                setDraftClip(clip);
+                              }}
+                            >
+                              <button
+                                type="button"
+                                className="w-2 shrink-0 cursor-ew-resize bg-black/20 hover:bg-black/30"
+                                onMouseDown={(event) => {
+                                  if (track.locked) {
+                                    return;
+                                  }
+                                  event.stopPropagation();
+                                  selectClip(renderedClip.id);
+                                  setInteraction({
+                                    type: "trim-left",
+                                    clip,
+                                    originX: event.clientX,
+                                  });
+                                  setDraftClip(clip);
+                                }}
+                                aria-label="Trim clip start"
+                              />
+                              <div className="flex min-w-0 flex-1 flex-col justify-center px-2 text-left">
+                                <div className="truncate text-xs font-medium text-white">
+                                  {clip.sourcePath?.split(/[\\/]/).pop() ?? "Clip"}
+                                </div>
+                                <div className="text-[10px] text-white/80">
+                                  {renderedClip.duration.toFixed(2)}s · {Math.round(renderedClip.duration * project.fps)}f
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                className="w-2 shrink-0 cursor-ew-resize bg-black/20 hover:bg-black/30"
+                                onMouseDown={(event) => {
+                                  if (track.locked) {
+                                    return;
+                                  }
+                                  event.stopPropagation();
+                                  selectClip(renderedClip.id);
+                                  setInteraction({
+                                    type: "trim-right",
+                                    clip,
+                                    originX: event.clientX,
+                                  });
+                                  setDraftClip(clip);
+                                }}
+                                aria-label="Trim clip end"
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+
+                  <div
+                    className="border-b border-border/70 bg-background/20"
+                    style={{ height: ADD_TRACK_TARGET_HEIGHT }}
+                  />
+                </div>
+                {moveGhostModel && moveGhostPointer ? (
+                  <div
+                    className="pointer-events-none fixed z-[120] flex items-stretch overflow-hidden"
+                    style={{
+                      ...getInstanceGhostStyle(moveGhostModel),
+                      opacity: 0.5,
+                      left: moveGhostPointer.x - 12,
+                      top: moveGhostPointer.y - 22,
+                    }}
+                  >
+                    <div className="w-2 shrink-0 bg-black/20" />
+                    <div className="flex min-w-0 flex-1 flex-col justify-center px-2 text-left">
+                      <div className="truncate text-xs font-medium text-white">
+                        {moveGhostModel.label}
+                      </div>
+                      <div className="truncate text-[10px] text-white/80">
+                        {moveGhostModel.detail}
+                      </div>
                     </div>
-                  );
-                })}
-              </div>
+                    <div className="w-2 shrink-0 bg-black/20" />
+                  </div>
+                ) : null}
             </div>
           </div>
         </div>

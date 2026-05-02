@@ -34,6 +34,10 @@ import type {
 import { cn } from "@/lib/utils";
 import { MyAssetsPickerDialog } from "./MyAssetsPickerDialog";
 import { useComposerRuntime } from "../context/ComposerRuntimeContext";
+import {
+  createInstanceDragImage,
+  getInstanceGhostWidth,
+} from "../utils/instanceDragGhost";
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -72,6 +76,7 @@ interface AssetDetails {
   summary: string;
   thumbnailUrl?: string;
   sourcePath: string;
+  durationSeconds?: number;
 }
 
 function clampProgress(value: number | undefined): number {
@@ -195,7 +200,7 @@ export function AssetsPanel() {
     (state) => state.currentProject?.path ?? null,
   );
   const setClips = useComposerProjectStore((state) => state.setClips);
-  const { getAssetUrl, previewLibraryAsset } = useComposerRuntime();
+  const { getAssetUrl, previewLibraryAsset, zoom } = useComposerRuntime();
   const [assets, setAssets] = useState<ComposerAsset[]>([]);
   const [assetDetails, setAssetDetails] = useState<
     Record<string, AssetDetails>
@@ -269,8 +274,18 @@ export function AssetsPanel() {
       );
       event.dataTransfer.setData("application/x-composer-asset-present", "1");
       event.dataTransfer.setData("text/plain", asset.fileName);
+
+      const details = assetDetails[asset.id];
+      const durationSeconds =
+        details?.durationSeconds ?? (asset.type === "image" ? 5 : 5);
+      createInstanceDragImage(event.dataTransfer, {
+        label: asset.fileName,
+        detail: `${durationSeconds.toFixed(2)}s`,
+        trackType: asset.type === "audio" ? "audio" : "video",
+        width: getInstanceGhostWidth(durationSeconds, zoom),
+      });
     },
-    [],
+    [assetDetails, zoom],
   );
 
   useEffect(() => {
@@ -303,6 +318,7 @@ export function AssetsPanel() {
               summary: `${image.naturalWidth}*${image.naturalHeight}px`,
               thumbnailUrl: assetUrl,
               sourcePath: detailsPath,
+              durationSeconds: 5,
             });
           image.onerror = () =>
             resolve({
@@ -322,6 +338,7 @@ export function AssetsPanel() {
             resolve({
               summary: `${formatDuration(media.duration)} ${media.videoWidth}*${media.videoHeight}px`,
               sourcePath: detailsPath,
+              durationSeconds: media.duration,
             });
             return;
           }
@@ -329,6 +346,7 @@ export function AssetsPanel() {
           resolve({
             summary: formatDuration(media.duration),
             sourcePath: detailsPath,
+            durationSeconds: media.duration,
           });
         };
         media.onerror = () =>
