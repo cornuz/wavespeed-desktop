@@ -1132,6 +1132,7 @@ async function renderProjectSequencePreview(
       if (blendMode) {
         const clipCanvasLabel = `layer${currentInputIndex}`;
         const blendLabel = `blend${currentInputIndex}`;
+        const blendedLayerLabel = `blendLayer${currentInputIndex}`;
         const maskLabel = `mask${currentInputIndex}`;
         filterLines.push(
           `color=c=black@0.0:s=${outputDimensions.width}x${outputDimensions.height}:r=${plan.request.fps}:d=${outputDuration},format=rgba[blank${currentInputIndex}]`,
@@ -1141,10 +1142,13 @@ async function renderProjectSequencePreview(
         );
         filterLines.push(`[${clipCanvasLabel}]alphaextract[${maskLabel}]`);
         filterLines.push(
-          `[${videoCompositeLabel}][${clipCanvasLabel}]blend=all_mode=${blendMode}[${blendLabel}]`,
+          `[${videoCompositeLabel}][${clipCanvasLabel}]blend=all_mode=${blendMode},format=rgb24[${blendLabel}]`,
         );
         filterLines.push(
-          `[${videoCompositeLabel}][${blendLabel}][${maskLabel}]maskedmerge[${nextCompositeLabel}]`,
+          `[${blendLabel}][${maskLabel}]alphamerge[${blendedLayerLabel}]`,
+        );
+        filterLines.push(
+          `[${videoCompositeLabel}][${blendedLayerLabel}]overlay=0:0:eof_action=pass:repeatlast=0[${nextCompositeLabel}]`,
         );
       } else {
         filterLines.push(
