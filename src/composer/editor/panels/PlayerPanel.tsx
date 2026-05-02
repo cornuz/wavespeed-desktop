@@ -1201,54 +1201,60 @@ export function PlayerPanel() {
                       <div
                         className="relative h-full w-full"
                         style={{
-                          filter: layer.adjustmentFilter,
                           opacity: layer.effectiveOpacity,
                           mixBlendMode: layer.blendMode,
                         }}
                       >
-                        {isImagePath(layer.clip.sourcePath) ? (
-                          <img
-                            src={layer.canonicalUrl}
-                            alt={layer.clip.sourcePath}
-                            className="h-full w-full object-fill"
-                            draggable={false}
-                          />
-                        ) : (
-                          <video
-                            ref={(element) => {
-                              videoLayerRefs.current[layer.clip.id] = element;
-                            }}
-                            src={layer.canonicalUrl}
-                            className="h-full w-full object-fill"
-                            playsInline
-                            muted
-                            preload="auto"
-                          />
-                        )}
-                        {layer.temperatureOverlayStyle ? (
-                          <div
-                            className="pointer-events-none absolute inset-0"
-                            style={layer.temperatureOverlayStyle}
-                          />
-                        ) : null}
-                        {layer.tintOverlayStyle ? (
-                          <div
-                            className="pointer-events-none absolute inset-0"
-                            style={layer.tintOverlayStyle}
-                          />
-                        ) : null}
-                        {layer.vignetteOverlayStyle ? (
-                          <div
-                            className="pointer-events-none absolute inset-0"
-                            style={layer.vignetteOverlayStyle}
-                          />
-                        ) : null}
-                        {layer.noiseOverlayStyle ? (
-                          <div
-                            className="pointer-events-none absolute inset-0"
-                            style={layer.noiseOverlayStyle}
-                          />
-                        ) : null}
+                        <div
+                          className="relative h-full w-full"
+                          style={{
+                            filter: layer.adjustmentFilter,
+                          }}
+                        >
+                          {isImagePath(layer.clip.sourcePath) ? (
+                            <img
+                              src={layer.canonicalUrl}
+                              alt={layer.clip.sourcePath}
+                              className="h-full w-full object-fill"
+                              draggable={false}
+                            />
+                          ) : (
+                            <video
+                              ref={(element) => {
+                                videoLayerRefs.current[layer.clip.id] = element;
+                              }}
+                              src={layer.canonicalUrl}
+                              className="h-full w-full object-fill"
+                              playsInline
+                              muted
+                              preload="auto"
+                            />
+                          )}
+                          {layer.temperatureOverlayStyle ? (
+                            <div
+                              className="pointer-events-none absolute inset-0"
+                              style={layer.temperatureOverlayStyle}
+                            />
+                          ) : null}
+                          {layer.tintOverlayStyle ? (
+                            <div
+                              className="pointer-events-none absolute inset-0"
+                              style={layer.tintOverlayStyle}
+                            />
+                          ) : null}
+                          {layer.vignetteOverlayStyle ? (
+                            <div
+                              className="pointer-events-none absolute inset-0"
+                              style={layer.vignetteOverlayStyle}
+                            />
+                          ) : null}
+                          {layer.noiseOverlayStyle ? (
+                            <div
+                              className="pointer-events-none absolute inset-0"
+                              style={layer.noiseOverlayStyle}
+                            />
+                          ) : null}
+                        </div>
                       </div>
                     </div>
                   ))}
