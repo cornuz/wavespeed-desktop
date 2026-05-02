@@ -5,12 +5,16 @@
 import type {
   ComposerProject,
   ComposerProjectSummary,
+  ComposerAsset,
+  ComposerSequencePreview,
+  ComposerSequencePreviewInvalidationCause,
   Track,
   Clip,
   TrackType,
   SourceType,
   LayoutPreset,
   LayoutSizesMap,
+  ComposerPlaybackQuality,
 } from "./project";
 
 // ─── Input / result shapes ────────────────────────────────────────────────────
@@ -23,6 +27,10 @@ export interface OpenProjectInput {
   id: string;
 }
 
+export interface OpenProjectLocationInput {
+  id: string;
+}
+
 export interface RenameProjectInput {
   id: string;
   name: string;
@@ -32,12 +40,40 @@ export interface DeleteProjectInput {
   id: string;
 }
 
+export interface SetProjectFavoriteInput {
+  id: string;
+  favorite: boolean;
+}
+
+export interface DuplicateProjectInput {
+  id: string;
+}
+
 export interface SaveProjectInput {
   id: string;
   duration?: number;
   fps?: number;
+  width?: number;
+  height?: number;
+  playbackQuality?: ComposerPlaybackQuality;
+  safeZoneEnabled?: boolean;
+  safeZoneMargin?: number;
   layoutPreset?: LayoutPreset;
   layoutSizes?: LayoutSizesMap;
+}
+
+export interface GetSequencePreviewInput {
+  projectId: string;
+}
+
+export interface InvalidateSequencePreviewInput {
+  projectId: string;
+  causes: ComposerSequencePreviewInvalidationCause[];
+}
+
+export interface ComposerFfmpegStatus {
+  available: boolean;
+  blockedReason: string | null;
 }
 
 // ─── Track inputs ─────────────────────────────────────────────────────────────
@@ -67,6 +103,7 @@ export interface DeleteTrackInput {
 
 export interface AddClipInput {
   projectId: string;
+  id?: string;
   trackId: string;
   sourceType: SourceType;
   sourcePath: string | null;
@@ -76,6 +113,14 @@ export interface AddClipInput {
   trimStart?: number;
   trimEnd?: number | null;
   speed?: number;
+  transformOffsetX?: number;
+  transformOffsetY?: number;
+  transformScale?: number;
+  rotationZ?: number;
+  opacity?: number;
+  fadeInDuration?: number;
+  fadeOutDuration?: number;
+  createdAt?: string;
 }
 
 export interface UpdateClipInput {
@@ -87,6 +132,13 @@ export interface UpdateClipInput {
   trimEnd?: number | null;
   speed?: number;
   trackId?: string;
+  transformOffsetX?: number;
+  transformOffsetY?: number;
+  transformScale?: number;
+  rotationZ?: number;
+  opacity?: number;
+  fadeInDuration?: number;
+  fadeOutDuration?: number;
 }
 
 export interface DeleteClipInput {
@@ -94,10 +146,34 @@ export interface DeleteClipInput {
   clipId: string;
 }
 
+// ─── Asset inputs ─────────────────────────────────────────────────────────────
+
+export interface ListAssetsInput {
+  projectId: string;
+}
+
+export interface ImportAssetsInput {
+  projectId: string;
+}
+
+export interface ImportAssetsByPathsInput {
+  projectId: string;
+  sourcePaths: string[];
+}
+
+export interface DeleteAssetInput {
+  projectId: string;
+  assetId: string;
+}
+
 // ─── Channel map ─────────────────────────────────────────────────────────────
 
 export type ComposerIpcChannels = {
   // Project CRUD
+  "composer:ffmpeg-check": {
+    args: void;
+    result: ComposerFfmpegStatus;
+  };
   "composer:project-create": {
     args: CreateProjectInput;
     result: ComposerProject;
@@ -105,6 +181,10 @@ export type ComposerIpcChannels = {
   "composer:project-open": {
     args: OpenProjectInput;
     result: ComposerProject;
+  };
+  "composer:project-open-location": {
+    args: OpenProjectLocationInput;
+    result: void;
   };
   "composer:project-close": {
     args: { id: string };
@@ -118,6 +198,14 @@ export type ComposerIpcChannels = {
     args: RenameProjectInput;
     result: void;
   };
+  "composer:project-set-favorite": {
+    args: SetProjectFavoriteInput;
+    result: ComposerProjectSummary;
+  };
+  "composer:project-duplicate": {
+    args: DuplicateProjectInput;
+    result: ComposerProjectSummary;
+  };
   "composer:project-delete": {
     args: DeleteProjectInput;
     result: void;
@@ -125,6 +213,14 @@ export type ComposerIpcChannels = {
   "composer:project-save": {
     args: SaveProjectInput;
     result: void;
+  };
+  "composer:sequence-preview-get": {
+    args: GetSequencePreviewInput;
+    result: ComposerSequencePreview;
+  };
+  "composer:sequence-preview-invalidate": {
+    args: InvalidateSequencePreviewInput;
+    result: ComposerSequencePreview;
   };
 
   // Track CRUD
@@ -153,6 +249,24 @@ export type ComposerIpcChannels = {
   "composer:clip-delete": {
     args: DeleteClipInput;
     result: void;
+  };
+
+  // Project-local assets
+  "composer:asset-list": {
+    args: ListAssetsInput;
+    result: ComposerAsset[];
+  };
+  "composer:asset-import": {
+    args: ImportAssetsInput;
+    result: ComposerAsset[];
+  };
+  "composer:asset-import-from-paths": {
+    args: ImportAssetsByPathsInput;
+    result: ComposerAsset[];
+  };
+  "composer:asset-delete": {
+    args: DeleteAssetInput;
+    result: ComposerAsset[];
   };
 };
 

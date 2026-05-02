@@ -3,6 +3,7 @@
  * Called from electron/main.ts during app.whenReady().
  */
 import { registerProjectIpc } from "./ipc/project.ipc";
+import { registerAssetsIpc } from "./ipc/assets.ipc";
 import { registerTimelineIpc } from "./ipc/timeline.ipc";
 import { closeAllProjectDatabases } from "./db/connection";
 
@@ -10,6 +11,7 @@ export async function initComposerModule(): Promise<void> {
   console.log("[Composer] Initializing Composer module...");
 
   registerProjectIpc();
+  registerAssetsIpc();
   registerTimelineIpc();
 
   console.log("[Composer] Composer module ready.");

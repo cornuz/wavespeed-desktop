@@ -9,9 +9,10 @@ import {
   protocol,
   net,
 } from "electron";
-import { join, dirname } from "path";
+import { join, dirname, extname } from "path";
 import {
   existsSync,
+  createReadStream,
   readFileSync,
   writeFileSync,
   mkdirSync,
@@ -22,6 +23,7 @@ import {
   renameSync,
 } from "fs";
 import { readdir, stat } from "fs/promises";
+import { Readable } from "stream";
 import AdmZip from "adm-zip";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import { autoUpdater, UpdateInfo } from "electron-updater";
@@ -69,22 +71,10 @@ async function downloadToFile(
   }
 }
 
-// Suppress Chromium's noisy ffmpeg pixel format warnings (harmless, caused by video thumbnail decoding)
-// These come from GPU/renderer processes' stderr and cannot be disabled via command-line switches.
-// Filter them at the process level:
-const originalStderrWrite = process.stderr.write.bind(process.stderr);
-process.stderr.write = (
-  chunk: string | Uint8Array,
-  ...args: unknown[]
-): boolean => {
-  const str = typeof chunk === "string" ? chunk : chunk.toString();
-  if (
-    str.includes("Unsupported pixel format") ||
-    str.includes("ffmpeg_common.cc")
-  )
-    return true;
-  return (originalStderrWrite as (...a: unknown[]) => boolean)(chunk, ...args);
-};
+const remoteDebuggingPort = process.env.REMOTE_DEBUGGING_PORT;
+if (remoteDebuggingPort) {
+  app.commandLine.appendSwitch("remote-debugging-port", remoteDebuggingPort);
+}
 
 // Linux-specific flags
 if (process.platform === "linux") {
@@ -250,6 +240,153 @@ function saveState(state: Record<string, unknown>): void {
 
 const defaultAssetsDirectory = join(app.getPath("documents"), "WaveSpeed");
 const assetsMetadataPath = join(userDataPath, "assets-metadata.json");
+
+function getLocalAssetContentType(filePath: string): string {
+  switch (extname(filePath).toLowerCase()) {
+    case ".mp4":
+    case ".m4v":
+      return "video/mp4";
+    case ".webm":
+      return "video/webm";
+    case ".mov":
+      return "video/quicktime";
+    case ".mp3":
+      return "audio/mpeg";
+    case ".wav":
+      return "audio/wav";
+    case ".ogg":
+      return "audio/ogg";
+    case ".aac":
+    case ".m4a":
+      return "audio/aac";
+    case ".flac":
+      return "audio/flac";
+    case ".png":
+      return "image/png";
+    case ".jpg":
+    case ".jpeg":
+      return "image/jpeg";
+    case ".webp":
+      return "image/webp";
+    case ".gif":
+      return "image/gif";
+    case ".bmp":
+      return "image/bmp";
+    case ".svg":
+      return "image/svg+xml";
+    default:
+      return "application/octet-stream";
+  }
+}
+
+function parseRangeHeader(rangeHeader: string, totalSize: number): {
+  start: number;
+  end: number;
+} | null {
+  const match = /^bytes=(\d*)-(\d*)$/i.exec(rangeHeader.trim());
+  if (!match) {
+    return null;
+  }
+
+  const [, rawStart, rawEnd] = match;
+  let start: number;
+  let end: number;
+
+  if (rawStart === "" && rawEnd === "") {
+    return null;
+  }
+
+  if (rawStart === "") {
+    const suffixLength = Number.parseInt(rawEnd, 10);
+    if (!Number.isFinite(suffixLength) || suffixLength <= 0) {
+      return null;
+    }
+    start = Math.max(0, totalSize - suffixLength);
+    end = totalSize - 1;
+  } else {
+    start = Number.parseInt(rawStart, 10);
+    end = rawEnd === "" ? totalSize - 1 : Number.parseInt(rawEnd, 10);
+  }
+
+  if (
+    !Number.isFinite(start) ||
+    !Number.isFinite(end) ||
+    start < 0 ||
+    end < start ||
+    start >= totalSize
+  ) {
+    return null;
+  }
+
+  return {
+    start,
+    end: Math.min(end, totalSize - 1),
+  };
+}
+
+function createLocalAssetResponse(request: Request): Response {
+  const filePath = decodeURIComponent(request.url.replace("local-asset://", ""));
+
+  if (!existsSync(filePath)) {
+    return new Response("Asset not found", { status: 404 });
+  }
+
+  const stats = statSync(filePath);
+  const totalSize = stats.size;
+  const contentType = getLocalAssetContentType(filePath);
+  const headers = new Headers({
+    "Accept-Ranges": "bytes",
+    "Content-Type": contentType,
+    "Cache-Control": "no-store",
+  });
+  const rangeHeader = request.headers.get("range");
+  const isHeadRequest = request.method.toUpperCase() === "HEAD";
+
+  if (rangeHeader) {
+    const parsedRange = parseRangeHeader(rangeHeader, totalSize);
+    if (!parsedRange) {
+      headers.set("Content-Range", `bytes */${totalSize}`);
+      return new Response(null, {
+        status: 416,
+        headers,
+      });
+    }
+
+    headers.set("Content-Range", `bytes ${parsedRange.start}-${parsedRange.end}/${totalSize}`);
+    headers.set("Content-Length", String(parsedRange.end - parsedRange.start + 1));
+
+    if (isHeadRequest) {
+      return new Response(null, {
+        status: 206,
+        headers,
+      });
+    }
+
+    const stream = createReadStream(filePath, {
+      start: parsedRange.start,
+      end: parsedRange.end,
+    });
+    return new Response(Readable.toWeb(stream) as ReadableStream, {
+      status: 206,
+      headers,
+    });
+  }
+
+  headers.set("Content-Length", String(totalSize));
+
+  if (isHeadRequest) {
+    return new Response(null, {
+      status: 200,
+      headers,
+    });
+  }
+
+  const stream = createReadStream(filePath);
+  return new Response(Readable.toWeb(stream) as ReadableStream, {
+    status: 200,
+    headers,
+  });
+}
 
 const defaultSettings: Settings = {
   apiKey: "",
@@ -2031,10 +2168,7 @@ app.whenReady().then(() => {
 
   // Handle local-asset:// protocol for loading local files (videos, images, etc.)
   protocol.handle("local-asset", (request) => {
-    const filePath = decodeURIComponent(
-      request.url.replace("local-asset://", ""),
-    );
-    return net.fetch(pathToFileURL(filePath).href);
+    return createLocalAssetResponse(request);
   });
 
   app.on("browser-window-created", (_, window) => {

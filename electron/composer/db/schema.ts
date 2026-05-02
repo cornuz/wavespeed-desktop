@@ -5,7 +5,7 @@
  */
 import type { Database as SqlJsDatabase } from "sql.js";
 
-export const CURRENT_SCHEMA_VERSION = 2;
+export const CURRENT_SCHEMA_VERSION = 7;
 
 // ─── Migration definition ─────────────────────────────────────────────────────
 
@@ -126,6 +126,117 @@ const MIGRATIONS: NamedMigration[] = [
       }
     },
   },
+  {
+    id: "003_project_output",
+    apply: (db) => {
+      const info = db.exec(`PRAGMA table_info(meta)`);
+      const columns = (info[0]?.values ?? []).map((row) => row[1] as string);
+      if (!columns.includes("width")) {
+        db.run(`ALTER TABLE meta ADD COLUMN width INTEGER NOT NULL DEFAULT 1920`);
+      }
+      if (!columns.includes("height")) {
+        db.run(`ALTER TABLE meta ADD COLUMN height INTEGER NOT NULL DEFAULT 1080`);
+      }
+      if (!columns.includes("safe_zone_enabled")) {
+        db.run(`ALTER TABLE meta ADD COLUMN safe_zone_enabled INTEGER NOT NULL DEFAULT 1`);
+      }
+      if (!columns.includes("safe_zone_margin")) {
+        db.run(`ALTER TABLE meta ADD COLUMN safe_zone_margin REAL NOT NULL DEFAULT 0.1`);
+      }
+    },
+  },
+  {
+    id: "004_clip_transform",
+    apply: (db) => {
+      const info = db.exec(`PRAGMA table_info(clips)`);
+      const columns = (info[0]?.values ?? []).map((row) => row[1] as string);
+      if (!columns.includes("transform_offset_x")) {
+        db.run(`ALTER TABLE clips ADD COLUMN transform_offset_x REAL NOT NULL DEFAULT 0`);
+      }
+      if (!columns.includes("transform_offset_y")) {
+        db.run(`ALTER TABLE clips ADD COLUMN transform_offset_y REAL NOT NULL DEFAULT 0`);
+      }
+      if (!columns.includes("transform_scale")) {
+        db.run(`ALTER TABLE clips ADD COLUMN transform_scale REAL NOT NULL DEFAULT 1`);
+      }
+    },
+  },
+  {
+    id: "005_project_playback_quality",
+    apply: (db) => {
+      const info = db.exec(`PRAGMA table_info(meta)`);
+      const columns = (info[0]?.values ?? []).map((row) => row[1] as string);
+      if (!columns.includes("playback_quality")) {
+        db.run(
+          `ALTER TABLE meta ADD COLUMN playback_quality TEXT NOT NULL DEFAULT 'med'`,
+        );
+      }
+    },
+  },
+  {
+    id: "006_sequence_preview",
+    apply: (db) => {
+      db.run(`
+        CREATE TABLE IF NOT EXISTS sequence_preview (
+          id                   INTEGER PRIMARY KEY CHECK (id = 1),
+          status               TEXT    NOT NULL DEFAULT 'missing'
+                                     CHECK (status IN ('missing', 'processing', 'ready', 'stale', 'error')),
+          request_signature    TEXT    NOT NULL DEFAULT '',
+          request_json         TEXT    NOT NULL DEFAULT '{}',
+          file_path            TEXT,
+          playback_quality     TEXT    NOT NULL DEFAULT 'med',
+          invalidation_reasons TEXT    NOT NULL DEFAULT '[]',
+          error_message        TEXT,
+          created_at           TEXT    NOT NULL,
+          updated_at           TEXT    NOT NULL,
+          last_requested_at    TEXT,
+          started_at           TEXT,
+          completed_at         TEXT,
+          invalidated_at       TEXT
+        )
+      `);
+
+      const now = new Date().toISOString();
+      db.run(
+        `INSERT OR IGNORE INTO sequence_preview (
+           id,
+           status,
+           request_signature,
+           request_json,
+           file_path,
+           playback_quality,
+           invalidation_reasons,
+           created_at,
+           updated_at
+         )
+         VALUES (1, 'missing', '', '{}', NULL, 'med', '[]', ?, ?)`,
+        [now, now],
+      );
+    },
+  },
+  {
+    id: "007_clip_style",
+    apply: (db) => {
+      const info = db.exec(`PRAGMA table_info(clips)`);
+      const columns = (info[0]?.values ?? []).map((row) => row[1] as string);
+      if (!columns.includes("rotation_z")) {
+        db.run(`ALTER TABLE clips ADD COLUMN rotation_z REAL NOT NULL DEFAULT 0`);
+      }
+      if (!columns.includes("opacity")) {
+        db.run(`ALTER TABLE clips ADD COLUMN opacity REAL NOT NULL DEFAULT 1`);
+      }
+      if (!columns.includes("fade_in_duration")) {
+        db.run(
+          `ALTER TABLE clips ADD COLUMN fade_in_duration REAL NOT NULL DEFAULT 0`,
+        );
+      }
+      if (!columns.includes("fade_out_duration")) {
+        db.run(
+          `ALTER TABLE clips ADD COLUMN fade_out_duration REAL NOT NULL DEFAULT 0`,
+        );
+      }
+    },
+  },
 ];
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -147,9 +258,29 @@ export function initializeSchema(
 
   // Insert meta singleton
   db.run(
-    `INSERT INTO meta (schema_version, app_version, project_name, duration, fps, layout_preset, layout_sizes, created_at, updated_at)
-     VALUES (?, ?, ?, 60, 30, 'timeline', '{}', ?, ?)`,
-    [CURRENT_SCHEMA_VERSION, appVersion, projectName, now, now],
+     `INSERT INTO meta (
+        schema_version, app_version, project_name, duration, fps, width, height,
+        playback_quality, safe_zone_enabled, safe_zone_margin, layout_preset,
+        layout_sizes, created_at, updated_at
+      )
+      VALUES (?, ?, ?, 60, 30, 1920, 1080, 'med', 1, 0.1, 'timeline', '{}', ?, ?)`,
+     [CURRENT_SCHEMA_VERSION, appVersion, projectName, now, now],
+   );
+
+  db.run(
+    `INSERT OR IGNORE INTO sequence_preview (
+       id,
+       status,
+       request_signature,
+       request_json,
+       file_path,
+       playback_quality,
+       invalidation_reasons,
+       created_at,
+       updated_at
+     )
+     VALUES (1, 'missing', '', '{}', NULL, 'med', '[]', ?, ?)`,
+    [now, now],
   );
 
   // Mark all migrations as applied

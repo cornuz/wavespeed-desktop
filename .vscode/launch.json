@@ -13,7 +13,7 @@
       "runtimeArgs": ["--sourcemap"],
       "env": {
         "NODE_ENV": "development",
-        "REMOTE_DEBUGGING_PORT": "9222"
+        "REMOTE_DEBUGGING_PORT": "9333"
       },
       "console": "integratedTerminal",
       "internalConsoleOptions": "neverOpen"
@@ -22,7 +22,7 @@
       "name": "Electron: Renderer (attach)",
       "type": "chrome",
       "request": "attach",
-      "port": 9222,
+      "port": 9333,
       "webRoot": "${workspaceFolder}/src",
       "timeout": 60000,
       "sourceMapPathOverrides": {

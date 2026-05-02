@@ -33,17 +33,22 @@ interface ComposerProjectActions {
   closeProject: () => Promise<void>;
   /** Rename a project */
   renameProject: (id: string, name: string) => Promise<void>;
+  /** Persist favorite state for a project */
+  setProjectFavorite: (id: string, favorite: boolean) => Promise<void>;
   /** Delete a project (closes it first if open) */
   deleteProject: (id: string) => Promise<void>;
   /** Update tracks on the current project (after IPC mutation) */
   setTracks: (tracks: Track[]) => void;
   /** Update clips on the current project (after IPC mutation) */
   setClips: (clips: Clip[]) => void;
+  /** Patch current project metadata in renderer state */
+  patchCurrentProject: (patch: Partial<ComposerProject>) => void;
   /** Clear error state */
   clearError: () => void;
 }
 
-export type ComposerProjectStore = ComposerProjectState & ComposerProjectActions;
+export type ComposerProjectStore = ComposerProjectState &
+  ComposerProjectActions;
 
 export const useComposerProjectStore = create<ComposerProjectStore>(
   (set, get) => ({
@@ -80,6 +85,9 @@ export const useComposerProjectStore = create<ComposerProjectStore>(
               createdAt: project.createdAt,
               updatedAt: project.updatedAt,
               lastOpenedAt: project.lastOpenedAt,
+              favorite: project.favorite ?? false,
+              previewPath: project.previewPath ?? null,
+              sizeOnDiskBytes: project.sizeOnDiskBytes ?? 0,
             },
           ],
           loading: false,
@@ -98,7 +106,22 @@ export const useComposerProjectStore = create<ComposerProjectStore>(
       set({ loading: true, error: null });
       try {
         const project = await composerProjectIpc.open({ id });
-        set({ currentProject: project, loading: false });
+        set((state) => ({
+          currentProject: project,
+          loading: false,
+          projectList: state.projectList.map((summary) =>
+            summary.id === id
+              ? {
+                  ...summary,
+                  name: project.name,
+                  path: project.path,
+                  updatedAt: project.updatedAt,
+                  lastOpenedAt: project.lastOpenedAt,
+                  favorite: project.favorite ?? summary.favorite ?? false,
+                }
+              : summary,
+          ),
+        }));
         return project;
       } catch (err) {
         set({
@@ -115,7 +138,8 @@ export const useComposerProjectStore = create<ComposerProjectStore>(
       set({ loading: true, error: null });
       try {
         await composerProjectIpc.close(currentProject.id);
-        set({ currentProject: null, loading: false });
+        const projectList = await composerProjectIpc.list();
+        set({ currentProject: null, projectList, loading: false });
       } catch (err) {
         set({
           loading: false,
@@ -142,6 +166,29 @@ export const useComposerProjectStore = create<ComposerProjectStore>(
         set({
           loading: false,
           error: (err as Error).message ?? "Failed to rename project",
+        });
+        throw err;
+      }
+    },
+
+    setProjectFavorite: async (id: string, favorite: boolean) => {
+      set({ loading: true, error: null });
+      try {
+        const summary = await composerProjectIpc.setFavorite({ id, favorite });
+        set((state) => ({
+          loading: false,
+          projectList: state.projectList.map((project) =>
+            project.id === id ? { ...project, ...summary } : project,
+          ),
+          currentProject:
+            state.currentProject?.id === id
+              ? { ...state.currentProject, favorite: summary.favorite ?? false }
+              : state.currentProject,
+        }));
+      } catch (err) {
+        set({
+          loading: false,
+          error: (err as Error).message ?? "Failed to update project favorite",
         });
         throw err;
       }
@@ -180,6 +227,14 @@ export const useComposerProjectStore = create<ComposerProjectStore>(
       set((state) => ({
         currentProject: state.currentProject
           ? { ...state.currentProject, clips }
+          : null,
+      }));
+    },
+
+    patchCurrentProject: (patch: Partial<ComposerProject>) => {
+      set((state) => ({
+        currentProject: state.currentProject
+          ? { ...state.currentProject, ...patch }
           : null,
       }));
     },

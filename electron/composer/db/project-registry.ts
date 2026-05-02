@@ -18,6 +18,15 @@ function getRegistryPath(): string {
   return join(app.getPath("userData"), "composer.json");
 }
 
+function normalizeProjectSummary(
+  summary: ComposerProjectSummary,
+): ComposerProjectSummary {
+  return {
+    ...summary,
+    favorite: summary.favorite ?? false,
+  };
+}
+
 // ─── Default settings ─────────────────────────────────────────────────────────
 
 const DEFAULT_SETTINGS: ComposerRegistrySettings = {
@@ -34,7 +43,11 @@ export function loadRegistry(): ComposerRegistry {
       const raw = readFileSync(registryPath, "utf-8");
       const data = JSON.parse(raw) as Partial<ComposerRegistry>;
       return {
-        projects: Array.isArray(data.projects) ? data.projects : [],
+        projects: Array.isArray(data.projects)
+          ? data.projects.map((project) =>
+              normalizeProjectSummary(project as ComposerProjectSummary),
+            )
+          : [],
         settings: { ...DEFAULT_SETTINGS, ...(data.settings ?? {}) },
       };
     }
@@ -53,9 +66,7 @@ function saveRegistry(registry: ComposerRegistry): void {
 
 // ─── Mutations ────────────────────────────────────────────────────────────────
 
-export function addProjectToRegistry(
-  summary: ComposerProjectSummary,
-): void {
+export function addProjectToRegistry(summary: ComposerProjectSummary): void {
   const registry = loadRegistry();
   // Avoid duplicates
   const existing = registry.projects.findIndex((p) => p.id === summary.id);
@@ -75,13 +86,29 @@ export function removeProjectFromRegistry(projectId: string): void {
 
 export function updateProjectTimestamps(
   projectId: string,
-  fields: Partial<Pick<ComposerProjectSummary, "updatedAt" | "lastOpenedAt" | "name">>,
+  fields: Partial<
+    Pick<ComposerProjectSummary, "updatedAt" | "lastOpenedAt" | "name">
+  >,
 ): void {
   const registry = loadRegistry();
   const project = registry.projects.find((p) => p.id === projectId);
   if (!project) return;
   Object.assign(project, fields);
   saveRegistry(registry);
+}
+
+export function updateProjectSummary(
+  projectId: string,
+  patch: Partial<ComposerProjectSummary>,
+): ComposerProjectSummary | null {
+  const registry = loadRegistry();
+  const project = registry.projects.find((entry) => entry.id === projectId);
+  if (!project) {
+    return null;
+  }
+  Object.assign(project, patch);
+  saveRegistry(registry);
+  return project;
 }
 
 export function getRegistrySettings(): ComposerRegistrySettings {

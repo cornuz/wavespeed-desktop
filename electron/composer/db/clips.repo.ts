@@ -19,13 +19,22 @@ function rowToClip(row: unknown[]): Clip {
     trimStart: row[7] as number,
     trimEnd: (row[8] as number | null) ?? null,
     speed: row[9] as number,
-    createdAt: row[10] as string,
+    transformOffsetX: row[10] as number,
+    transformOffsetY: row[11] as number,
+    transformScale: row[12] as number,
+    rotationZ: (row[13] as number | null) ?? 0,
+    opacity: (row[14] as number | null) ?? 1,
+    fadeInDuration: (row[15] as number | null) ?? 0,
+    fadeOutDuration: (row[16] as number | null) ?? 0,
+    createdAt: row[17] as string,
   };
 }
 
 const SELECT_COLUMNS = `
   id, track_id, source_type, source_path, source_asset_id,
-  start_time, duration, trim_start, trim_end, speed, created_at
+  start_time, duration, trim_start, trim_end, speed,
+  transform_offset_x, transform_offset_y, transform_scale,
+  rotation_z, opacity, fade_in_duration, fade_out_duration, created_at
 `;
 
 // ─── Queries ──────────────────────────────────────────────────────────────────
@@ -54,6 +63,7 @@ export function listClipsByTrack(projectId: string, trackId: string): Clip[] {
 export function createClip(
   projectId: string,
   input: {
+    id?: string;
     trackId: string;
     sourceType: SourceType;
     sourcePath: string | null;
@@ -63,22 +73,39 @@ export function createClip(
     trimStart?: number;
     trimEnd?: number | null;
     speed?: number;
+    transformOffsetX?: number;
+    transformOffsetY?: number;
+    transformScale?: number;
+    rotationZ?: number;
+    opacity?: number;
+    fadeInDuration?: number;
+    fadeOutDuration?: number;
+    createdAt?: string;
   },
 ): Clip {
   const db = getProjectDatabase(projectId);
   if (!db) throw new Error(`Project ${projectId} is not open`);
 
-  const id = uuid();
-  const now = new Date().toISOString();
+  const id = input.id ?? uuid();
+  const now = input.createdAt ?? new Date().toISOString();
   const trimStart = input.trimStart ?? 0;
   const trimEnd = input.trimEnd ?? null;
   const speed = input.speed ?? 1.0;
+  const transformOffsetX = input.transformOffsetX ?? 0;
+  const transformOffsetY = input.transformOffsetY ?? 0;
+  const transformScale = input.transformScale ?? 1;
+  const rotationZ = input.rotationZ ?? 0;
+  const opacity = input.opacity ?? 1;
+  const fadeInDuration = input.fadeInDuration ?? 0;
+  const fadeOutDuration = input.fadeOutDuration ?? 0;
 
   db.run(
     `INSERT INTO clips
        (id, track_id, source_type, source_path, source_asset_id,
-        start_time, duration, trim_start, trim_end, speed, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         start_time, duration, trim_start, trim_end, speed,
+         transform_offset_x, transform_offset_y, transform_scale,
+         rotation_z, opacity, fade_in_duration, fade_out_duration, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       input.trackId,
@@ -90,6 +117,13 @@ export function createClip(
       trimStart,
       trimEnd,
       speed,
+      transformOffsetX,
+      transformOffsetY,
+      transformScale,
+      rotationZ,
+      opacity,
+      fadeInDuration,
+      fadeOutDuration,
       now,
     ],
   );
@@ -106,6 +140,13 @@ export function createClip(
     trimStart,
     trimEnd,
     speed,
+    transformOffsetX,
+    transformOffsetY,
+    transformScale,
+    rotationZ,
+    opacity,
+    fadeInDuration,
+    fadeOutDuration,
     createdAt: now,
   };
 }
@@ -114,7 +155,22 @@ export function updateClip(
   projectId: string,
   clipId: string,
   patch: Partial<
-    Pick<Clip, "startTime" | "duration" | "trimStart" | "trimEnd" | "speed" | "trackId">
+    Pick<
+      Clip,
+      | "startTime"
+      | "duration"
+      | "trimStart"
+      | "trimEnd"
+      | "speed"
+      | "trackId"
+      | "transformOffsetX"
+      | "transformOffsetY"
+      | "transformScale"
+      | "rotationZ"
+      | "opacity"
+      | "fadeInDuration"
+      | "fadeOutDuration"
+    >
   >,
 ): Clip {
   const db = getProjectDatabase(projectId);
@@ -129,6 +185,13 @@ export function updateClip(
   if ("trimEnd" in patch) { fields.push("trim_end = ?"); values.push(patch.trimEnd ?? null); }
   if (patch.speed !== undefined) { fields.push("speed = ?"); values.push(patch.speed); }
   if (patch.trackId !== undefined) { fields.push("track_id = ?"); values.push(patch.trackId); }
+  if (patch.transformOffsetX !== undefined) { fields.push("transform_offset_x = ?"); values.push(patch.transformOffsetX); }
+  if (patch.transformOffsetY !== undefined) { fields.push("transform_offset_y = ?"); values.push(patch.transformOffsetY); }
+  if (patch.transformScale !== undefined) { fields.push("transform_scale = ?"); values.push(patch.transformScale); }
+  if (patch.rotationZ !== undefined) { fields.push("rotation_z = ?"); values.push(patch.rotationZ); }
+  if (patch.opacity !== undefined) { fields.push("opacity = ?"); values.push(patch.opacity); }
+  if (patch.fadeInDuration !== undefined) { fields.push("fade_in_duration = ?"); values.push(patch.fadeInDuration); }
+  if (patch.fadeOutDuration !== undefined) { fields.push("fade_out_duration = ?"); values.push(patch.fadeOutDuration); }
 
   if (fields.length > 0) {
     values.push(clipId);

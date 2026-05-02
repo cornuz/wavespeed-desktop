@@ -10,10 +10,16 @@ import type {
   ComposerIpcChannelName,
   ComposerIpcArgs,
   ComposerIpcResult,
+  ComposerFfmpegStatus,
   CreateProjectInput,
   OpenProjectInput,
+  OpenProjectLocationInput,
   RenameProjectInput,
   DeleteProjectInput,
+  SetProjectFavoriteInput,
+  DuplicateProjectInput,
+  GetSequencePreviewInput,
+  InvalidateSequencePreviewInput,
   SaveProjectInput,
   AddTrackInput,
   UpdateTrackInput,
@@ -21,10 +27,16 @@ import type {
   AddClipInput,
   UpdateClipInput,
   DeleteClipInput,
+  ListAssetsInput,
+  ImportAssetsInput,
+  ImportAssetsByPathsInput,
+  DeleteAssetInput,
 } from "@/composer/types/ipc";
 import type {
   ComposerProject,
   ComposerProjectSummary,
+  ComposerAsset,
+  ComposerSequencePreview,
   Track,
   Clip,
 } from "@/composer/types/project";
@@ -33,8 +45,13 @@ import type {
 
 function getApi() {
   if (typeof window === "undefined") return undefined;
-  return (window as Window & { composerAPI?: { invoke: (channel: string, args?: unknown) => Promise<unknown> } })
-    .composerAPI;
+  return (
+    window as Window & {
+      composerAPI?: {
+        invoke: (channel: string, args?: unknown) => Promise<unknown>;
+      };
+    }
+  ).composerAPI;
 }
 
 export function invoke<C extends ComposerIpcChannelName>(
@@ -56,6 +73,9 @@ export function invoke<C extends ComposerIpcChannelName>(
 // ─── Project IPC ─────────────────────────────────────────────────────────────
 
 export const composerProjectIpc = {
+  checkFfmpeg: (): Promise<ComposerFfmpegStatus> =>
+    invoke("composer:ffmpeg-check", undefined as void),
+
   list: (): Promise<ComposerProjectSummary[]> =>
     invoke("composer:project-list", undefined as void),
 
@@ -65,17 +85,38 @@ export const composerProjectIpc = {
   open: (input: OpenProjectInput): Promise<ComposerProject> =>
     invoke("composer:project-open", input),
 
+  openLocation: (input: OpenProjectLocationInput): Promise<void> =>
+    invoke("composer:project-open-location", input),
+
   close: (id: string): Promise<void> =>
     invoke("composer:project-close", { id }),
 
   rename: (input: RenameProjectInput): Promise<void> =>
     invoke("composer:project-rename", input),
 
+  setFavorite: (
+    input: SetProjectFavoriteInput,
+  ): Promise<ComposerProjectSummary> =>
+    invoke("composer:project-set-favorite", input),
+
+  duplicate: (input: DuplicateProjectInput): Promise<ComposerProjectSummary> =>
+    invoke("composer:project-duplicate", input),
+
   delete: (input: DeleteProjectInput): Promise<void> =>
     invoke("composer:project-delete", input),
 
   save: (input: SaveProjectInput): Promise<void> =>
     invoke("composer:project-save", input),
+};
+
+export const composerSequencePreviewIpc = {
+  get: (input: GetSequencePreviewInput): Promise<ComposerSequencePreview> =>
+    invoke("composer:sequence-preview-get", input),
+
+  invalidate: (
+    input: InvalidateSequencePreviewInput,
+  ): Promise<ComposerSequencePreview> =>
+    invoke("composer:sequence-preview-invalidate", input),
 };
 
 // ─── Track IPC ────────────────────────────────────────────────────────────────
@@ -102,4 +143,22 @@ export const composerClipIpc = {
 
   delete: (input: DeleteClipInput): Promise<void> =>
     invoke("composer:clip-delete", input),
+};
+
+// ─── Asset IPC ───────────────────────────────────────────────────────────────
+
+export const composerAssetIpc = {
+  list: (input: ListAssetsInput): Promise<ComposerAsset[]> =>
+    invoke("composer:asset-list", input),
+
+  import: (input: ImportAssetsInput): Promise<ComposerAsset[]> =>
+    invoke("composer:asset-import", input),
+
+  importFromPaths: (
+    input: ImportAssetsByPathsInput,
+  ): Promise<ComposerAsset[]> =>
+    invoke("composer:asset-import-from-paths", input),
+
+  delete: (input: DeleteAssetInput): Promise<ComposerAsset[]> =>
+    invoke("composer:asset-delete", input),
 };
