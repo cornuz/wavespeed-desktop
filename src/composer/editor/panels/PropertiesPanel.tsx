@@ -1,9 +1,16 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { SlidersHorizontal } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Loader2, RefreshCw, SlidersHorizontal, Upload } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { composerProjectIpc } from "@/composer/ipc/ipc-client";
+import { composerLutIpc, composerProjectIpc } from "@/composer/ipc/ipc-client";
+import { normalizeClipAdjustments } from "@/composer/shared/clipAdjustments";
 import { useComposerProjectStore } from "@/composer/stores/project.store";
-import type { Clip } from "@/composer/types/project";
+import type {
+  Clip,
+  ClipAdjustmentsPatch,
+  ClipBlendMode,
+  ComposerLutAsset,
+} from "@/composer/types/project";
 import { useComposerRuntime } from "../context/ComposerRuntimeContext";
 import {
   formatTimelineTime,
@@ -24,6 +31,15 @@ const DIMENSION_PRESETS = [
 ] as const;
 
 const FRAME_RATE_OPTIONS = [24, 25, 29.97, 30, 50, 59.97, 60] as const;
+const BLEND_MODE_OPTIONS: Array<{ value: ClipBlendMode; label: string }> = [
+  { value: "normal", label: "Normal" },
+  { value: "multiply", label: "Multiply" },
+  { value: "screen", label: "Screen" },
+  { value: "overlay", label: "Overlay" },
+  { value: "soft-light", label: "Soft light" },
+  { value: "darken", label: "Darken" },
+  { value: "lighten", label: "Lighten" },
+];
 
 function formatInputNumber(value: number, decimals = 3): string {
   return Number(value.toFixed(decimals)).toString();
@@ -118,6 +134,21 @@ function PropertyNumberField({
   );
 }
 
+function PropertySection({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="rounded-md border border-border bg-muted/20 p-3">
+      <div className="mb-3 text-sm font-medium text-foreground">{title}</div>
+      {children}
+    </div>
+  );
+}
+
 export function PropertiesPanel() {
   const patchCurrentProject = useComposerProjectStore((state) => state.patchCurrentProject);
   const {
@@ -136,6 +167,8 @@ export function PropertiesPanel() {
       (preset) => preset.width === project.width && preset.height === project.height,
     )?.id ?? "custom";
   const [selectedDimensionMode, setSelectedDimensionMode] = useState(dimensionPreset);
+  const [lutAssets, setLutAssets] = useState<ComposerLutAsset[]>([]);
+  const [lutLoading, setLutLoading] = useState(false);
   const trackName = selectedClip
     ? tracks.find((track) => track.id === selectedClip.trackId)?.name ?? selectedClip.trackId
     : null;
@@ -170,6 +203,51 @@ export function PropertiesPanel() {
         : undefined,
     [selectedClip, siblingClips],
   );
+  const selectedAdjustments = useMemo(
+    () => (selectedClip ? normalizeClipAdjustments(selectedClip.adjustments) : null),
+    [selectedClip],
+  );
+
+  const loadLuts = useCallback(async () => {
+    if (!project.id) {
+      setLutAssets([]);
+      return;
+    }
+
+    setLutLoading(true);
+    try {
+      setLutAssets(await composerLutIpc.list({ projectId: project.id }));
+    } finally {
+      setLutLoading(false);
+    }
+  }, [project.id]);
+
+  useEffect(() => {
+    void loadLuts();
+  }, [loadLuts]);
+
+  const updateAdjustments = useCallback(
+    (patch: ClipAdjustmentsPatch) => {
+      if (!selectedClip) {
+        return;
+      }
+      void updateClip(selectedClip.id, { adjustments: patch });
+    },
+    [selectedClip, updateClip],
+  );
+
+  const handleLutImport = useCallback(async () => {
+    if (!project.id) {
+      return;
+    }
+
+    setLutLoading(true);
+    try {
+      setLutAssets(await composerLutIpc.import({ projectId: project.id }));
+    } finally {
+      setLutLoading(false);
+    }
+  }, [project.id]);
 
   const handleStartCommit = useCallback(
     (value: number) => {
@@ -298,133 +376,392 @@ export function PropertiesPanel() {
                   <span className="text-foreground">Asset:</span> {selectedClipSourceName}
                 </div>
               </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <PropertyNumberField
-                  label="Start"
-                  value={selectedClip.startTime}
-                  min={0}
-                  step={0.01}
-                  onCommit={handleStartCommit}
-                />
-                <PropertyNumberField
-                  label="Duration"
-                  value={selectedClip.duration}
-                  min={MIN_CLIP_DURATION}
-                  step={0.01}
-                  onCommit={handleDurationCommit}
-                />
-                <PropertyNumberField
-                  label="Trim in"
-                  value={selectedClip.trimStart}
-                  min={0}
-                  step={0.01}
-                  disabled={!sourceTrimEditable}
-                  onCommit={handleTrimInCommit}
-                />
-                <PropertyNumberField
-                  label="Trim out"
-                  value={trimOut}
-                  min={0}
-                  step={0.01}
-                  disabled={!sourceTrimEditable}
-                  onCommit={handleTrimOutCommit}
-                />
-                <PropertyNumberField
-                  label="Fade in"
-                  value={selectedClip.fadeInDuration}
-                  min={0}
-                  step={0.01}
-                  onCommit={(value) =>
-                    void updateClip(selectedClip.id, { fadeInDuration: Math.max(0, value) })
-                  }
-                />
-                <PropertyNumberField
-                  label="Fade out"
-                  value={selectedClip.fadeOutDuration}
-                  min={0}
-                  step={0.01}
-                  onCommit={(value) =>
-                    void updateClip(selectedClip.id, { fadeOutDuration: Math.max(0, value) })
-                  }
-                />
-              </div>
-
               <div className="rounded border border-border/60 bg-background/70 p-2 text-[11px] text-muted-foreground">
                 Current range: {formatTimelineTime(selectedClip.startTime)} →{" "}
                 {formatTimelineTime(getClipEnd(selectedClip))} on the timeline
               </div>
-              {!sourceTrimEditable ? (
-                <div className="text-[11px] text-muted-foreground">
-                  Still images do not expose source trim in/out in the current clip model.
-                </div>
-              ) : null}
             </div>
           </div>
 
-          {isVisualClip ? (
-            <div className="rounded-md border border-border bg-muted/20 p-3">
-              <div className="mb-3 text-sm font-medium text-foreground">Visual</div>
-              <div className="grid grid-cols-2 gap-2">
-                <PropertyNumberField
-                  label="Position X"
-                  value={(selectedClip.transformOffsetX + 0.5) * project.width}
-                  step={1}
-                  decimals={2}
-                  onCommit={(value) =>
-                    void updateClip(selectedClip.id, {
-                      transformOffsetX: value / project.width - 0.5,
-                    })
-                  }
-                />
-                <PropertyNumberField
-                  label="Position Y"
-                  value={(selectedClip.transformOffsetY + 0.5) * project.height}
-                  step={1}
-                  decimals={2}
-                  onCommit={(value) =>
-                    void updateClip(selectedClip.id, {
-                      transformOffsetY: value / project.height - 0.5,
-                    })
-                  }
-                />
-                <PropertyNumberField
-                  label="Rotation Z"
-                  value={selectedClip.rotationZ}
-                  step={0.1}
-                  decimals={2}
-                  onCommit={(value) => void updateClip(selectedClip.id, { rotationZ: value })}
-                />
-                <PropertyNumberField
-                  label="Scale"
-                  value={selectedClip.transformScale * 100}
-                  min={10}
-                  max={1000}
-                  step={1}
-                  decimals={2}
-                  suffix="%"
-                  onCommit={(value) =>
-                    void updateClip(selectedClip.id, {
-                      transformScale: Math.max(0.1, value / 100),
-                    })
-                  }
-                />
-                <PropertyNumberField
-                  label="Opacity"
-                  value={selectedClip.opacity * 100}
-                  min={0}
-                  max={100}
-                  step={1}
-                  decimals={2}
-                  suffix="%"
-                  onCommit={(value) =>
-                    void updateClip(selectedClip.id, {
-                      opacity: Math.min(1, Math.max(0, value / 100)),
-                    })
-                  }
-                />
-              </div>
+          <PropertySection title="Timeline">
+            <div className="grid grid-cols-2 gap-2">
+              <PropertyNumberField
+                label="Start"
+                value={selectedClip.startTime}
+                min={0}
+                step={0.01}
+                onCommit={handleStartCommit}
+              />
+              <PropertyNumberField
+                label="Duration"
+                value={selectedClip.duration}
+                min={MIN_CLIP_DURATION}
+                step={0.01}
+                onCommit={handleDurationCommit}
+              />
+              <PropertyNumberField
+                label="Trim in"
+                value={selectedClip.trimStart}
+                min={0}
+                step={0.01}
+                disabled={!sourceTrimEditable}
+                onCommit={handleTrimInCommit}
+              />
+              <PropertyNumberField
+                label="Trim out"
+                value={trimOut}
+                min={0}
+                step={0.01}
+                disabled={!sourceTrimEditable}
+                onCommit={handleTrimOutCommit}
+              />
+              <PropertyNumberField
+                label="Speed"
+                value={selectedClip.speed}
+                min={0.1}
+                max={8}
+                step={0.05}
+                decimals={2}
+                suffix="x"
+                disabled={!sourceTrimEditable}
+                onCommit={(value) =>
+                  void updateClip(selectedClip.id, { speed: Math.min(8, Math.max(0.1, value)) })
+                }
+              />
+              <PropertyNumberField
+                label="Fade in"
+                value={selectedClip.fadeInDuration}
+                min={0}
+                step={0.01}
+                onCommit={(value) =>
+                  void updateClip(selectedClip.id, { fadeInDuration: Math.max(0, value) })
+                }
+              />
+              <PropertyNumberField
+                label="Fade out"
+                value={selectedClip.fadeOutDuration}
+                min={0}
+                step={0.01}
+                onCommit={(value) =>
+                  void updateClip(selectedClip.id, { fadeOutDuration: Math.max(0, value) })
+                }
+              />
             </div>
+            {!sourceTrimEditable ? (
+              <div className="mt-3 text-[11px] text-muted-foreground">
+                Still images do not expose source trim in/out or speed in the current clip model.
+              </div>
+            ) : null}
+          </PropertySection>
+
+          {isVisualClip ? (
+            <>
+              <PropertySection title="Position">
+                <div className="grid grid-cols-2 gap-2">
+                  <PropertyNumberField
+                    label="Position X"
+                    value={(selectedClip.transformOffsetX + 0.5) * project.width}
+                    step={1}
+                    decimals={2}
+                    onCommit={(value) =>
+                      void updateClip(selectedClip.id, {
+                        transformOffsetX: value / project.width - 0.5,
+                      })
+                    }
+                  />
+                  <PropertyNumberField
+                    label="Position Y"
+                    value={(selectedClip.transformOffsetY + 0.5) * project.height}
+                    step={1}
+                    decimals={2}
+                    onCommit={(value) =>
+                      void updateClip(selectedClip.id, {
+                        transformOffsetY: value / project.height - 0.5,
+                      })
+                    }
+                  />
+                  <PropertyNumberField
+                    label="Rotation Z"
+                    value={selectedClip.rotationZ}
+                    min={-359}
+                    max={359}
+                    step={0.1}
+                    decimals={2}
+                    onCommit={(value) => void updateClip(selectedClip.id, { rotationZ: value })}
+                  />
+                  <PropertyNumberField
+                    label="Scale"
+                    value={selectedClip.transformScale * 100}
+                    min={10}
+                    max={1000}
+                    step={1}
+                    decimals={2}
+                    suffix="%"
+                    onCommit={(value) =>
+                      void updateClip(selectedClip.id, {
+                        transformScale: Math.max(0.1, value / 100),
+                      })
+                    }
+                  />
+                </div>
+              </PropertySection>
+
+              <PropertySection title="Adjust">
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    <PropertyNumberField
+                      label="Opacity"
+                      value={selectedClip.opacity * 100}
+                      min={0}
+                      max={100}
+                      step={1}
+                      decimals={2}
+                      suffix="%"
+                      onCommit={(value) =>
+                        void updateClip(selectedClip.id, {
+                          opacity: Math.min(1, Math.max(0, value / 100)),
+                        })
+                      }
+                    />
+                    <label className="flex flex-col gap-1">
+                      <span className="text-foreground">Blend mode</span>
+                      <select
+                        className="h-8 rounded border border-border bg-background px-2 py-1 text-xs text-foreground"
+                        value={selectedAdjustments?.blendMode ?? "normal"}
+                        onChange={(event) =>
+                          updateAdjustments({
+                            blendMode: event.target.value as ClipBlendMode,
+                          })
+                        }
+                      >
+                        {BLEND_MODE_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="text-[11px] font-medium text-muted-foreground">LUT</div>
+                    <div className="flex items-center gap-2">
+                      <select
+                        className="h-8 min-w-0 flex-1 rounded border border-border bg-background px-2 py-1 text-xs text-foreground"
+                        value={selectedAdjustments?.lutAssetId ?? ""}
+                        onChange={(event) =>
+                          updateAdjustments({
+                            lutAssetId: event.target.value || null,
+                          })
+                        }
+                      >
+                        <option value="">None</option>
+                        {lutAssets.map((lut) => (
+                          <option key={lut.id} value={lut.id}>
+                            {lut.fileName}
+                          </option>
+                        ))}
+                      </select>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8 px-2"
+                        onClick={() => void loadLuts()}
+                        disabled={lutLoading}
+                      >
+                        {lutLoading ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <RefreshCw className="h-3.5 w-3.5" />
+                        )}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8 gap-1 px-2"
+                        onClick={() => void handleLutImport()}
+                        disabled={lutLoading}
+                      >
+                        <Upload className="h-3.5 w-3.5" />
+                        Import
+                      </Button>
+                    </div>
+                    <div className="text-[11px] text-muted-foreground">
+                      LUT files are stored per project in <code>assets\luts</code>.
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="text-[11px] font-medium text-muted-foreground">
+                      Color correction
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <PropertyNumberField
+                        label="Temperature"
+                        value={selectedAdjustments?.colorCorrection.temperature ?? 0}
+                        min={-100}
+                        max={100}
+                        step={1}
+                        decimals={0}
+                        onCommit={(value) =>
+                          updateAdjustments({
+                            colorCorrection: { temperature: value },
+                          })
+                        }
+                      />
+                      <PropertyNumberField
+                        label="Tint"
+                        value={selectedAdjustments?.colorCorrection.tint ?? 0}
+                        min={-100}
+                        max={100}
+                        step={1}
+                        decimals={0}
+                        onCommit={(value) =>
+                          updateAdjustments({
+                            colorCorrection: { tint: value },
+                          })
+                        }
+                      />
+                      <PropertyNumberField
+                        label="Hue"
+                        value={selectedAdjustments?.colorCorrection.hue ?? 0}
+                        min={-100}
+                        max={100}
+                        step={1}
+                        decimals={0}
+                        onCommit={(value) =>
+                          updateAdjustments({
+                            colorCorrection: { hue: value },
+                          })
+                        }
+                      />
+                      <PropertyNumberField
+                        label="Saturation"
+                        value={selectedAdjustments?.colorCorrection.saturation ?? 0}
+                        min={-100}
+                        max={100}
+                        step={1}
+                        decimals={0}
+                        onCommit={(value) =>
+                          updateAdjustments({
+                            colorCorrection: { saturation: value },
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="text-[11px] font-medium text-muted-foreground">
+                      Lightness correction
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <PropertyNumberField
+                        label="Exposure"
+                        value={selectedAdjustments?.lightnessCorrection.exposure ?? 0}
+                        min={-100}
+                        max={100}
+                        step={1}
+                        decimals={0}
+                        onCommit={(value) =>
+                          updateAdjustments({
+                            lightnessCorrection: { exposure: value },
+                          })
+                        }
+                      />
+                      <PropertyNumberField
+                        label="Contrast"
+                        value={selectedAdjustments?.lightnessCorrection.contrast ?? 0}
+                        min={-100}
+                        max={100}
+                        step={1}
+                        decimals={0}
+                        onCommit={(value) =>
+                          updateAdjustments({
+                            lightnessCorrection: { contrast: value },
+                          })
+                        }
+                      />
+                      <PropertyNumberField
+                        label="Highlights"
+                        value={selectedAdjustments?.lightnessCorrection.highlights ?? 0}
+                        min={-100}
+                        max={100}
+                        step={1}
+                        decimals={0}
+                        onCommit={(value) =>
+                          updateAdjustments({
+                            lightnessCorrection: { highlights: value },
+                          })
+                        }
+                      />
+                      <PropertyNumberField
+                        label="Shadows"
+                        value={selectedAdjustments?.lightnessCorrection.shadows ?? 0}
+                        min={-100}
+                        max={100}
+                        step={1}
+                        decimals={0}
+                        onCommit={(value) =>
+                          updateAdjustments({
+                            lightnessCorrection: { shadows: value },
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="text-[11px] font-medium text-muted-foreground">
+                      Effects
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <PropertyNumberField
+                        label="Sharpen"
+                        value={selectedAdjustments?.effects.sharpen ?? 0}
+                        min={0}
+                        max={100}
+                        step={1}
+                        decimals={0}
+                        onCommit={(value) =>
+                          updateAdjustments({
+                            effects: { sharpen: value },
+                          })
+                        }
+                      />
+                      <PropertyNumberField
+                        label="Noise"
+                        value={selectedAdjustments?.effects.noise ?? 0}
+                        min={0}
+                        max={100}
+                        step={1}
+                        decimals={0}
+                        onCommit={(value) =>
+                          updateAdjustments({
+                            effects: { noise: value },
+                          })
+                        }
+                      />
+                      <PropertyNumberField
+                        label="Vignette"
+                        value={selectedAdjustments?.effects.vignette ?? 0}
+                        min={0}
+                        max={100}
+                        step={1}
+                        decimals={0}
+                        onCommit={(value) =>
+                          updateAdjustments({
+                            effects: { vignette: value },
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+                </div>
+              </PropertySection>
+            </>
           ) : null}
 
           <div className="text-muted-foreground">

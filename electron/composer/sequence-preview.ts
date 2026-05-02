@@ -1,10 +1,12 @@
 import { spawn } from "child_process";
 import { createHash } from "crypto";
 import { existsSync, mkdirSync, readdirSync, rmSync } from "fs";
-import { extname, join, resolve } from "path";
+import { extname, join, normalize, resolve } from "path";
 import stringify from "json-stable-stringify";
+import { normalizeClipAdjustments } from "../../src/composer/shared/clipAdjustments";
 import type {
   Clip,
+  ClipBlendMode,
   ComposerPlaybackQuality,
   ComposerSequencePreview,
   ComposerSequencePreviewInvalidationCause,
@@ -23,7 +25,7 @@ import {
 import { getProjectDatabase } from "./db/connection";
 import { ensureComposerFfmpegToolsAvailable } from "./ffmpeg";
 
-export const SEQUENCE_PREVIEW_REQUEST_VERSION = 4;
+export const SEQUENCE_PREVIEW_REQUEST_VERSION = 5;
 const SEQUENCE_PREVIEW_EDIT_DEBOUNCE_MS = 600;
 const SEQUENCE_PREVIEW_RECONCILE_INTERVAL_MS = 15_000;
 
@@ -140,6 +142,155 @@ function clampFadeDuration(value: number, clipDuration: number): number {
     return 0;
   }
   return Math.min(value, clipDuration);
+}
+
+function clampSignedPercent(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+  return Math.min(Math.max(value, -100), 100);
+}
+
+function clampUnsignedPercent(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+  return Math.min(Math.max(value, 0), 100);
+}
+
+function clampUnit(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+  return Math.min(Math.max(value, 0), 1);
+}
+
+function getProjectLutsDir(projectId: string): string {
+  return join(getProjectAssetsDir(projectId), "luts");
+}
+
+function resolveProjectLutPath(projectId: string, lutAssetId: string | null): string | null {
+  if (!lutAssetId) {
+    return null;
+  }
+
+  const lutDir = getProjectLutsDir(projectId);
+  const resolvedPath = normalize(join(lutDir, lutAssetId));
+  const normalizedDir = normalize(lutDir);
+  const normalizedDirPrefix = normalizedDir.endsWith("\\")
+    ? normalizedDir
+    : `${normalizedDir}\\`;
+  if (
+    !resolvedPath.startsWith(normalizedDirPrefix) ||
+    !existsSync(resolvedPath)
+  ) {
+    return null;
+  }
+
+  return resolvedPath;
+}
+
+function escapeFfmpegFilterPath(filePath: string): string {
+  return filePath
+    .replace(/\\/g, "/")
+    .replace(/:/g, "\\:")
+    .replace(/'/g, "\\'");
+}
+
+function getFfmpegBlendMode(mode: ClipBlendMode): string | null {
+  switch (mode) {
+    case "multiply":
+      return "multiply";
+    case "screen":
+      return "screen";
+    case "overlay":
+      return "overlay";
+    case "soft-light":
+      return "softlight";
+    case "darken":
+      return "darken";
+    case "lighten":
+      return "lighten";
+    default:
+      return null;
+  }
+}
+
+function buildClipCurvesFilter(shadows: number, highlights: number): string | null {
+  if (shadows === 0 && highlights === 0) {
+    return null;
+  }
+
+  const shadowFactor = clampSignedPercent(shadows) / 100;
+  const highlightFactor = clampSignedPercent(highlights) / 100;
+  const points = [
+    `0/${formatFilterNumber(clampUnit(Math.max(0, shadowFactor * 0.08)))}`,
+    `0.25/${formatFilterNumber(clampUnit(0.25 + shadowFactor * 0.18))}`,
+    `0.75/${formatFilterNumber(clampUnit(0.75 + highlightFactor * 0.18))}`,
+    `1/${formatFilterNumber(clampUnit(1 + highlightFactor * 0.08))}`,
+  ];
+  return `curves=all='${points.join(" ")}'`;
+}
+
+function buildClipAdjustmentFilters(projectId: string, clip: Clip): string[] {
+  const adjustments = normalizeClipAdjustments(clip.adjustments);
+  const filters: string[] = [];
+  const temperature = clampSignedPercent(adjustments.colorCorrection.temperature) / 100;
+  const tint = clampSignedPercent(adjustments.colorCorrection.tint) / 100;
+  const hue = clampSignedPercent(adjustments.colorCorrection.hue) * 1.8;
+  const saturation =
+    1 + clampSignedPercent(adjustments.colorCorrection.saturation) / 100;
+  const exposure =
+    clampSignedPercent(adjustments.lightnessCorrection.exposure) / 200;
+  const contrast =
+    1 + clampSignedPercent(adjustments.lightnessCorrection.contrast) / 100;
+  const curvesFilter = buildClipCurvesFilter(
+    adjustments.lightnessCorrection.shadows,
+    adjustments.lightnessCorrection.highlights,
+  );
+  const sharpen = clampUnsignedPercent(adjustments.effects.sharpen);
+  const noise = clampUnsignedPercent(adjustments.effects.noise);
+  const vignette = clampUnsignedPercent(adjustments.effects.vignette);
+  const lutPath = resolveProjectLutPath(projectId, adjustments.lutAssetId);
+
+  if (temperature !== 0 || tint !== 0) {
+    filters.push(
+      `colorbalance=rm=${formatFilterNumber(temperature * 0.35 + tint * 0.2)}:gm=${formatFilterNumber(-tint * 0.2)}:bm=${formatFilterNumber(-temperature * 0.35)}`,
+    );
+  }
+  if (hue !== 0 || saturation !== 1) {
+    filters.push(
+      `hue=h=${formatFilterNumber(hue)}:s=${formatFilterNumber(Math.max(0, saturation))}`,
+    );
+  }
+  if (exposure !== 0 || contrast !== 1) {
+    filters.push(
+      `eq=brightness=${formatFilterNumber(exposure)}:contrast=${formatFilterNumber(Math.max(0, contrast))}`,
+    );
+  }
+  if (curvesFilter) {
+    filters.push(curvesFilter);
+  }
+  if (lutPath) {
+    filters.push("format=rgb24");
+    filters.push(`lut3d=file='${escapeFfmpegFilterPath(lutPath)}':interp=tetrahedral`);
+  }
+  if (sharpen > 0) {
+    filters.push(
+      `unsharp=5:5:${formatFilterNumber(sharpen / 20)}:5:5:0`,
+    );
+  }
+  if (noise > 0) {
+    filters.push(`noise=alls=${formatFilterNumber(noise * 0.25)}:allf=t+u`);
+  }
+  if (vignette > 0) {
+    const vignetteAngle = Math.max(0.35, 1.35 - vignette * 0.008);
+    filters.push(
+      `vignette=angle=${formatFilterNumber(vignetteAngle)}:x0=W/2:y0=H/2:mode=forward`,
+    );
+  }
+
+  return filters;
 }
 
 function computeClipRenderedDuration(
@@ -309,6 +460,10 @@ export function computeProjectTimelineSignature(projectId: string): string {
     transformScale: clip.transformScale,
     rotationZ: clip.rotationZ,
     opacity: clip.opacity,
+    brightness: clip.brightness,
+    contrast: clip.contrast,
+    saturation: clip.saturation,
+    adjustments: normalizeClipAdjustments(clip.adjustments),
     fadeInDuration: clip.fadeInDuration,
     fadeOutDuration: clip.fadeOutDuration,
   }));
@@ -859,7 +1014,7 @@ async function renderProjectSequencePreview(
     "-i",
     `color=c=black:s=${outputDimensions.width}x${outputDimensions.height}:r=${plan.request.fps}:d=${outputDuration}`,
   ];
-  const filterLines: string[] = ["[0:v]format=yuv420p[v0]"];
+  const filterLines: string[] = ["[0:v]format=rgba[v0]"];
   const audioLabels: string[] = [];
   let videoCompositeLabel = "v0";
   let inputIndex = 1;
@@ -919,6 +1074,7 @@ async function renderProjectSequencePreview(
     inputIndex += 1;
 
     if (track.type === "video" && track.visible && resolvedSource.probe?.hasVideo !== false) {
+      const clipAdjustments = normalizeClipAdjustments(clip.adjustments);
       const placement = computeRenderedVideoPlacement(
         resolvedSource.probe,
         outputDimensions.width,
@@ -948,6 +1104,7 @@ async function renderProjectSequencePreview(
         `setpts=${setPtsExpr}`,
         `scale=${formatFilterNumber(placement.width)}:${formatFilterNumber(placement.height)}:flags=lanczos`,
         "setsar=1",
+        ...buildClipAdjustmentFilters(projectId, clip),
         "format=rgba",
       ];
       if (fadeInDuration > 0) {
@@ -971,9 +1128,29 @@ async function renderProjectSequencePreview(
       filterLines.push(
         `[${currentInputIndex}:v]${videoFilters.join(",")}[${sourceVideoLabel}]`,
       );
-      filterLines.push(
-        `[${videoCompositeLabel}][${sourceVideoLabel}]overlay=${formatFilterNumber(overlayCenterX)}-w/2:${formatFilterNumber(overlayCenterY)}-h/2:eof_action=pass:repeatlast=0[${nextCompositeLabel}]`,
-      );
+      const blendMode = getFfmpegBlendMode(clipAdjustments.blendMode);
+      if (blendMode) {
+        const clipCanvasLabel = `layer${currentInputIndex}`;
+        const blendLabel = `blend${currentInputIndex}`;
+        const maskLabel = `mask${currentInputIndex}`;
+        filterLines.push(
+          `color=c=black@0.0:s=${outputDimensions.width}x${outputDimensions.height}:r=${plan.request.fps}:d=${outputDuration},format=rgba[blank${currentInputIndex}]`,
+        );
+        filterLines.push(
+          `[blank${currentInputIndex}][${sourceVideoLabel}]overlay=${formatFilterNumber(overlayCenterX)}-w/2:${formatFilterNumber(overlayCenterY)}-h/2:eof_action=pass:repeatlast=0[${clipCanvasLabel}]`,
+        );
+        filterLines.push(`[${clipCanvasLabel}]alphaextract[${maskLabel}]`);
+        filterLines.push(
+          `[${videoCompositeLabel}][${clipCanvasLabel}]blend=all_mode=${blendMode}[${blendLabel}]`,
+        );
+        filterLines.push(
+          `[${videoCompositeLabel}][${blendLabel}][${maskLabel}]maskedmerge[${nextCompositeLabel}]`,
+        );
+      } else {
+        filterLines.push(
+          `[${videoCompositeLabel}][${sourceVideoLabel}]overlay=${formatFilterNumber(overlayCenterX)}-w/2:${formatFilterNumber(overlayCenterY)}-h/2:eof_action=pass:repeatlast=0[${nextCompositeLabel}]`,
+        );
+      }
       videoCompositeLabel = nextCompositeLabel;
     }
 

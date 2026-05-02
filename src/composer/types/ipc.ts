@@ -6,10 +6,12 @@ import type {
   ComposerProject,
   ComposerProjectSummary,
   ComposerAsset,
+  ComposerLutAsset,
   ComposerSequencePreview,
   ComposerSequencePreviewInvalidationCause,
   Track,
   Clip,
+  ClipAdjustmentsPatch,
   TrackType,
   SourceType,
   LayoutPreset,
@@ -118,6 +120,10 @@ export interface AddClipInput {
   transformScale?: number;
   rotationZ?: number;
   opacity?: number;
+  brightness?: number;
+  contrast?: number;
+  saturation?: number;
+  adjustments?: ClipAdjustmentsPatch;
   fadeInDuration?: number;
   fadeOutDuration?: number;
   createdAt?: string;
@@ -137,6 +143,10 @@ export interface UpdateClipInput {
   transformScale?: number;
   rotationZ?: number;
   opacity?: number;
+  brightness?: number;
+  contrast?: number;
+  saturation?: number;
+  adjustments?: ClipAdjustmentsPatch;
   fadeInDuration?: number;
   fadeOutDuration?: number;
 }
@@ -164,6 +174,19 @@ export interface ImportAssetsByPathsInput {
 export interface DeleteAssetInput {
   projectId: string;
   assetId: string;
+}
+
+export interface ListLutsInput {
+  projectId: string;
+}
+
+export interface ImportLutsInput {
+  projectId: string;
+}
+
+export interface ImportLutsByPathsInput {
+  projectId: string;
+  sourcePaths: string[];
 }
 
 // ─── Channel map ─────────────────────────────────────────────────────────────
@@ -267,6 +290,18 @@ export type ComposerIpcChannels = {
   "composer:asset-delete": {
     args: DeleteAssetInput;
     result: ComposerAsset[];
+  };
+  "composer:lut-list": {
+    args: ListLutsInput;
+    result: ComposerLutAsset[];
+  };
+  "composer:lut-import": {
+    args: ImportLutsInput;
+    result: ComposerLutAsset[];
+  };
+  "composer:lut-import-from-paths": {
+    args: ImportLutsByPathsInput;
+    result: ComposerLutAsset[];
   };
 };
 

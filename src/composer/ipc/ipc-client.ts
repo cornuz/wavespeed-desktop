@@ -31,11 +31,15 @@ import type {
   ImportAssetsInput,
   ImportAssetsByPathsInput,
   DeleteAssetInput,
+  ListLutsInput,
+  ImportLutsInput,
+  ImportLutsByPathsInput,
 } from "@/composer/types/ipc";
 import type {
   ComposerProject,
   ComposerProjectSummary,
   ComposerAsset,
+  ComposerLutAsset,
   ComposerSequencePreview,
   Track,
   Clip,
@@ -161,4 +165,16 @@ export const composerAssetIpc = {
 
   delete: (input: DeleteAssetInput): Promise<ComposerAsset[]> =>
     invoke("composer:asset-delete", input),
+};
+
+export const composerLutIpc = {
+  list: (input: ListLutsInput): Promise<ComposerLutAsset[]> =>
+    invoke("composer:lut-list", input),
+
+  import: (input: ImportLutsInput): Promise<ComposerLutAsset[]> =>
+    invoke("composer:lut-import", input),
+
+  importFromPaths: (
+    input: ImportLutsByPathsInput,
+  ): Promise<ComposerLutAsset[]> => invoke("composer:lut-import-from-paths", input),
 };

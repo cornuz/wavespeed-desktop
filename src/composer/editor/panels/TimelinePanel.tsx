@@ -1,12 +1,12 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent } from "react";
 import {
-  Ellipsis,
   Eye,
   EyeOff,
   Film,
   Layers,
   Lock,
   Music2,
+  Plus,
   Ruler,
   Scissors,
   Trash2,
@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { toast } from "@/hooks/useToast";
 import type { Clip, ComposerAsset, Track } from "@/composer/types/project";
 import { useComposerRuntime } from "../context/ComposerRuntimeContext";
 import {
@@ -55,10 +56,6 @@ type Interaction =
       clip: Clip;
       originX: number;
     };
-
-function roundTime(value: number): number {
-  return Number(value.toFixed(3));
-}
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -182,6 +179,8 @@ export function TimelinePanel() {
     stopPlayback,
     selectClip,
     setZoom,
+    addTrack,
+    deleteTrack,
     updateTrack,
     addAssetToTrack,
     getMediaDuration,
@@ -197,11 +196,12 @@ export function TimelinePanel() {
   const [isDraggingPlayhead, setIsDraggingPlayhead] = useState(false);
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const rulerRef = useRef<HTMLDivElement | null>(null);
+  const trackRowsRef = useRef<HTMLDivElement | null>(null);
   const previousZoomRef = useRef(zoom);
   const autoFitProjectRef = useRef<string | null>(null);
   const [viewportWidth, setViewportWidth] = useState(MIN_VIEWPORT_WIDTH);
   const frameDuration = useMemo(() => getFrameDuration(project.fps), [project.fps]);
-  const isPlaybackActive = isPlaying || isPlaybackWaiting;
+  const tracksById = useMemo(() => new Map(tracks.map((track) => [track.id, track])), [tracks]);
 
   const minZoom = useMemo(() => {
     const safeDuration = Math.max(project.duration, 1 / project.fps);
@@ -324,6 +324,20 @@ export function TimelinePanel() {
     setZoom(clamp(zoom * factor, minZoom, maxZoom));
   };
 
+  const resolveTrackFromClientY = (clientY: number, fallbackTrackId: string): Track | null => {
+    const rowsElement = trackRowsRef.current;
+    const viewportElement = viewportRef.current;
+    if (!rowsElement || !viewportElement) {
+      return tracksById.get(fallbackTrackId) ?? null;
+    }
+
+    const rect = rowsElement.getBoundingClientRect();
+    const relativeY = clientY - rect.top + viewportElement.scrollTop;
+    const rowIndex = Math.floor(relativeY / TRACK_ROW_HEIGHT);
+    const candidate = tracks[rowIndex];
+    return candidate ?? tracksById.get(fallbackTrackId) ?? null;
+  };
+
   useEffect(() => {
     if (!interaction) {
       return;
@@ -341,13 +355,28 @@ export function TimelinePanel() {
       const nextClip = trackClips.find((clip) => clip.startTime >= getClipEnd(baseClip));
 
       if (interaction.type === "move") {
+        const sourceTrack = tracksById.get(baseClip.trackId);
+        const hoveredTrack = resolveTrackFromClientY(event.clientY, baseClip.trackId);
+        const targetTrack =
+          sourceTrack &&
+          hoveredTrack &&
+          hoveredTrack.type === sourceTrack.type &&
+          !hoveredTrack.locked
+            ? hoveredTrack
+            : sourceTrack;
+        if (!targetTrack) {
+          return;
+        }
+        const trackClips = clips
+          .filter((clip) => clip.trackId === targetTrack.id && clip.id !== baseClip.id)
+          .sort((left, right) => left.startTime - right.startTime);
         const nextStartTime = resolveTrackStart(
           baseClip.startTime + deltaSeconds,
           baseClip.duration,
           trackClips,
           project.fps,
         );
-        setDraftClip({ ...baseClip, startTime: nextStartTime });
+        setDraftClip({ ...baseClip, startTime: nextStartTime, trackId: targetTrack.id });
         return;
       }
 
@@ -426,7 +455,7 @@ export function TimelinePanel() {
       }
 
       if (currentInteraction.type === "move") {
-        void moveClip(currentDraft.id, currentDraft.startTime);
+        void moveClip(currentDraft.id, currentDraft.startTime, currentDraft.trackId);
         return;
       }
 
@@ -560,6 +589,40 @@ export function TimelinePanel() {
       <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
         <Layers className="h-4 w-4 text-muted-foreground" />
         <span className="flex-1 text-sm font-medium text-muted-foreground">Timeline</span>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 gap-1 px-2 text-[11px]"
+          onClick={() =>
+            void addTrack("video").catch((error: unknown) => {
+              toast({
+                title: "Couldn't add video track",
+                description: error instanceof Error ? error.message : "Try again.",
+                variant: "destructive",
+              });
+            })
+          }
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Video track
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 gap-1 px-2 text-[11px]"
+          onClick={() =>
+            void addTrack("audio").catch((error: unknown) => {
+              toast({
+                title: "Couldn't add audio track",
+                description: error instanceof Error ? error.message : "Try again.",
+                variant: "destructive",
+              });
+            })
+          }
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Audio track
+        </Button>
         <div className="text-[11px] text-muted-foreground">
           {Math.round(playhead * project.fps)}f - {playhead.toFixed(2)}s / {project.duration.toFixed(2)}s
         </div>
@@ -677,10 +740,12 @@ export function TimelinePanel() {
               Tracks
             </div>
             <div className="min-h-0">
-              {tracks.map((track) => (
-                <div
-                  key={track.id}
-                  className={cn(
+               {tracks.map((track) => {
+                 const sameTypeTracks = tracks.filter((candidate) => candidate.type === track.type);
+                 return (
+                 <div
+                   key={track.id}
+                   className={cn(
                     "relative flex items-center border-b border-border px-2 text-sm",
                     isTrackDimmed(track) && "bg-muted/30",
                   )}
@@ -751,21 +816,49 @@ export function TimelinePanel() {
                       </TooltipTrigger>
                       <TooltipContent>{track.muted ? "Unmute track" : "Mute track"}</TooltipContent>
                     </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span>
-                          <Button variant="ghost" size="icon" className="h-6 w-6 opacity-60" disabled>
-                            <Ellipsis className="h-3.5 w-3.5" />
-                          </Button>
-                        </span>
-                      </TooltipTrigger>
-                      <TooltipContent>More</TooltipContent>
-                    </Tooltip>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+                     <Tooltip>
+                       <TooltipTrigger asChild>
+                         <Button
+                           variant="ghost"
+                           size="icon"
+                           className="h-6 w-6"
+                           onClick={() => {
+                             const clipCount = clips.filter((clip) => clip.trackId === track.id).length;
+                             if (clipCount > 0) {
+                               toast({
+                                 title: "Track is not empty",
+                                 description: `Move or delete the ${clipCount} clip${clipCount === 1 ? "" : "s"} on ${track.name} before removing the track.`,
+                                 variant: "destructive",
+                               });
+                               return;
+                             }
+                             if (sameTypeTracks.length <= 1) {
+                               toast({
+                                 title: "Track can't be deleted",
+                                 description: `Keep at least one ${track.type} track in the timeline.`,
+                               });
+                               return;
+                             }
+                             void deleteTrack(track.id).catch((error: unknown) => {
+                               toast({
+                                 title: "Couldn't delete track",
+                                 description:
+                                   error instanceof Error ? error.message : "Try again.",
+                                 variant: "destructive",
+                               });
+                             });
+                           }}
+                         >
+                           <Trash2 className="h-3.5 w-3.5" />
+                         </Button>
+                       </TooltipTrigger>
+                       <TooltipContent>Delete empty track</TooltipContent>
+                     </Tooltip>
+                   </div>
+                 </div>
+               )})}
+             </div>
+           </div>
 
           <div ref={viewportRef} className="min-w-0 min-h-0 overflow-auto">
             <div className="relative" style={{ width: timelineWidth }}>
@@ -822,7 +915,7 @@ export function TimelinePanel() {
                 </div>
               </div>
 
-              <div className="relative">
+               <div ref={trackRowsRef} className="relative">
                 <div
                   className="absolute bottom-0 top-0 z-30 w-px bg-primary"
                   style={{ left: playhead * zoom }}
@@ -846,12 +939,13 @@ export function TimelinePanel() {
                   return (
                     <div
                       key={track.id}
-                      className={cn(
-                        "relative border-b border-border transition-colors",
-                        dragOverTrackId === track.id && "bg-primary/10",
-                        isTrackDimmed(track) && "bg-muted/25",
-                        track.locked && "cursor-not-allowed",
-                      )}
+                        className={cn(
+                          "relative border-b border-border transition-colors",
+                          dragOverTrackId === track.id && "bg-primary/10",
+                          interaction?.type === "move" && draftClip?.trackId === track.id && "bg-primary/5",
+                          isTrackDimmed(track) && "bg-muted/25",
+                          track.locked && "cursor-not-allowed",
+                        )}
                       style={{ height: TRACK_ROW_HEIGHT }}
                       onMouseDown={(event) =>
                         handleTimelineSeek(event, event.currentTarget as HTMLDivElement)

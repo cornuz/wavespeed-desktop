@@ -16,6 +16,7 @@ import {
   Music2,
   RefreshCw,
   Trash2,
+  Palette,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -50,6 +51,8 @@ function getAssetIcon(type: ComposerAsset["type"]) {
       return FileVideo;
     case "audio":
       return Music2;
+    case "lut":
+      return Palette;
   }
 }
 
@@ -284,6 +287,15 @@ export function AssetsPanel() {
       }
 
       const nextDetails = await new Promise<AssetDetails>((resolve) => {
+        if (asset.type === "lut") {
+          // LUT files don't need loading, just show file size
+          resolve({
+            summary: formatBytes(asset.fileSize),
+            sourcePath: detailsPath,
+          });
+          return;
+        }
+
         if (asset.type === "image") {
           const image = new Image();
           image.onload = () =>
@@ -455,7 +467,7 @@ export function AssetsPanel() {
             <Film className="h-8 w-8 opacity-50" />
             <div>No project media yet</div>
             <div>
-              Import image, video, or audio files into this Composer project.
+              Import image, video, audio, or LUT files into this Composer project.
             </div>
           </div>
         ) : (

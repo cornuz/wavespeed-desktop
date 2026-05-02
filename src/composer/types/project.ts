@@ -39,7 +39,16 @@ export type TrackType = "video" | "audio";
 
 export type SourceType = "asset" | "import" | "ai-result" | "workflow-ref";
 
-export type ComposerAssetType = "image" | "video" | "audio";
+export type ComposerAssetType = "image" | "video" | "audio" | "lut";
+
+export type ClipBlendMode =
+  | "normal"
+  | "multiply"
+  | "screen"
+  | "overlay"
+  | "soft-light"
+  | "darken"
+  | "lighten";
 
 export type RegionStatus = "pending" | "success" | "error" | "stale";
 
@@ -104,11 +113,55 @@ export interface Clip {
   rotationZ: number;
   /** Visual opacity, where 1 is fully opaque. */
   opacity: number;
+  /** Optional visual brightness multiplier, where 1 is neutral. */
+  brightness?: number;
+  /** Optional visual contrast multiplier, where 1 is neutral. */
+  contrast?: number;
+  /** Optional visual saturation multiplier, where 1 is neutral. */
+  saturation?: number;
   /** Fade-in duration in seconds. */
   fadeInDuration: number;
   /** Fade-out duration in seconds. */
   fadeOutDuration: number;
+  /** Persisted adjust-panel settings for sequence preview parity. */
+  adjustments: ClipAdjustments;
   createdAt: string; // ISO 8601
+}
+
+export interface ClipColorCorrection {
+  temperature: number;
+  tint: number;
+  hue: number;
+  saturation: number;
+}
+
+export interface ClipLightnessCorrection {
+  exposure: number;
+  contrast: number;
+  highlights: number;
+  shadows: number;
+}
+
+export interface ClipEffects {
+  sharpen: number;
+  noise: number;
+  vignette: number;
+}
+
+export interface ClipAdjustments {
+  blendMode: ClipBlendMode;
+  lutAssetId: string | null;
+  colorCorrection: ClipColorCorrection;
+  lightnessCorrection: ClipLightnessCorrection;
+  effects: ClipEffects;
+}
+
+export interface ClipAdjustmentsPatch {
+  blendMode?: ClipBlendMode;
+  lutAssetId?: string | null;
+  colorCorrection?: Partial<ClipColorCorrection>;
+  lightnessCorrection?: Partial<ClipLightnessCorrection>;
+  effects?: Partial<ClipEffects>;
 }
 
 // ─── Project-local asset library ─────────────────────────────────────────────
@@ -226,6 +279,14 @@ export interface ComposerAsset {
   playbackProxies?: ComposerPreviewProxySet;
   /** @deprecated Use playbackProxies. */
   previewProxies?: ComposerPreviewProxySet;
+}
+
+export interface ComposerLutAsset {
+  id: string;
+  fileName: string;
+  filePath: string;
+  createdAt: string;
+  modifiedAt: string;
 }
 
 // ─── Region (L3 — Workflow integration) ──────────────────────────────────────

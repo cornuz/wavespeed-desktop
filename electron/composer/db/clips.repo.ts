@@ -3,11 +3,47 @@
  */
 import { v4 as uuid } from "uuid";
 import { getProjectDatabase, persistProjectDatabase } from "./connection";
-import type { Clip, SourceType } from "../../../src/composer/types/project";
+import {
+  createDefaultClipAdjustments,
+  mergeClipAdjustments,
+  normalizeClipAdjustments,
+} from "../../../src/composer/shared/clipAdjustments";
+import type {
+  Clip,
+  ClipAdjustmentsPatch,
+  SourceType,
+} from "../../../src/composer/types/project";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+function parseStoredAdjustments(value: unknown): Clip["adjustments"] {
+  if (typeof value !== "string" || value.length === 0) {
+    return createDefaultClipAdjustments();
+  }
+
+  try {
+    return normalizeClipAdjustments(
+      JSON.parse(value) as Partial<Clip["adjustments"]>,
+    );
+  } catch {
+    return createDefaultClipAdjustments();
+  }
+}
+
+function getLegacyBrightness(adjustments: Clip["adjustments"]): number {
+  return 1 + adjustments.lightnessCorrection.exposure / 100;
+}
+
+function getLegacyContrast(adjustments: Clip["adjustments"]): number {
+  return 1 + adjustments.lightnessCorrection.contrast / 100;
+}
+
+function getLegacySaturation(adjustments: Clip["adjustments"]): number {
+  return 1 + adjustments.colorCorrection.saturation / 100;
+}
+
 function rowToClip(row: unknown[]): Clip {
+  const adjustments = parseStoredAdjustments(row[17]);
   return {
     id: row[0] as string,
     trackId: row[1] as string,
@@ -26,7 +62,11 @@ function rowToClip(row: unknown[]): Clip {
     opacity: (row[14] as number | null) ?? 1,
     fadeInDuration: (row[15] as number | null) ?? 0,
     fadeOutDuration: (row[16] as number | null) ?? 0,
-    createdAt: row[17] as string,
+    brightness: getLegacyBrightness(adjustments),
+    contrast: getLegacyContrast(adjustments),
+    saturation: getLegacySaturation(adjustments),
+    adjustments,
+    createdAt: row[18] as string,
   };
 }
 
@@ -34,7 +74,7 @@ const SELECT_COLUMNS = `
   id, track_id, source_type, source_path, source_asset_id,
   start_time, duration, trim_start, trim_end, speed,
   transform_offset_x, transform_offset_y, transform_scale,
-  rotation_z, opacity, fade_in_duration, fade_out_duration, created_at
+  rotation_z, opacity, fade_in_duration, fade_out_duration, adjustments_json, created_at
 `;
 
 // ─── Queries ──────────────────────────────────────────────────────────────────
@@ -75,12 +115,16 @@ export function createClip(
     speed?: number;
     transformOffsetX?: number;
     transformOffsetY?: number;
-    transformScale?: number;
-    rotationZ?: number;
-    opacity?: number;
-    fadeInDuration?: number;
-    fadeOutDuration?: number;
-    createdAt?: string;
+      transformScale?: number;
+      rotationZ?: number;
+      opacity?: number;
+      brightness?: number;
+      contrast?: number;
+      saturation?: number;
+      adjustments?: ClipAdjustmentsPatch;
+      fadeInDuration?: number;
+      fadeOutDuration?: number;
+      createdAt?: string;
   },
 ): Clip {
   const db = getProjectDatabase(projectId);
@@ -98,14 +142,38 @@ export function createClip(
   const opacity = input.opacity ?? 1;
   const fadeInDuration = input.fadeInDuration ?? 0;
   const fadeOutDuration = input.fadeOutDuration ?? 0;
+  const adjustments = mergeClipAdjustments(createDefaultClipAdjustments(), {
+    ...(input.adjustments ?? {}),
+    ...(input.brightness !== undefined || input.contrast !== undefined
+      ? {
+          lightnessCorrection: {
+            ...(input.adjustments?.lightnessCorrection ?? {}),
+            ...(input.brightness !== undefined
+              ? { exposure: (input.brightness - 1) * 100 }
+              : {}),
+            ...(input.contrast !== undefined
+              ? { contrast: (input.contrast - 1) * 100 }
+              : {}),
+          },
+        }
+      : {}),
+    ...(input.saturation !== undefined
+      ? {
+          colorCorrection: {
+            ...(input.adjustments?.colorCorrection ?? {}),
+            saturation: (input.saturation - 1) * 100,
+          },
+        }
+      : {}),
+  });
 
   db.run(
     `INSERT INTO clips
        (id, track_id, source_type, source_path, source_asset_id,
          start_time, duration, trim_start, trim_end, speed,
          transform_offset_x, transform_offset_y, transform_scale,
-         rotation_z, opacity, fade_in_duration, fade_out_duration, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         rotation_z, opacity, fade_in_duration, fade_out_duration, adjustments_json, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       input.trackId,
@@ -124,6 +192,7 @@ export function createClip(
       opacity,
       fadeInDuration,
       fadeOutDuration,
+      JSON.stringify(adjustments),
       now,
     ],
   );
@@ -145,8 +214,12 @@ export function createClip(
     transformScale,
     rotationZ,
     opacity,
+    brightness: getLegacyBrightness(adjustments),
+    contrast: getLegacyContrast(adjustments),
+    saturation: getLegacySaturation(adjustments),
     fadeInDuration,
     fadeOutDuration,
+    adjustments,
     createdAt: now,
   };
 }
@@ -168,10 +241,15 @@ export function updateClip(
       | "transformScale"
       | "rotationZ"
       | "opacity"
+      | "brightness"
+      | "contrast"
+      | "saturation"
       | "fadeInDuration"
       | "fadeOutDuration"
     >
-  >,
+  > & {
+    adjustments?: ClipAdjustmentsPatch;
+  },
 ): Clip {
   const db = getProjectDatabase(projectId);
   if (!db) throw new Error(`Project ${projectId} is not open`);
@@ -192,6 +270,42 @@ export function updateClip(
   if (patch.opacity !== undefined) { fields.push("opacity = ?"); values.push(patch.opacity); }
   if (patch.fadeInDuration !== undefined) { fields.push("fade_in_duration = ?"); values.push(patch.fadeInDuration); }
   if (patch.fadeOutDuration !== undefined) { fields.push("fade_out_duration = ?"); values.push(patch.fadeOutDuration); }
+  if (
+    patch.adjustments !== undefined ||
+    patch.brightness !== undefined ||
+    patch.contrast !== undefined ||
+    patch.saturation !== undefined
+  ) {
+    const current = getClipById(projectId, clipId);
+    const adjustmentsPatch: ClipAdjustmentsPatch = {
+      ...(patch.adjustments ?? {}),
+      ...(patch.brightness !== undefined || patch.contrast !== undefined
+        ? {
+            lightnessCorrection: {
+              ...(patch.adjustments?.lightnessCorrection ?? {}),
+              ...(patch.brightness !== undefined
+                ? { exposure: (patch.brightness - 1) * 100 }
+                : {}),
+              ...(patch.contrast !== undefined
+                ? { contrast: (patch.contrast - 1) * 100 }
+                : {}),
+            },
+          }
+        : {}),
+      ...(patch.saturation !== undefined
+        ? {
+            colorCorrection: {
+              ...(patch.adjustments?.colorCorrection ?? {}),
+              saturation: (patch.saturation - 1) * 100,
+            },
+          }
+        : {}),
+    };
+    fields.push("adjustments_json = ?");
+    values.push(
+      JSON.stringify(mergeClipAdjustments(current.adjustments, adjustmentsPatch)),
+    );
+  }
 
   if (fields.length > 0) {
     values.push(clipId);

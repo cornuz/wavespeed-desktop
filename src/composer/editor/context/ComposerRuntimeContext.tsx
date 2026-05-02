@@ -40,11 +40,15 @@ type EditableClipPatch = Partial<
     | "trackId"
     | "transformOffsetX"
     | "transformOffsetY"
-    | "transformScale"
-    | "rotationZ"
-    | "opacity"
-    | "fadeInDuration"
-    | "fadeOutDuration"
+      | "transformScale"
+      | "rotationZ"
+      | "opacity"
+      | "brightness"
+      | "contrast"
+      | "saturation"
+      | "adjustments"
+      | "fadeInDuration"
+      | "fadeOutDuration"
   >
 >;
 
@@ -54,12 +58,17 @@ type ClipUndoSnapshot = Pick<
   | "duration"
   | "trimStart"
   | "trimEnd"
+  | "speed"
   | "trackId"
   | "transformOffsetX"
   | "transformOffsetY"
   | "transformScale"
   | "rotationZ"
   | "opacity"
+  | "brightness"
+  | "contrast"
+  | "saturation"
+  | "adjustments"
   | "fadeInDuration"
   | "fadeOutDuration"
 >;
@@ -110,6 +119,8 @@ interface ComposerRuntimeContextValue {
   selectClip: (clipId: string | null) => void;
   previewLibraryAsset: (asset: ComposerAsset | null) => void;
   setZoom: (value: number) => void;
+  addTrack: (type: Track["type"]) => Promise<void>;
+  deleteTrack: (trackId: string) => Promise<void>;
   updateTrack: (
     trackId: string,
     patch: Partial<Pick<Track, "muted" | "locked" | "visible" | "name" | "order">>,
@@ -120,7 +131,7 @@ interface ComposerRuntimeContextValue {
     startTime: number,
     durationOverride?: number,
   ) => Promise<void>;
-  moveClip: (clipId: string, startTime: number) => Promise<void>;
+  moveClip: (clipId: string, startTime: number, trackId?: string) => Promise<void>;
   trimClip: (
     clipId: string,
     nextValues: Pick<Clip, "startTime" | "duration" | "trimStart" | "trimEnd">,
@@ -162,11 +173,16 @@ function getUndoClipSnapshot(clip: Clip): ClipUndoSnapshot {
     duration: clip.duration,
     trimStart: clip.trimStart,
     trimEnd: clip.trimEnd,
+    speed: clip.speed,
     transformOffsetX: clip.transformOffsetX,
     transformOffsetY: clip.transformOffsetY,
     transformScale: clip.transformScale,
     rotationZ: clip.rotationZ,
     opacity: clip.opacity,
+    brightness: clip.brightness,
+    contrast: clip.contrast,
+    saturation: clip.saturation,
+    adjustments: clip.adjustments,
     fadeInDuration: clip.fadeInDuration,
     fadeOutDuration: clip.fadeOutDuration,
   };
@@ -187,6 +203,10 @@ function getAssetUrl(filePath: string | null): string | null {
 }
 
 function getTrackForType(tracks: Track[], type: ComposerAssetType): Track | null {
+  if (type === "lut") {
+    // LUT files cannot be added to the timeline
+    return null;
+  }
   if (type === "audio") {
     return tracks.find((track) => track.type === "audio") ?? null;
   }
@@ -581,6 +601,40 @@ export function ComposerRuntimeProvider({
     [getLiveProject, project.id, selectedClipId, updateTrackList],
   );
 
+  const addTrack = useCallback(
+    async (type: Track["type"]) => {
+      const currentTracks = getLiveProject().tracks;
+      const prefix = type === "audio" ? "Audio" : "Video";
+      const nextIndex =
+        currentTracks
+          .filter((track) => track.type === type)
+          .reduce((max, track) => {
+            const match = track.name.match(new RegExp(`^${prefix}\\s+(\\d+)$`, "i"));
+            const parsed = match ? Number(match[1]) : Number.NaN;
+            return Number.isFinite(parsed) ? Math.max(max, parsed) : max;
+          }, 0) + 1;
+      const createdTrack = await composerTrackIpc.add({
+        projectId: project.id,
+        type,
+        name: `${prefix} ${nextIndex}`,
+      });
+
+      updateTrackList([...getLiveProject().tracks, createdTrack]);
+    },
+    [getLiveProject, project.id, updateTrackList],
+  );
+
+  const deleteTrack = useCallback(
+    async (trackId: string) => {
+      await composerTrackIpc.delete({
+        projectId: project.id,
+        trackId,
+      });
+      updateTrackList(getLiveProject().tracks.filter((track) => track.id !== trackId));
+    },
+    [getLiveProject, project.id, updateTrackList],
+  );
+
   const updateClip = useCallback(
     async (clipId: string, patch: EditableClipPatch) => {
       const currentProject = getLiveProject();
@@ -589,9 +643,13 @@ export function ComposerRuntimeProvider({
         return;
       }
 
+      const currentTrack = currentProject.tracks.find((track) => track.id === currentClip.trackId);
       const nextTrackId = patch.trackId ?? currentClip.trackId;
-      const currentTrack = currentProject.tracks.find((track) => track.id === nextTrackId);
-      if (currentTrack?.locked) {
+      const nextTrack = currentProject.tracks.find((track) => track.id === nextTrackId);
+      if (!nextTrack || nextTrack.locked) {
+        return;
+      }
+      if (currentTrack && currentTrack.type !== nextTrack.type) {
         return;
       }
 
@@ -641,21 +699,29 @@ export function ComposerRuntimeProvider({
   );
 
   const moveClip = useCallback(
-    async (clipId: string, startTime: number) => {
+    async (clipId: string, startTime: number, trackId?: string) => {
       const currentClip = getLiveProject().clips.find((clip) => clip.id === clipId);
       if (!currentClip) {
         return;
       }
       const currentTrack = getLiveProject().tracks.find((track) => track.id === currentClip.trackId);
-      if (currentTrack?.locked) {
+      const nextTrackId = trackId ?? currentClip.trackId;
+      const nextTrack = getLiveProject().tracks.find((track) => track.id === nextTrackId);
+      if (!currentTrack || currentTrack.locked || !nextTrack || nextTrack.locked) {
+        return;
+      }
+      if (currentTrack.type !== nextTrack.type) {
         return;
       }
 
       const nextStartTime = snapTimeToFrame(startTime, project.fps);
-      if (Math.abs(nextStartTime - currentClip.startTime) < 0.001) {
+      if (
+        Math.abs(nextStartTime - currentClip.startTime) < 0.001 &&
+        nextTrackId === currentClip.trackId
+      ) {
         return;
       }
-      await updateClip(clipId, { startTime: nextStartTime });
+      await updateClip(clipId, { startTime: nextStartTime, trackId: nextTrackId });
     },
     [getLiveProject, project.fps, updateClip],
   );
@@ -761,6 +827,10 @@ export function ComposerRuntimeProvider({
         transformScale: currentClip.transformScale,
         rotationZ: currentClip.rotationZ,
         opacity: currentClip.opacity,
+        brightness: currentClip.brightness,
+        contrast: currentClip.contrast,
+        saturation: currentClip.saturation,
+        adjustments: currentClip.adjustments,
         fadeInDuration: currentClip.fadeInDuration,
         fadeOutDuration: currentClip.fadeOutDuration,
       });
@@ -841,6 +911,10 @@ export function ComposerRuntimeProvider({
           transformScale: previousEntry.clip.transformScale,
           rotationZ: previousEntry.clip.rotationZ,
           opacity: previousEntry.clip.opacity,
+          brightness: previousEntry.clip.brightness,
+          contrast: previousEntry.clip.contrast,
+          saturation: previousEntry.clip.saturation,
+          adjustments: previousEntry.clip.adjustments,
           fadeInDuration: previousEntry.clip.fadeInDuration,
           fadeOutDuration: previousEntry.clip.fadeOutDuration,
         });
@@ -857,11 +931,16 @@ export function ComposerRuntimeProvider({
           duration: previousEntry.previous.duration,
           trimStart: previousEntry.previous.trimStart,
           trimEnd: previousEntry.previous.trimEnd,
+          speed: previousEntry.previous.speed,
           transformOffsetX: previousEntry.previous.transformOffsetX,
           transformOffsetY: previousEntry.previous.transformOffsetY,
           transformScale: previousEntry.previous.transformScale,
           rotationZ: previousEntry.previous.rotationZ,
           opacity: previousEntry.previous.opacity,
+          brightness: previousEntry.previous.brightness,
+          contrast: previousEntry.previous.contrast,
+          saturation: previousEntry.previous.saturation,
+          adjustments: previousEntry.previous.adjustments,
           fadeInDuration: previousEntry.previous.fadeInDuration,
           fadeOutDuration: previousEntry.previous.fadeOutDuration,
         });
@@ -885,12 +964,17 @@ export function ComposerRuntimeProvider({
           duration: previousEntry.original.duration,
           trimStart: previousEntry.original.trimStart,
           trimEnd: previousEntry.original.trimEnd,
+          speed: previousEntry.original.speed,
           trackId: previousEntry.original.trackId,
           transformOffsetX: previousEntry.original.transformOffsetX,
           transformOffsetY: previousEntry.original.transformOffsetY,
           transformScale: previousEntry.original.transformScale,
           rotationZ: previousEntry.original.rotationZ,
           opacity: previousEntry.original.opacity,
+          brightness: previousEntry.original.brightness,
+          contrast: previousEntry.original.contrast,
+          saturation: previousEntry.original.saturation,
+          adjustments: previousEntry.original.adjustments,
           fadeInDuration: previousEntry.original.fadeInDuration,
           fadeOutDuration: previousEntry.original.fadeOutDuration,
         });
@@ -1096,6 +1180,8 @@ export function ComposerRuntimeProvider({
       selectClip,
       previewLibraryAsset,
       setZoom,
+      addTrack,
+      deleteTrack,
       updateTrack,
       addAssetToTrack,
       moveClip,
@@ -1112,7 +1198,9 @@ export function ComposerRuntimeProvider({
       activeAudioClip,
       activeVisualClip,
       addAssetToTrack,
+      addTrack,
       clips,
+      deleteTrack,
       deleteSelectedClip,
       isPlaying,
       isPlaybackWaiting,

@@ -5,7 +5,7 @@
  */
 import type { Database as SqlJsDatabase } from "sql.js";
 
-export const CURRENT_SCHEMA_VERSION = 7;
+export const CURRENT_SCHEMA_VERSION = 8;
 
 // ─── Migration definition ─────────────────────────────────────────────────────
 
@@ -233,6 +233,18 @@ const MIGRATIONS: NamedMigration[] = [
       if (!columns.includes("fade_out_duration")) {
         db.run(
           `ALTER TABLE clips ADD COLUMN fade_out_duration REAL NOT NULL DEFAULT 0`,
+        );
+      }
+    },
+  },
+  {
+    id: "008_clip_adjustments",
+    apply: (db) => {
+      const info = db.exec(`PRAGMA table_info(clips)`);
+      const columns = (info[0]?.values ?? []).map((row) => row[1] as string);
+      if (!columns.includes("adjustments_json")) {
+        db.run(
+          `ALTER TABLE clips ADD COLUMN adjustments_json TEXT NOT NULL DEFAULT '{}'`,
         );
       }
     },

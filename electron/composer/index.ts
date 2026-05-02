@@ -4,6 +4,7 @@
  */
 import { registerProjectIpc } from "./ipc/project.ipc";
 import { registerAssetsIpc } from "./ipc/assets.ipc";
+import { registerLutsIpc } from "./ipc/luts.ipc";
 import { registerTimelineIpc } from "./ipc/timeline.ipc";
 import { closeAllProjectDatabases } from "./db/connection";
 
@@ -12,6 +13,7 @@ export async function initComposerModule(): Promise<void> {
 
   registerProjectIpc();
   registerAssetsIpc();
+  registerLutsIpc();
   registerTimelineIpc();
 
   console.log("[Composer] Composer module ready.");

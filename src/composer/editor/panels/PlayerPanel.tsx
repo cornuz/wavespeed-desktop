@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import {
   ChevronDown,
   CircleGauge,
@@ -31,8 +38,10 @@ import {
   composerAssetIpc,
   composerProjectIpc,
 } from "@/composer/ipc/ipc-client";
+import { normalizeClipAdjustments } from "@/composer/shared/clipAdjustments";
 import { useComposerProjectStore } from "@/composer/stores/project.store";
 import type {
+  Clip,
   ComposerAsset,
   ComposerPlaybackQuality,
 } from "@/composer/types/project";
@@ -54,8 +63,9 @@ function getClipLocalTime(
   playhead: number,
   clipStart: number,
   trimStart: number,
+  speed = 1,
 ): number {
-  return Math.max(0, playhead - clipStart + trimStart);
+  return Math.max(0, (playhead - clipStart) * speed + trimStart);
 }
 
 function syncMediaElementTime(
@@ -269,6 +279,116 @@ function getProjectRatioLabel(width: number, height: number): string {
   ].find((entry) => Math.abs(entry.ratio - ratio) < 0.02);
 
   return preset?.label ?? `${ratio.toFixed(2)}:1`;
+}
+
+function getVisualAdjustmentFilter(clip: {
+  adjustments: Clip["adjustments"];
+} | null): string | undefined {
+  if (!clip) {
+    return undefined;
+  }
+
+  const adjustments = normalizeClipAdjustments(clip.adjustments);
+  const filters = [
+    `brightness(${Math.max(0, 1 + adjustments.lightnessCorrection.exposure / 100)})`,
+    `contrast(${Math.max(0, 1 + adjustments.lightnessCorrection.contrast / 100)})`,
+    `saturate(${Math.max(0, 1 + adjustments.colorCorrection.saturation / 100)})`,
+    Math.abs(adjustments.colorCorrection.hue) > 0.1
+      ? `hue-rotate(${adjustments.colorCorrection.hue * 1.8}deg)`
+      : null,
+  ].filter(Boolean);
+
+  return filters.length > 0 ? filters.join(" ") : undefined;
+}
+
+function getVisualBlendMode(clip: { adjustments: Clip["adjustments"] } | null) {
+  if (!clip) {
+    return undefined;
+  }
+
+  const blendMode = normalizeClipAdjustments(clip.adjustments).blendMode;
+  return blendMode === "normal" ? undefined : blendMode;
+}
+
+function getTemperatureOverlayStyle(
+  clip: { adjustments: Clip["adjustments"] } | null,
+): CSSProperties | undefined {
+  if (!clip) {
+    return undefined;
+  }
+
+  const { temperature } = normalizeClipAdjustments(clip.adjustments).colorCorrection;
+  if (Math.abs(temperature) < 0.1) {
+    return undefined;
+  }
+
+  return {
+    backgroundColor:
+      temperature >= 0 ? "rgba(255, 150, 70, 1)" : "rgba(70, 165, 255, 1)",
+    mixBlendMode: "soft-light",
+    opacity: Math.min(Math.abs(temperature) / 100, 1) * 0.28,
+  };
+}
+
+function getTintOverlayStyle(
+  clip: { adjustments: Clip["adjustments"] } | null,
+): CSSProperties | undefined {
+  if (!clip) {
+    return undefined;
+  }
+
+  const { tint } = normalizeClipAdjustments(clip.adjustments).colorCorrection;
+  if (Math.abs(tint) < 0.1) {
+    return undefined;
+  }
+
+  return {
+    backgroundColor: tint >= 0 ? "rgba(255, 90, 205, 1)" : "rgba(120, 255, 160, 1)",
+    mixBlendMode: "soft-light",
+    opacity: Math.min(Math.abs(tint) / 100, 1) * 0.18,
+  };
+}
+
+function getVignetteOverlayStyle(
+  clip: { adjustments: Clip["adjustments"] } | null,
+): CSSProperties | undefined {
+  if (!clip) {
+    return undefined;
+  }
+
+  const { vignette } = normalizeClipAdjustments(clip.adjustments).effects;
+  if (vignette <= 0) {
+    return undefined;
+  }
+
+  return {
+    background:
+      "radial-gradient(circle at center, rgba(0,0,0,0) 48%, rgba(0,0,0,0.72) 100%)",
+    opacity: Math.min(vignette / 100, 1) * 0.8,
+  };
+}
+
+function getNoiseOverlayStyle(
+  clip: { adjustments: Clip["adjustments"] } | null,
+): CSSProperties | undefined {
+  if (!clip) {
+    return undefined;
+  }
+
+  const { noise } = normalizeClipAdjustments(clip.adjustments).effects;
+  if (noise <= 0) {
+    return undefined;
+  }
+
+  return {
+    backgroundImage: [
+      "linear-gradient(0deg, rgba(255,255,255,0.95) 50%, rgba(0,0,0,0.95) 50%)",
+      "linear-gradient(90deg, rgba(255,255,255,0.85) 50%, rgba(0,0,0,0.85) 50%)",
+    ].join(","),
+    backgroundSize: "3px 3px, 4px 4px",
+    mixBlendMode: "overlay",
+    opacity: Math.min(noise / 100, 1) * 0.08,
+  };
 }
 
 export function PlayerPanel() {
@@ -519,7 +639,7 @@ export function PlayerPanel() {
   }, [isPlaybackWaiting, sequencePreview.status]);
   const shouldMuteVideoElement = visualTrackMuted;
   const clipPreviewLocalTime = visualClip
-    ? getClipLocalTime(playhead, visualClip.startTime, visualClip.trimStart)
+    ? getClipLocalTime(playhead, visualClip.startTime, visualClip.trimStart, visualClip.speed)
     : 0;
   const fadeInFactor =
     visualClip && visualClip.fadeInDuration > 0
@@ -579,6 +699,27 @@ export function PlayerPanel() {
         transformOrigin: "center center",
       }
     : undefined;
+  const visualAdjustmentFilter = useMemo(
+    () => getVisualAdjustmentFilter(visualClip),
+    [visualClip],
+  );
+  const visualBlendMode = useMemo(() => getVisualBlendMode(visualClip), [visualClip]);
+  const visualTemperatureOverlayStyle = useMemo(
+    () => getTemperatureOverlayStyle(visualClip),
+    [visualClip],
+  );
+  const visualTintOverlayStyle = useMemo(
+    () => getTintOverlayStyle(visualClip),
+    [visualClip],
+  );
+  const visualVignetteOverlayStyle = useMemo(
+    () => getVignetteOverlayStyle(visualClip),
+    [visualClip],
+  );
+  const visualNoiseOverlayStyle = useMemo(
+    () => getNoiseOverlayStyle(visualClip),
+    [visualClip],
+  );
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -714,6 +855,17 @@ export function PlayerPanel() {
     visualClip,
     canonicalVisualUrl,
   ]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || previewAsset || !visualClip || isSequencePlaybackActive) {
+      return;
+    }
+
+    if (Math.abs(video.playbackRate - visualClip.speed) > 0.001) {
+      video.playbackRate = visualClip.speed;
+    }
+  }, [isSequencePlaybackActive, previewAsset, visualClip]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -987,13 +1139,15 @@ export function PlayerPanel() {
                     ...visualRotationStyle,
                   }}
                 >
-                  <div
-                    className="h-full w-full"
-                    style={{
-                      opacity: effectiveVisualOpacity,
-                    }}
-                  >
-                    {isImagePath(visualClip.sourcePath) ? (
+                    <div
+                      className="relative h-full w-full"
+                      style={{
+                        filter: visualAdjustmentFilter,
+                        opacity: effectiveVisualOpacity,
+                        mixBlendMode: visualBlendMode,
+                      }}
+                    >
+                      {isImagePath(visualClip.sourcePath) ? (
                       <img
                         src={canonicalVisualUrl}
                         alt={visualClip.sourcePath}
@@ -1007,12 +1161,36 @@ export function PlayerPanel() {
                         className="h-full w-full object-fill"
                         playsInline
                         muted={shouldMuteVideoElement}
-                        preload="auto"
-                      />
-                    )}
+                          preload="auto"
+                        />
+                      )}
+                      {visualTemperatureOverlayStyle ? (
+                        <div
+                          className="pointer-events-none absolute inset-0"
+                          style={visualTemperatureOverlayStyle}
+                        />
+                      ) : null}
+                      {visualTintOverlayStyle ? (
+                        <div
+                          className="pointer-events-none absolute inset-0"
+                          style={visualTintOverlayStyle}
+                        />
+                      ) : null}
+                      {visualVignetteOverlayStyle ? (
+                        <div
+                          className="pointer-events-none absolute inset-0"
+                          style={visualVignetteOverlayStyle}
+                        />
+                      ) : null}
+                      {visualNoiseOverlayStyle ? (
+                        <div
+                          className="pointer-events-none absolute inset-0"
+                          style={visualNoiseOverlayStyle}
+                        />
+                      ) : null}
+                    </div>
                   </div>
-                </div>
-              ) : null}
+                ) : null}
             </div>
 
             {isPlaybackWaiting ? (
