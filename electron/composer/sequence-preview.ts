@@ -1131,10 +1131,8 @@ async function renderProjectSequencePreview(
       const blendMode = getFfmpegBlendMode(clipAdjustments.blendMode);
       if (blendMode) {
         const clipCanvasLabel = `layer${currentInputIndex}`;
-        const compositeRgbLabel = `baseRgb${currentInputIndex}`;
-        const clipRgbLabel = `clipRgb${currentInputIndex}`;
         const blendLabel = `blend${currentInputIndex}`;
-        const blendedLayerLabel = `blendLayer${currentInputIndex}`;
+        const maskedLabel = `masked${currentInputIndex}`;
         const maskLabel = `mask${currentInputIndex}`;
         filterLines.push(
           `color=c=black@0.0:s=${outputDimensions.width}x${outputDimensions.height}:r=${plan.request.fps}:d=${outputDuration},format=rgba[blank${currentInputIndex}]`,
@@ -1144,26 +1142,18 @@ async function renderProjectSequencePreview(
         );
         filterLines.push(`[${clipCanvasLabel}]alphaextract[${maskLabel}]`);
         filterLines.push(
-          `[${videoCompositeLabel}]format=rgb24[${compositeRgbLabel}]`,
+          `[${clipCanvasLabel}][${videoCompositeLabel}]blend=all_mode=${blendMode}:c3_mode=normal[${blendLabel}]`,
         );
         filterLines.push(
-          `[${clipCanvasLabel}]format=rgb24[${clipRgbLabel}]`,
+          `[${videoCompositeLabel}][${blendLabel}][${maskLabel}]maskedmerge[${maskedLabel}]`,
         );
-        filterLines.push(
-          `[${compositeRgbLabel}][${clipRgbLabel}]blend=all_mode=${blendMode}[${blendLabel}]`,
-        );
-        filterLines.push(
-          `[${blendLabel}][${maskLabel}]alphamerge[${blendedLayerLabel}]`,
-        );
-        filterLines.push(
-          `[${videoCompositeLabel}][${blendedLayerLabel}]overlay=0:0:eof_action=pass:repeatlast=0[${nextCompositeLabel}]`,
-        );
+        videoCompositeLabel = maskedLabel;
       } else {
         filterLines.push(
           `[${videoCompositeLabel}][${sourceVideoLabel}]overlay=${formatFilterNumber(overlayCenterX)}-w/2:${formatFilterNumber(overlayCenterY)}-h/2:eof_action=pass:repeatlast=0[${nextCompositeLabel}]`,
         );
+        videoCompositeLabel = nextCompositeLabel;
       }
-      videoCompositeLabel = nextCompositeLabel;
     }
 
     if (!track.muted && resolvedSource.probe?.hasAudio) {
