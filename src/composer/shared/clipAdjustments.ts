@@ -12,6 +12,15 @@ const SUPPORTED_BLEND_MODES: readonly ClipBlendMode[] = [
   "soft-light",
   "darken",
   "lighten",
+  "color-dodge",
+  "color-burn",
+  "hard-light",
+  "difference",
+  "exclusion",
+  "hue",
+  "saturation",
+  "color",
+  "luminosity",
 ];
 
 function clamp(value: number, min: number, max: number): number {

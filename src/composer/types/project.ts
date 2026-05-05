@@ -48,7 +48,16 @@ export type ClipBlendMode =
   | "overlay"
   | "soft-light"
   | "darken"
-  | "lighten";
+  | "lighten"
+  | "color-dodge"
+  | "color-burn"
+  | "hard-light"
+  | "difference"
+  | "exclusion"
+  | "hue"
+  | "saturation"
+  | "color"
+  | "luminosity";
 
 export type RegionStatus = "pending" | "success" | "error" | "stale";
 

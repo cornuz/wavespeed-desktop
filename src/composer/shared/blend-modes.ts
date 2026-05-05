@@ -8,6 +8,15 @@ const CANVAS_BLEND_MODE_MAP: Record<ClipBlendMode, GlobalCompositeOperation> = {
   "soft-light": "soft-light",
   darken: "darken",
   lighten: "lighten",
+  "color-dodge": "color-dodge",
+  "color-burn": "color-burn",
+  "hard-light": "hard-light",
+  difference: "difference",
+  exclusion: "exclusion",
+  hue: "hue",
+  saturation: "saturation",
+  color: "color",
+  luminosity: "luminosity",
 };
 
 export function getCanvasBlendMode(

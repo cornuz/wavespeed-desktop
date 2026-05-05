@@ -4,11 +4,11 @@ import { BrowserWindow } from "electron";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from "fs";
 import { extname, join, normalize, resolve } from "path";
 import stringify from "json-stable-stringify";
+import { getCanvasBlendMode } from "../../src/composer/shared/blend-modes";
 import { normalizeClipAdjustments } from "../../src/composer/shared/clipAdjustments";
 import { getUniversalClipRect, universalRectToScreen } from "../../src/composer/shared/compositionGeometry";
 import type {
   Clip,
-  ClipBlendMode,
   ComposerPlaybackQuality,
   ComposerSequencePreview,
   ComposerSequencePreviewInvalidationCause,
@@ -164,26 +164,6 @@ function clampSignedPercent(value: number): number {
     return 0;
   }
   return Math.min(Math.max(value, -100), 100);
-}
-
-function getCanvasBlendMode(mode: ClipBlendMode): GlobalCompositeOperation {
-  switch (mode) {
-    case "multiply":
-      return "multiply";
-    case "screen":
-      return "screen";
-    case "overlay":
-      return "overlay";
-    case "soft-light":
-      return "soft-light";
-    case "darken":
-      return "darken";
-    case "lighten":
-      return "lighten";
-    case "normal":
-    default:
-      return "source-over";
-  }
 }
 
 function buildCssFilter(clip: Clip): string {

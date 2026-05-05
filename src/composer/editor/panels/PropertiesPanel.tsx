@@ -39,6 +39,15 @@ const BLEND_MODE_OPTIONS: Array<{ value: ClipBlendMode; label: string }> = [
   { value: "soft-light", label: "Soft light" },
   { value: "darken", label: "Darken" },
   { value: "lighten", label: "Lighten" },
+  { value: "color-dodge", label: "Color dodge" },
+  { value: "color-burn", label: "Color burn" },
+  { value: "hard-light", label: "Hard light" },
+  { value: "difference", label: "Difference" },
+  { value: "exclusion", label: "Exclusion" },
+  { value: "hue", label: "Hue" },
+  { value: "saturation", label: "Saturation" },
+  { value: "color", label: "Color" },
+  { value: "luminosity", label: "Luminosity" },
 ];
 
 function formatInputNumber(value: number, decimals = 3): string {

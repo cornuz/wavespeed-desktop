@@ -420,7 +420,7 @@ export function PlayerPanel() {
     sequencePreviewProgress,
     previewAsset,
     selectedVisualClip,
-    selectedClipIds,
+    selectClip,
     syncPlaybackToMediaClock,
     setPlaybackClockSource,
     togglePlayback,
@@ -614,17 +614,10 @@ export function PlayerPanel() {
             viewScale,
           );
 
-          const isOffFrame =
-            uRect.centerX + uRect.width / 2 < -project.width / 2 ||
-            uRect.centerX - uRect.width / 2 > project.width / 2 ||
-            uRect.centerY + uRect.height / 2 < -project.height / 2 ||
-            uRect.centerY - uRect.height / 2 > project.height / 2;
-
           return {
             ...layer,
             uRect,
             screenRect,
-            isOffFrame,
             rotationStyle: {
               transform: `rotate(${layer.clip.rotationZ}deg)`,
               transformOrigin: "center center",
@@ -639,6 +632,14 @@ export function PlayerPanel() {
         })
         .filter((layer): layer is NonNullable<typeof layer> => layer !== null),
     [activeVisualLayers, screenCenter, viewScale, project.width, project.height],
+  );
+  const selectedVisualRenderLayer = useMemo(
+    () =>
+      selectedVisualClip
+        ? activeVisualRenderLayers.find((layer) => layer.clip.id === selectedVisualClip.id) ??
+          null
+        : null,
+    [activeVisualRenderLayers, selectedVisualClip],
   );
   const previewAssetUrl = useMemo(
     () =>
@@ -657,6 +658,13 @@ export function PlayerPanel() {
       height: project.height * viewScale,
     }),
     [project.height, project.width, viewScale],
+  );
+  const selectedOverflowExtent = useMemo(
+    () => ({
+      width: Math.max(panelSize?.width ?? 0, project.width * viewScale),
+      height: Math.max(panelSize?.height ?? 0, project.height * viewScale),
+    }),
+    [panelSize, project.height, project.width, viewScale],
   );
   const projectRatioLabel = useMemo(
     () => getProjectRatioLabel(project.width, project.height),
@@ -795,6 +803,86 @@ export function PlayerPanel() {
       }
     : undefined;
   const selectedVisualClipForTransform = transformVisualLayer?.clip ?? null;
+  const renderVisualLayer = useCallback(
+    (
+      layer: (typeof activeVisualRenderLayers)[number],
+      options?: {
+        opacity?: number;
+        bindVideoRef?: boolean;
+        offsetX?: number;
+        offsetY?: number;
+      },
+    ) => (
+      <div
+        className="absolute"
+        style={{
+          left: layer.screenRect.x + (options?.offsetX ?? 0),
+          top: layer.screenRect.y + (options?.offsetY ?? 0),
+          width: layer.screenRect.width,
+          height: layer.screenRect.height,
+          opacity: options?.opacity ?? layer.effectiveOpacity,
+          mixBlendMode: layer.blendMode,
+        }}
+      >
+        <div
+          className="relative h-full w-full"
+          style={{
+            filter: layer.adjustmentFilter,
+            ...layer.rotationStyle,
+          }}
+        >
+          {isImagePath(layer.clip.sourcePath) ? (
+            <img
+              src={layer.canonicalUrl}
+              alt={layer.clip.sourcePath}
+              className="h-full w-full object-fill"
+              draggable={false}
+            />
+          ) : (
+            <video
+              ref={
+                options?.bindVideoRef === false
+                  ? undefined
+                  : (element) => {
+                      videoLayerRefs.current[layer.clip.id] = element;
+                    }
+              }
+              src={layer.canonicalUrl}
+              className="h-full w-full object-fill"
+              playsInline
+              muted
+              preload="auto"
+            />
+          )}
+          {layer.temperatureOverlayStyle ? (
+            <div
+              className="pointer-events-none absolute inset-0"
+              style={layer.temperatureOverlayStyle}
+            />
+          ) : null}
+          {layer.tintOverlayStyle ? (
+            <div
+              className="pointer-events-none absolute inset-0"
+              style={layer.tintOverlayStyle}
+            />
+          ) : null}
+          {layer.vignetteOverlayStyle ? (
+            <div
+              className="pointer-events-none absolute inset-0"
+              style={layer.vignetteOverlayStyle}
+            />
+          ) : null}
+          {layer.noiseOverlayStyle ? (
+            <div
+              className="pointer-events-none absolute inset-0"
+              style={layer.noiseOverlayStyle}
+            />
+          ) : null}
+        </div>
+      </div>
+    ),
+    [activeVisualRenderLayers],
+  );
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -1165,7 +1253,15 @@ export function PlayerPanel() {
         ) : null}
       </div>
 
-      <div ref={viewportRef} className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-muted-foreground/20 p-3">
+      <div
+        ref={viewportRef}
+        className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-muted-foreground/20 p-3"
+        onMouseDown={() => {
+          if (isTransformMode && !interaction) {
+            selectClip(null);
+          }
+        }}
+      >
         <div className="flex h-full w-full items-center justify-center overflow-visible">
           <div
             ref={frameRef}
@@ -1215,81 +1311,81 @@ export function PlayerPanel() {
                 />
               ) : activeVisualRenderLayers.length > 0 ? (
                 <>
-                  {activeVisualRenderLayers.map((layer) => (
-                    <div
-                      key={layer.clip.id}
-                      className="absolute"
-                      style={{
-                        left: layer.screenRect.x,
-                        top: layer.screenRect.y,
-                        width: layer.screenRect.width,
-                        height: layer.screenRect.height,
-                        opacity:
-                          selectedClipIds.includes(layer.clip.id) && layer.isOffFrame
-                            ? layer.effectiveOpacity * 0.5
-                            : layer.effectiveOpacity,
-                      }}
-                    >
+                  <div className="absolute inset-0 overflow-hidden">
+                    {activeVisualRenderLayers.map((layer) => (
+                      <div key={layer.clip.id}>{renderVisualLayer(layer)}</div>
+                    ))}
+                  </div>
+                  {isTransformMode && selectedVisualRenderLayer ? (
+                    <>
                       <div
-                        className="relative h-full w-full"
+                        className="pointer-events-none absolute overflow-hidden"
                         style={{
-                          mixBlendMode: layer.blendMode,
+                          right: "100%",
+                          top: -selectedOverflowExtent.height,
+                          width: selectedOverflowExtent.width,
+                          height:
+                            project.height * viewScale +
+                            selectedOverflowExtent.height * 2,
                         }}
                       >
-                        <div
-                          className="relative h-full w-full"
-                          style={{
-                            filter: layer.adjustmentFilter,
-                            ...layer.rotationStyle,
-                          }}
-                        >
-                          {isImagePath(layer.clip.sourcePath) ? (
-                            <img
-                              src={layer.canonicalUrl}
-                              alt={layer.clip.sourcePath}
-                              className="h-full w-full object-fill"
-                              draggable={false}
-                            />
-                          ) : (
-                            <video
-                              ref={(element) => {
-                                videoLayerRefs.current[layer.clip.id] = element;
-                              }}
-                              src={layer.canonicalUrl}
-                              className="h-full w-full object-fill"
-                              playsInline
-                              muted
-                              preload="auto"
-                            />
-                          )}
-                          {layer.temperatureOverlayStyle ? (
-                            <div
-                              className="pointer-events-none absolute inset-0"
-                              style={layer.temperatureOverlayStyle}
-                            />
-                          ) : null}
-                          {layer.tintOverlayStyle ? (
-                            <div
-                              className="pointer-events-none absolute inset-0"
-                              style={layer.tintOverlayStyle}
-                            />
-                          ) : null}
-                          {layer.vignetteOverlayStyle ? (
-                            <div
-                              className="pointer-events-none absolute inset-0"
-                              style={layer.vignetteOverlayStyle}
-                            />
-                          ) : null}
-                          {layer.noiseOverlayStyle ? (
-                            <div
-                              className="pointer-events-none absolute inset-0"
-                              style={layer.noiseOverlayStyle}
-                            />
-                ) : null}
-            </div>
-          </div>
-        </div>
-                  ))}
+                        {renderVisualLayer(selectedVisualRenderLayer, {
+                          opacity: selectedVisualRenderLayer.effectiveOpacity * 0.5,
+                          bindVideoRef: false,
+                          offsetX: selectedOverflowExtent.width,
+                          offsetY: selectedOverflowExtent.height,
+                        })}
+                      </div>
+                      <div
+                        className="pointer-events-none absolute overflow-hidden"
+                        style={{
+                          left: "100%",
+                          top: -selectedOverflowExtent.height,
+                          width: selectedOverflowExtent.width,
+                          height:
+                            project.height * viewScale +
+                            selectedOverflowExtent.height * 2,
+                        }}
+                      >
+                        {renderVisualLayer(selectedVisualRenderLayer, {
+                          opacity: selectedVisualRenderLayer.effectiveOpacity * 0.5,
+                          bindVideoRef: false,
+                          offsetX: -(project.width * viewScale),
+                          offsetY: selectedOverflowExtent.height,
+                        })}
+                      </div>
+                      <div
+                        className="pointer-events-none absolute overflow-hidden"
+                        style={{
+                          left: 0,
+                          bottom: "100%",
+                          width: project.width * viewScale,
+                          height: selectedOverflowExtent.height,
+                        }}
+                      >
+                        {renderVisualLayer(selectedVisualRenderLayer, {
+                          opacity: selectedVisualRenderLayer.effectiveOpacity * 0.5,
+                          bindVideoRef: false,
+                          offsetY: selectedOverflowExtent.height,
+                        })}
+                      </div>
+                      <div
+                        className="pointer-events-none absolute overflow-hidden"
+                        style={{
+                          left: 0,
+                          top: "100%",
+                          width: project.width * viewScale,
+                          height: selectedOverflowExtent.height,
+                        }}
+                      >
+                        {renderVisualLayer(selectedVisualRenderLayer, {
+                          opacity: selectedVisualRenderLayer.effectiveOpacity * 0.5,
+                          bindVideoRef: false,
+                          offsetY: -(project.height * viewScale),
+                        })}
+                      </div>
+                    </>
+                  ) : null}
                 </>
               ) : null}
 
