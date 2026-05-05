@@ -1,4 +1,13 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type DragEvent,
+  type MouseEvent,
+  type UIEvent,
+} from "react";
 import {
   Eye,
   EyeOff,
@@ -59,6 +68,7 @@ type Interaction =
       type: "move";
       clip: Clip;
       originX: number;
+      duplicate: boolean;
       groupInitialStates: Array<{ id: string; startTime: number; trackId: string }>;
     }
   | {
@@ -210,6 +220,7 @@ export function TimelinePanel() {
     reorderTrack,
     updateTrack,
     addAssetToTrack,
+    duplicateClip,
     getMediaDuration,
     moveClip,
     trimClip,
@@ -227,8 +238,10 @@ export function TimelinePanel() {
   const [moveGhostPointer, setMoveGhostPointer] = useState<PointerPosition | null>(null);
   const [isCrossTrackDrag, setIsCrossTrackDrag] = useState(false);
   const viewportRef = useRef<HTMLDivElement | null>(null);
+  const trackListRef = useRef<HTMLDivElement | null>(null);
   const rulerRef = useRef<HTMLDivElement | null>(null);
   const trackRowsRef = useRef<HTMLDivElement | null>(null);
+  const syncingScrollSourceRef = useRef<"tracks" | "viewport" | null>(null);
   const previousZoomRef = useRef(zoom);
   const autoFitProjectRef = useRef<string | null>(null);
   const groupDragRef = useRef<{ snappedDelta: number; targetTrackId: string } | null>(null);
@@ -336,6 +349,34 @@ export function TimelinePanel() {
     previousZoomRef.current = zoom;
   }, [playhead, timelineWidth, zoom]);
 
+  const syncTimelineScroll = (source: "tracks" | "viewport", scrollTop: number) => {
+    const target = source === "viewport" ? trackListRef.current : viewportRef.current;
+    if (!target || Math.abs(target.scrollTop - scrollTop) < 1) {
+      return;
+    }
+
+    syncingScrollSourceRef.current = source;
+    target.scrollTop = scrollTop;
+  };
+
+  const handleTrackListScroll = (event: UIEvent<HTMLDivElement>) => {
+    if (syncingScrollSourceRef.current === "viewport") {
+      syncingScrollSourceRef.current = null;
+      return;
+    }
+
+    syncTimelineScroll("tracks", event.currentTarget.scrollTop);
+  };
+
+  const handleViewportScroll = (event: UIEvent<HTMLDivElement>) => {
+    if (syncingScrollSourceRef.current === "tracks") {
+      syncingScrollSourceRef.current = null;
+      return;
+    }
+
+    syncTimelineScroll("viewport", event.currentTarget.scrollTop);
+  };
+
   const handleZoomToFit = () => {
     const fittedZoom = viewportWidth / Math.max(timelineDuration, 1 / project.fps);
     setZoom(clamp(fittedZoom, minZoom, maxZoom));
@@ -436,7 +477,11 @@ export function TimelinePanel() {
           return;
         }
         const trackClips = clips
-          .filter((clip) => clip.trackId === targetTrack.id && clip.id !== baseClip.id)
+          .filter(
+            (clip) =>
+              clip.trackId === targetTrack.id &&
+              (interaction.duplicate || clip.id !== baseClip.id),
+          )
           .sort((left, right) => left.startTime - right.startTime);
         const nextStartTime = resolveTrackStart(
           baseClip.startTime + deltaSeconds,
@@ -545,6 +590,19 @@ export function TimelinePanel() {
       }
 
       if (currentInteraction.type === "move") {
+        const shouldDuplicate =
+          currentInteraction.duplicate &&
+          (currentDraft.trackId !== currentInteraction.clip.trackId ||
+            Math.abs(currentDraft.startTime - currentInteraction.clip.startTime) >= 0.001);
+        if (shouldDuplicate) {
+          void duplicateClip(
+            currentInteraction.clip.id,
+            currentDraft.startTime,
+            currentDraft.trackId,
+          );
+          groupDragRef.current = null;
+          return;
+        }
         // Move the base clip
         void moveClip(currentDraft.id, currentDraft.startTime, currentDraft.trackId);
         // Move other selected clips in the group — each stays on its own track
@@ -684,6 +742,88 @@ export function TimelinePanel() {
 
     return byTrack;
   }, [clips, tracks]);
+
+  const renderTimelineClip = ({
+    renderedClip,
+    sourceClip,
+    track,
+    selected,
+    onClipMouseDown,
+    interactive = true,
+    clipKey,
+  }: {
+    renderedClip: Clip;
+    sourceClip: Clip;
+    track: Track;
+    selected: boolean;
+    onClipMouseDown?: (event: MouseEvent<HTMLDivElement>) => void;
+    interactive?: boolean;
+    clipKey: string;
+  }) => (
+    <div
+      key={clipKey}
+      className={cn(
+        "absolute top-2 flex h-[44px] items-stretch overflow-hidden rounded-md border shadow-sm",
+        getClipFill(track.type, selected),
+        isTrackDimmed(track) && "opacity-40",
+        interactive && selected && !interaction && "cursor-grab",
+        interactive && selected && interaction?.type === "move" && "cursor-grabbing",
+        !interactive && "pointer-events-none",
+      )}
+      style={{
+        left: renderedClip.startTime * zoom,
+        width: Math.max(renderedClip.duration * zoom, 18),
+      }}
+      onMouseDown={onClipMouseDown}
+    >
+      <button
+        type="button"
+        className="w-2 shrink-0 cursor-ew-resize bg-black/20 hover:bg-black/30"
+        onMouseDown={(event) => {
+          if (!interactive || track.locked) {
+            return;
+          }
+          event.stopPropagation();
+          selectClip(renderedClip.id, event.shiftKey);
+          setInteraction({
+            type: "trim-left",
+            clip: sourceClip,
+            originX: event.clientX,
+          });
+          setDraftClip(sourceClip);
+        }}
+        aria-label="Trim clip start"
+        tabIndex={interactive ? 0 : -1}
+      />
+      <div className="flex min-w-0 flex-1 flex-col justify-center px-2 text-left">
+        <div className="truncate text-xs font-medium text-white">
+          {renderedClip.sourcePath?.split(/[\\/]/).pop() ?? "Clip"}
+        </div>
+        <div className="text-[10px] text-white/80">
+          {renderedClip.duration.toFixed(2)}s · {Math.round(renderedClip.duration * project.fps)}f
+        </div>
+      </div>
+      <button
+        type="button"
+        className="w-2 shrink-0 cursor-ew-resize bg-black/20 hover:bg-black/30"
+        onMouseDown={(event) => {
+          if (!interactive || track.locked) {
+            return;
+          }
+          event.stopPropagation();
+          selectClip(renderedClip.id, event.shiftKey);
+          setInteraction({
+            type: "trim-right",
+            clip: sourceClip,
+            originX: event.clientX,
+          });
+          setDraftClip(sourceClip);
+        }}
+        aria-label="Trim clip end"
+        tabIndex={interactive ? 0 : -1}
+      />
+    </div>
+  );
 
   const moveGhostModel = useMemo(() => {
     if (
@@ -919,9 +1059,13 @@ export function TimelinePanel() {
 
       <div className="min-h-0 flex-1 overflow-hidden">
         <div className="grid h-full min-h-0 grid-cols-[136px_minmax(0,1fr)]">
-          <div className="border-r border-border bg-muted/20">
+          <div
+            ref={trackListRef}
+            className="hide-scrollbar min-h-0 overflow-y-auto border-r border-border bg-muted/20"
+            onScroll={handleTrackListScroll}
+          >
             <div
-              className="sticky top-0 z-10 flex items-center border-b border-border px-3 text-[11px] uppercase tracking-wide text-muted-foreground"
+              className="sticky top-0 z-20 flex items-center border-b border-border bg-muted/95 px-3 text-[11px] uppercase tracking-wide text-muted-foreground backdrop-blur"
               style={{ height: RULER_HEIGHT }}
             >
               Tracks
@@ -942,6 +1086,7 @@ export function TimelinePanel() {
                   trackDropTarget?.trackId === track.id && trackDropTarget.placement === "before";
                 const dropAfter =
                   trackDropTarget?.trackId === track.id && trackDropTarget.placement === "after";
+
                 return (
                   <div
                     key={track.id}
@@ -1070,7 +1215,11 @@ export function TimelinePanel() {
             </div>
           </div>
 
-          <div ref={viewportRef} className="min-w-0 min-h-0 overflow-auto">
+          <div
+            ref={viewportRef}
+            className="min-w-0 min-h-0 overflow-auto"
+            onScroll={handleViewportScroll}
+          >
             <div className="relative" style={{ width: timelineWidth }}>
                 <div
                   ref={rulerRef}
@@ -1212,108 +1361,75 @@ export function TimelinePanel() {
                         ) : null}
 
                         {trackClips.map((clip) => {
-                          if (isCrossTrackDrag && draftClip?.id === clip.id) {
+                          const isDuplicateDrag =
+                            interaction?.type === "move" && interaction.duplicate;
+                          if (isCrossTrackDrag && draftClip?.id === clip.id && !isDuplicateDrag) {
                             return null;
                           }
-                          const renderedClip = draftGroupClips.get(clip.id) ?? (draftClip?.id === clip.id ? draftClip : clip);
+                          const renderedClip =
+                            draftGroupClips.get(clip.id) ??
+                            (isDuplicateDrag ? clip : draftClip?.id === clip.id ? draftClip : clip);
                           const selected = selectedClipIds.includes(renderedClip.id) || renderedClip.id === selectedClipId;
-                          return (
-                            <div
-                              key={renderedClip.id}
-                              className={cn(
-                                "absolute top-2 flex h-[44px] items-stretch overflow-hidden rounded-md border shadow-sm",
-                                getClipFill(track.type, selected),
-                                isTrackDimmed(track) && "opacity-40",
-                                selected && !interaction && "cursor-grab",
-                                selected && interaction?.type === "move" && "cursor-grabbing",
-                              )}
-                              style={{
-                                left: renderedClip.startTime * zoom,
-                                width: Math.max(renderedClip.duration * zoom, 18),
-                              }}
-                              onMouseDown={(event) => {
-                                if (track.locked) {
-                                  return;
-                                }
-                                event.stopPropagation();
-                                const isAlreadySelected = selectedClipIds.includes(renderedClip.id);
-                                const hasMultiSelect = selectedClipIds.length > 1;
-                                // When clicking an already-selected clip in a group, keep the group
-                                if (isAlreadySelected && hasMultiSelect && !event.shiftKey) {
-                                  // Keep existing selection, don't replace
-                                } else {
-                                  selectClip(renderedClip.id, event.shiftKey);
-                                }
-                                const effectiveIds = selectedClipIds.includes(renderedClip.id)
-                                  ? selectedClipIds
-                                  : event.shiftKey
-                                    ? [...selectedClipIds, renderedClip.id]
-                                    : [renderedClip.id];
-                                const groupInitialStates = effectiveIds
-                                  .map((id) => clips.find((c) => c.id === id))
-                                  .filter((c): c is Clip => c != null)
-                                  .map((c) => ({ id: c.id, startTime: c.startTime, trackId: c.trackId }));
-                                setMoveGhostPointer({
-                                  x: event.clientX,
-                                  y: event.clientY,
-                                });
-                                setIsCrossTrackDrag(false);
-                                setInteraction({
-                                  type: "move",
-                                  clip,
-                                  originX: event.clientX,
-                                  groupInitialStates,
-                                });
-                                setDraftClip(clip);
-                              }}
-                            >
-                              <button
-                                type="button"
-                                className="w-2 shrink-0 cursor-ew-resize bg-black/20 hover:bg-black/30"
-                                onMouseDown={(event) => {
-                                  if (track.locked) {
-                                    return;
-                                  }
-                                  event.stopPropagation();
-                                  selectClip(renderedClip.id, event.shiftKey);
-                                  setInteraction({
-                                    type: "trim-left",
-                                    clip,
-                                    originX: event.clientX,
-                                  });
-                                  setDraftClip(clip);
-                                }}
-                                aria-label="Trim clip start"
-                              />
-                              <div className="flex min-w-0 flex-1 flex-col justify-center px-2 text-left">
-                                <div className="truncate text-xs font-medium text-white">
-                                  {clip.sourcePath?.split(/[\\/]/).pop() ?? "Clip"}
-                                </div>
-                                <div className="text-[10px] text-white/80">
-                                  {renderedClip.duration.toFixed(2)}s · {Math.round(renderedClip.duration * project.fps)}f
-                                </div>
-                              </div>
-                              <button
-                                type="button"
-                                className="w-2 shrink-0 cursor-ew-resize bg-black/20 hover:bg-black/30"
-                                onMouseDown={(event) => {
-                                  if (track.locked) {
-                                    return;
-                                  }
-                                  event.stopPropagation();
-                                  selectClip(renderedClip.id, event.shiftKey);
-                                  setInteraction({
-                                    type: "trim-right",
-                                    clip,
-                                    originX: event.clientX,
-                                  });
-                                  setDraftClip(clip);
-                                }}
-                                aria-label="Trim clip end"
-                              />
-                            </div>
-                          );
+                          return renderTimelineClip({
+                            clipKey: renderedClip.id,
+                            renderedClip,
+                            sourceClip: clip,
+                            track,
+                            selected,
+                            onClipMouseDown: (event) => {
+                              if (track.locked) {
+                                return;
+                              }
+                              event.stopPropagation();
+                              const isAlreadySelected = selectedClipIds.includes(renderedClip.id);
+                              const hasMultiSelect = selectedClipIds.length > 1;
+                              // When clicking an already-selected clip in a group, keep the group
+                              if (isAlreadySelected && hasMultiSelect && !event.shiftKey) {
+                                // Keep existing selection, don't replace
+                              } else {
+                                selectClip(renderedClip.id, event.shiftKey);
+                              }
+                              const effectiveIds = selectedClipIds.includes(renderedClip.id)
+                                ? selectedClipIds
+                                : event.shiftKey
+                                  ? [...selectedClipIds, renderedClip.id]
+                                  : [renderedClip.id];
+                              const duplicate =
+                                (event.ctrlKey || event.metaKey) &&
+                                effectiveIds.length === 1 &&
+                                effectiveIds[0] === renderedClip.id;
+                              const groupInitialStates = effectiveIds
+                                .map((id) => clips.find((c) => c.id === id))
+                                .filter((c): c is Clip => c != null)
+                                .map((c) => ({ id: c.id, startTime: c.startTime, trackId: c.trackId }));
+                              setMoveGhostPointer({
+                                x: event.clientX,
+                                y: event.clientY,
+                              });
+                              setIsCrossTrackDrag(false);
+                              setInteraction({
+                                type: "move",
+                                clip,
+                                originX: event.clientX,
+                                duplicate,
+                                groupInitialStates,
+                              });
+                              setDraftClip(clip);
+                            },
+                          });
                         })}
+                        {interaction?.type === "move" &&
+                        interaction.duplicate &&
+                        draftClip?.trackId === track.id
+                          ? renderTimelineClip({
+                              clipKey: `draft-${draftClip.id}`,
+                              renderedClip: draftClip,
+                              sourceClip: interaction.clip,
+                              track,
+                              selected: true,
+                              interactive: false,
+                            })
+                          : null}
                       </div>
                     );
                   })}

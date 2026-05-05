@@ -141,6 +141,7 @@ interface ComposerRuntimeContextValue {
     startTime: number,
     durationOverride?: number,
   ) => Promise<void>;
+  duplicateClip: (clipId: string, startTime: number, trackId?: string) => Promise<void>;
   moveClip: (clipId: string, startTime: number, trackId?: string) => Promise<void>;
   trimClip: (
     clipId: string,
@@ -983,6 +984,57 @@ export function ComposerRuntimeProvider({
     [getLiveProject, project.id, pushUndo, updateClipList],
   );
 
+  const duplicateClip = useCallback(
+    async (clipId: string, startTime: number, trackId?: string) => {
+      const currentProject = getLiveProject();
+      const sourceClip = currentProject.clips.find((clip) => clip.id === clipId);
+      if (!sourceClip) {
+        return;
+      }
+
+      const sourceTrack = currentProject.tracks.find((track) => track.id === sourceClip.trackId);
+      const nextTrackId = trackId ?? sourceClip.trackId;
+      const nextTrack = currentProject.tracks.find((track) => track.id === nextTrackId);
+      if (!sourceTrack || sourceTrack.locked || !nextTrack || nextTrack.locked) {
+        return;
+      }
+      if (sourceTrack.type !== nextTrack.type) {
+        return;
+      }
+
+      const createdClip = await composerClipIpc.add({
+        projectId: project.id,
+        trackId: nextTrackId,
+        sourceType: sourceClip.sourceType,
+        sourcePath: sourceClip.sourcePath,
+        sourceAssetId: sourceClip.sourceAssetId,
+        startTime: snapTimeToFrame(startTime, project.fps),
+        duration: sourceClip.duration,
+        trimStart: sourceClip.trimStart,
+        trimEnd: sourceClip.trimEnd,
+        speed: sourceClip.speed,
+        transformOffsetX: sourceClip.transformOffsetX,
+        transformOffsetY: sourceClip.transformOffsetY,
+        transformScale: sourceClip.transformScale,
+        rotationZ: sourceClip.rotationZ,
+        opacity: sourceClip.opacity,
+        brightness: sourceClip.brightness,
+        contrast: sourceClip.contrast,
+        saturation: sourceClip.saturation,
+        adjustments: sourceClip.adjustments,
+        fadeInDuration: sourceClip.fadeInDuration,
+        fadeOutDuration: sourceClip.fadeOutDuration,
+      });
+
+      updateClipList([...getLiveProject().clips, createdClip]);
+      setPreviewAsset(null);
+      setSelectedClipId(createdClip.id);
+      setSelectedClipIds([createdClip.id]);
+      pushUndo({ type: "delete-added", clipId: createdClip.id });
+    },
+    [getLiveProject, project.fps, project.id, pushUndo, updateClipList],
+  );
+
   const moveClip = useCallback(
     async (clipId: string, startTime: number, trackId?: string) => {
       const currentClip = getLiveProject().clips.find((clip) => clip.id === clipId);
@@ -1534,6 +1586,7 @@ export function ComposerRuntimeProvider({
       reorderTrack,
       updateTrack,
       addAssetToTrack,
+      duplicateClip,
       moveClip,
       trimClip,
       updateClip,
@@ -1550,6 +1603,7 @@ export function ComposerRuntimeProvider({
       addAssetToTrack,
       addTrack,
       clips,
+      duplicateClip,
       deleteTrack,
       deleteSelectedClip,
       isPlaying,

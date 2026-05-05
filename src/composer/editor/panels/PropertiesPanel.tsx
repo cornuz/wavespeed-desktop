@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { Loader2, RefreshCw, SlidersHorizontal, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { composerLutIpc, composerProjectIpc } from "@/composer/ipc/ipc-client";
 import { normalizeClipAdjustments } from "@/composer/shared/clipAdjustments";
 import { useComposerProjectStore } from "@/composer/stores/project.store";
@@ -18,6 +19,7 @@ import {
   getTrimEnd,
   MIN_CLIP_DURATION,
   resolveTrackStart,
+  snapTimeToFrame,
 } from "../utils/timeline";
 
 const DIMENSION_PRESETS = [
@@ -176,6 +178,7 @@ export function PropertiesPanel() {
       (preset) => preset.width === project.width && preset.height === project.height,
     )?.id ?? "custom";
   const [selectedDimensionMode, setSelectedDimensionMode] = useState(dimensionPreset);
+  const [activeClipTab, setActiveClipTab] = useState<"timeline" | "position" | "adjust">("timeline");
   const [lutAssets, setLutAssets] = useState<ComposerLutAsset[]>([]);
   const [lutLoading, setLutLoading] = useState(false);
   const trackName = selectedClip
@@ -211,6 +214,18 @@ export function PropertiesPanel() {
         ? siblingClips.find((clip) => clip.startTime >= getClipEnd(selectedClip))
         : undefined,
     [selectedClip, siblingClips],
+  );
+  const maxDurationByTrack = useMemo(
+    () =>
+      selectedClip && nextClip
+        ? Math.max(MIN_CLIP_DURATION, nextClip.startTime - selectedClip.startTime)
+        : Number.POSITIVE_INFINITY,
+    [nextClip, selectedClip],
+  );
+  const selectedClipSourceVisibleDuration = useMemo(
+    () =>
+      selectedClip ? selectedClip.duration * Math.max(selectedClip.speed, 0.1) : 0,
+    [selectedClip],
   );
   const selectedAdjustments = useMemo(
     () => (selectedClip ? normalizeClipAdjustments(selectedClip.adjustments) : null),
@@ -280,9 +295,6 @@ export function PropertiesPanel() {
 
       const desiredDuration = Math.max(MIN_CLIP_DURATION, value);
       if (!sourceTrimEditable) {
-        const maxDurationByTrack = nextClip
-          ? Math.max(MIN_CLIP_DURATION, nextClip.startTime - selectedClip.startTime)
-          : desiredDuration;
         void trimClip(selectedClip.id, {
           startTime: selectedClip.startTime,
           duration: Math.min(desiredDuration, maxDurationByTrack),
@@ -292,23 +304,32 @@ export function PropertiesPanel() {
         return;
       }
 
-      const totalAvailableDuration = selectedClip.duration + trimOut;
-      const maxDurationByTrack = nextClip
-        ? Math.max(MIN_CLIP_DURATION, nextClip.startTime - selectedClip.startTime)
-        : totalAvailableDuration;
+      const minDurationBySpeed = selectedClipSourceVisibleDuration / 8;
+      const maxDurationBySpeed = selectedClipSourceVisibleDuration / 0.1;
       const nextDuration = Math.max(
         MIN_CLIP_DURATION,
-        Math.min(desiredDuration, totalAvailableDuration, maxDurationByTrack),
+        Math.min(desiredDuration, maxDurationByTrack, maxDurationBySpeed),
+      );
+      const clampedDuration = Math.max(nextDuration, minDurationBySpeed || MIN_CLIP_DURATION);
+      const nextSpeed = Math.min(
+        8,
+        Math.max(0.1, selectedClipSourceVisibleDuration / Math.max(clampedDuration, MIN_CLIP_DURATION)),
       );
 
-      void trimClip(selectedClip.id, {
-        startTime: selectedClip.startTime,
-        duration: nextDuration,
-        trimStart: selectedClip.trimStart,
-        trimEnd: totalAvailableDuration - nextDuration,
+      void updateClip(selectedClip.id, {
+        duration: snapTimeToFrame(clampedDuration, project.fps),
+        speed: Number(nextSpeed.toFixed(4)),
       });
     },
-    [nextClip, selectedClip, sourceTrimEditable, trimClip, trimOut],
+    [
+      maxDurationByTrack,
+      project.fps,
+      selectedClip,
+      selectedClipSourceVisibleDuration,
+      sourceTrimEditable,
+      trimClip,
+      updateClip,
+    ],
   );
 
   const handleTrimInCommit = useCallback(
@@ -362,9 +383,45 @@ export function PropertiesPanel() {
     [nextClip, selectedClip, sourceTrimEditable, trimClip, trimOut],
   );
 
+  const handleSpeedCommit = useCallback(
+    (value: number) => {
+      if (!selectedClip || !sourceTrimEditable) {
+        return;
+      }
+
+      const desiredSpeed = Math.min(8, Math.max(0.1, value));
+      const desiredDuration = selectedClipSourceVisibleDuration / desiredSpeed;
+      const nextDuration = Math.max(
+        MIN_CLIP_DURATION,
+        Math.min(desiredDuration, maxDurationByTrack),
+      );
+      const resolvedSpeed = Math.min(
+        8,
+        Math.max(0.1, selectedClipSourceVisibleDuration / Math.max(nextDuration, MIN_CLIP_DURATION)),
+      );
+
+      void updateClip(selectedClip.id, {
+        duration: snapTimeToFrame(nextDuration, project.fps),
+        speed: Number(resolvedSpeed.toFixed(4)),
+      });
+    },
+    [
+      maxDurationByTrack,
+      project.fps,
+      selectedClip,
+      selectedClipSourceVisibleDuration,
+      sourceTrimEditable,
+      updateClip,
+    ],
+  );
+
   useEffect(() => {
     setSelectedDimensionMode(dimensionPreset);
   }, [dimensionPreset]);
+
+  useEffect(() => {
+    setActiveClipTab("timeline");
+  }, [selectedClip?.id]);
 
   return (
     <div className="flex h-full w-full flex-col border-l border-border bg-background">
@@ -372,413 +429,449 @@ export function PropertiesPanel() {
         <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
         <span className="text-sm font-medium text-muted-foreground">Properties</span>
       </div>
-      {selectedClip ? (
-        <div className="flex flex-col gap-3 p-3 text-xs">
-          <div className="rounded-md border border-border bg-muted/30 p-3">
-            <div className="mb-3 text-sm font-medium text-foreground">Selected clip</div>
-            <div className="space-y-3">
-              <div className="space-y-1 text-muted-foreground">
-                <div>
-                  <span className="text-foreground">Track:</span> {trackName}
+      <div className="min-h-0 flex-1 overflow-auto">
+        {selectedClip ? (
+          <div className="flex flex-col gap-3 p-3 text-xs">
+            <div className="rounded-md border border-border bg-muted/30 p-3">
+              <div className="mb-3 text-sm font-medium text-foreground">Selected clip</div>
+              <div className="space-y-3">
+                <div className="space-y-1 text-muted-foreground">
+                  <div>
+                    <span className="text-foreground">Track:</span> {trackName}
+                  </div>
+                  <div>
+                    <span className="text-foreground">Asset:</span> {selectedClipSourceName}
+                  </div>
                 </div>
-                <div>
-                  <span className="text-foreground">Asset:</span> {selectedClipSourceName}
+                <div className="rounded border border-border/60 bg-background/70 p-2 text-[11px] text-muted-foreground">
+                  Current range: {formatTimelineTime(selectedClip.startTime)} →{" "}
+                  {formatTimelineTime(getClipEnd(selectedClip))} on the timeline
                 </div>
-              </div>
-              <div className="rounded border border-border/60 bg-background/70 p-2 text-[11px] text-muted-foreground">
-                Current range: {formatTimelineTime(selectedClip.startTime)} →{" "}
-                {formatTimelineTime(getClipEnd(selectedClip))} on the timeline
               </div>
             </div>
-          </div>
+            <Tabs
+              value={activeClipTab}
+              onValueChange={(value) =>
+                setActiveClipTab(value as "timeline" | "position" | "adjust")
+              }
+              className="flex flex-col gap-3"
+            >
+              <TabsList className="grid h-auto w-full grid-cols-3 bg-muted/30">
+                <TabsTrigger value="timeline" className="px-2 py-1.5 text-xs">
+                  Timeline
+                </TabsTrigger>
+                <TabsTrigger value="position" className="px-2 py-1.5 text-xs">
+                  Position
+                </TabsTrigger>
+                <TabsTrigger value="adjust" className="px-2 py-1.5 text-xs">
+                  Adjust
+                </TabsTrigger>
+              </TabsList>
 
-          <PropertySection title="Timeline">
-            <div className="grid grid-cols-2 gap-2">
-              <PropertyNumberField
-                label="Start"
-                value={selectedClip.startTime}
-                min={0}
-                step={0.01}
-                onCommit={handleStartCommit}
-              />
-              <PropertyNumberField
-                label="Duration"
-                value={selectedClip.duration}
-                min={MIN_CLIP_DURATION}
-                step={0.01}
-                onCommit={handleDurationCommit}
-              />
-              <PropertyNumberField
-                label="Trim in"
-                value={selectedClip.trimStart}
-                min={0}
-                step={0.01}
-                disabled={!sourceTrimEditable}
-                onCommit={handleTrimInCommit}
-              />
-              <PropertyNumberField
-                label="Trim out"
-                value={trimOut}
-                min={0}
-                step={0.01}
-                disabled={!sourceTrimEditable}
-                onCommit={handleTrimOutCommit}
-              />
-              <PropertyNumberField
-                label="Speed"
-                value={selectedClip.speed}
-                min={0.1}
-                max={8}
-                step={0.05}
-                decimals={2}
-                suffix="x"
-                disabled={!sourceTrimEditable}
-                onCommit={(value) =>
-                  void updateClip(selectedClip.id, { speed: Math.min(8, Math.max(0.1, value)) })
-                }
-              />
-              <PropertyNumberField
-                label="Fade in"
-                value={selectedClip.fadeInDuration}
-                min={0}
-                step={0.01}
-                onCommit={(value) =>
-                  void updateClip(selectedClip.id, { fadeInDuration: Math.max(0, value) })
-                }
-              />
-              <PropertyNumberField
-                label="Fade out"
-                value={selectedClip.fadeOutDuration}
-                min={0}
-                step={0.01}
-                onCommit={(value) =>
-                  void updateClip(selectedClip.id, { fadeOutDuration: Math.max(0, value) })
-                }
-              />
-            </div>
-            {!sourceTrimEditable ? (
-              <div className="mt-3 text-[11px] text-muted-foreground">
-                Still images do not expose source trim in/out or speed in the current clip model.
-              </div>
-            ) : null}
-          </PropertySection>
-
-          {isVisualClip ? (
-            <>
-              <PropertySection title="Position">
-                <div className="grid grid-cols-2 gap-2">
-                  <PropertyNumberField
-                    label="Position X"
-                    value={selectedClip.transformOffsetX}
-                    step={1}
-                    decimals={2}
-                    onCommit={(value) =>
-                      void updateClip(selectedClip.id, {
-                        transformOffsetX: value,
-                      })
-                    }
-                  />
-                  <PropertyNumberField
-                    label="Position Y"
-                    value={selectedClip.transformOffsetY}
-                    step={1}
-                    decimals={2}
-                    onCommit={(value) =>
-                      void updateClip(selectedClip.id, {
-                        transformOffsetY: value,
-                      })
-                    }
-                  />
-                  <PropertyNumberField
-                    label="Rotation Z"
-                    value={selectedClip.rotationZ}
-                    min={-359}
-                    max={359}
-                    step={0.1}
-                    decimals={2}
-                    onCommit={(value) => void updateClip(selectedClip.id, { rotationZ: value })}
-                  />
-                  <PropertyNumberField
-                    label="Scale"
-                    value={selectedClip.transformScale * 100}
-                    min={10}
-                    max={1000}
-                    step={1}
-                    decimals={2}
-                    suffix="%"
-                    onCommit={(value) =>
-                      void updateClip(selectedClip.id, {
-                        transformScale: Math.max(0.1, value / 100),
-                      })
-                    }
-                  />
-                </div>
-              </PropertySection>
-
-              <PropertySection title="Adjust">
-                <div className="space-y-3">
+              <TabsContent value="timeline" className="mt-0">
+                <PropertySection title="Timeline">
                   <div className="grid grid-cols-2 gap-2">
                     <PropertyNumberField
-                      label="Opacity"
-                      value={selectedClip.opacity * 100}
+                      label="Start"
+                      value={selectedClip.startTime}
                       min={0}
-                      max={100}
-                      step={1}
+                      step={0.01}
+                      onCommit={handleStartCommit}
+                    />
+                    <PropertyNumberField
+                      label="Duration"
+                      value={selectedClip.duration}
+                      min={MIN_CLIP_DURATION}
+                      step={0.01}
+                      onCommit={handleDurationCommit}
+                    />
+                    <PropertyNumberField
+                      label="Trim in"
+                      value={selectedClip.trimStart}
+                      min={0}
+                      step={0.01}
+                      disabled={!sourceTrimEditable}
+                      onCommit={handleTrimInCommit}
+                    />
+                    <PropertyNumberField
+                      label="Trim out"
+                      value={trimOut}
+                      min={0}
+                      step={0.01}
+                      disabled={!sourceTrimEditable}
+                      onCommit={handleTrimOutCommit}
+                    />
+                    <PropertyNumberField
+                      label="Speed"
+                      value={selectedClip.speed}
+                      min={0.1}
+                      max={8}
+                      step={0.05}
                       decimals={2}
-                      suffix="%"
+                      suffix="x"
+                      disabled={!sourceTrimEditable}
+                      onCommit={handleSpeedCommit}
+                    />
+                    <PropertyNumberField
+                      label="Fade in"
+                      value={selectedClip.fadeInDuration}
+                      min={0}
+                      step={0.01}
                       onCommit={(value) =>
-                        void updateClip(selectedClip.id, {
-                          opacity: Math.min(1, Math.max(0, value / 100)),
-                        })
+                        void updateClip(selectedClip.id, { fadeInDuration: Math.max(0, value) })
                       }
                     />
-                    <label className="flex flex-col gap-1">
-                      <span className="text-foreground">Blend mode</span>
-                      <select
-                        className="h-8 rounded border border-border bg-background px-2 py-1 text-xs text-foreground"
-                        value={selectedAdjustments?.blendMode ?? "normal"}
-                        onChange={(event) =>
-                          updateAdjustments({
-                            blendMode: event.target.value as ClipBlendMode,
-                          })
-                        }
-                      >
-                        {BLEND_MODE_OPTIONS.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
+                    <PropertyNumberField
+                      label="Fade out"
+                      value={selectedClip.fadeOutDuration}
+                      min={0}
+                      step={0.01}
+                      onCommit={(value) =>
+                        void updateClip(selectedClip.id, { fadeOutDuration: Math.max(0, value) })
+                      }
+                    />
                   </div>
+                  {!sourceTrimEditable ? (
+                    <div className="mt-3 text-[11px] text-muted-foreground">
+                      Still images do not expose source trim in/out or speed in the current clip model.
+                    </div>
+                  ) : null}
+                </PropertySection>
+              </TabsContent>
 
-                  <div className="space-y-2">
-                    <div className="text-[11px] font-medium text-muted-foreground">LUT</div>
-                    <div className="flex items-center gap-2">
-                      <select
-                        className="h-8 min-w-0 flex-1 rounded border border-border bg-background px-2 py-1 text-xs text-foreground"
-                        value={selectedAdjustments?.lutAssetId ?? ""}
-                        onChange={(event) =>
-                          updateAdjustments({
-                            lutAssetId: event.target.value || null,
-                          })
-                        }
-                      >
-                        <option value="">None</option>
-                        {lutAssets.map((lut) => (
-                          <option key={lut.id} value={lut.id}>
-                            {lut.fileName}
-                          </option>
-                        ))}
-                      </select>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-8 px-2"
-                        onClick={() => void loadLuts()}
-                        disabled={lutLoading}
-                      >
-                        {lutLoading ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <RefreshCw className="h-3.5 w-3.5" />
-                        )}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-8 gap-1 px-2"
-                        onClick={() => void handleLutImport()}
-                        disabled={lutLoading}
-                      >
-                        <Upload className="h-3.5 w-3.5" />
-                        Import
-                      </Button>
-                    </div>
-                    <div className="text-[11px] text-muted-foreground">
-                      LUT files are stored per project in <code>assets\luts</code>.
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="text-[11px] font-medium text-muted-foreground">
-                      Color correction
-                    </div>
+              <TabsContent value="position" className="mt-0">
+                {isVisualClip ? (
+                  <PropertySection title="Position">
                     <div className="grid grid-cols-2 gap-2">
                       <PropertyNumberField
-                        label="Temperature"
-                        value={selectedAdjustments?.colorCorrection.temperature ?? 0}
-                        min={-100}
-                        max={100}
+                        label="Position X"
+                        value={selectedClip.transformOffsetX}
                         step={1}
-                        decimals={0}
+                        decimals={2}
                         onCommit={(value) =>
-                          updateAdjustments({
-                            colorCorrection: { temperature: value },
+                          void updateClip(selectedClip.id, {
+                            transformOffsetX: value,
                           })
                         }
                       />
                       <PropertyNumberField
-                        label="Tint"
-                        value={selectedAdjustments?.colorCorrection.tint ?? 0}
-                        min={-100}
-                        max={100}
+                        label="Position Y"
+                        value={selectedClip.transformOffsetY}
                         step={1}
-                        decimals={0}
+                        decimals={2}
                         onCommit={(value) =>
-                          updateAdjustments({
-                            colorCorrection: { tint: value },
+                          void updateClip(selectedClip.id, {
+                            transformOffsetY: value,
                           })
                         }
                       />
                       <PropertyNumberField
-                        label="Hue"
-                        value={selectedAdjustments?.colorCorrection.hue ?? 0}
-                        min={-100}
-                        max={100}
-                        step={1}
-                        decimals={0}
-                        onCommit={(value) =>
-                          updateAdjustments({
-                            colorCorrection: { hue: value },
-                          })
-                        }
+                        label="Rotation Z"
+                        value={selectedClip.rotationZ}
+                        min={-359}
+                        max={359}
+                        step={0.1}
+                        decimals={2}
+                        onCommit={(value) => void updateClip(selectedClip.id, { rotationZ: value })}
                       />
                       <PropertyNumberField
-                        label="Saturation"
-                        value={selectedAdjustments?.colorCorrection.saturation ?? 0}
-                        min={-100}
-                        max={100}
+                        label="Scale"
+                        value={selectedClip.transformScale * 100}
+                        min={10}
+                        max={1000}
                         step={1}
-                        decimals={0}
+                        decimals={2}
+                        suffix="%"
                         onCommit={(value) =>
-                          updateAdjustments({
-                            colorCorrection: { saturation: value },
+                          void updateClip(selectedClip.id, {
+                            transformScale: Math.max(0.1, value / 100),
                           })
                         }
                       />
                     </div>
-                  </div>
+                  </PropertySection>
+                ) : (
+                  <PropertySection title="Position">
+                    <div className="text-muted-foreground">
+                      Position properties are only available for visual clips.
+                    </div>
+                  </PropertySection>
+                )}
+              </TabsContent>
 
-                  <div className="space-y-2">
-                    <div className="text-[11px] font-medium text-muted-foreground">
-                      Lightness correction
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <PropertyNumberField
-                        label="Exposure"
-                        value={selectedAdjustments?.lightnessCorrection.exposure ?? 0}
-                        min={-100}
-                        max={100}
-                        step={1}
-                        decimals={0}
-                        onCommit={(value) =>
-                          updateAdjustments({
-                            lightnessCorrection: { exposure: value },
-                          })
-                        }
-                      />
-                      <PropertyNumberField
-                        label="Contrast"
-                        value={selectedAdjustments?.lightnessCorrection.contrast ?? 0}
-                        min={-100}
-                        max={100}
-                        step={1}
-                        decimals={0}
-                        onCommit={(value) =>
-                          updateAdjustments({
-                            lightnessCorrection: { contrast: value },
-                          })
-                        }
-                      />
-                      <PropertyNumberField
-                        label="Highlights"
-                        value={selectedAdjustments?.lightnessCorrection.highlights ?? 0}
-                        min={-100}
-                        max={100}
-                        step={1}
-                        decimals={0}
-                        onCommit={(value) =>
-                          updateAdjustments({
-                            lightnessCorrection: { highlights: value },
-                          })
-                        }
-                      />
-                      <PropertyNumberField
-                        label="Shadows"
-                        value={selectedAdjustments?.lightnessCorrection.shadows ?? 0}
-                        min={-100}
-                        max={100}
-                        step={1}
-                        decimals={0}
-                        onCommit={(value) =>
-                          updateAdjustments({
-                            lightnessCorrection: { shadows: value },
-                          })
-                        }
-                      />
-                    </div>
-                  </div>
+              <TabsContent value="adjust" className="mt-0">
+                {isVisualClip ? (
+                  <PropertySection title="Adjust">
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-2 gap-2">
+                        <PropertyNumberField
+                          label="Opacity"
+                          value={selectedClip.opacity * 100}
+                          min={0}
+                          max={100}
+                          step={1}
+                          decimals={2}
+                          suffix="%"
+                          onCommit={(value) =>
+                            void updateClip(selectedClip.id, {
+                              opacity: Math.min(1, Math.max(0, value / 100)),
+                            })
+                          }
+                        />
+                        <label className="flex flex-col gap-1">
+                          <span className="text-foreground">Blend mode</span>
+                          <select
+                            className="h-8 rounded border border-border bg-background px-2 py-1 text-xs text-foreground"
+                            value={selectedAdjustments?.blendMode ?? "normal"}
+                            onChange={(event) =>
+                              updateAdjustments({
+                                blendMode: event.target.value as ClipBlendMode,
+                              })
+                            }
+                          >
+                            {BLEND_MODE_OPTIONS.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
 
-                  <div className="space-y-2">
-                    <div className="text-[11px] font-medium text-muted-foreground">
-                      Effects
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <PropertyNumberField
-                        label="Sharpen"
-                        value={selectedAdjustments?.effects.sharpen ?? 0}
-                        min={0}
-                        max={100}
-                        step={1}
-                        decimals={0}
-                        onCommit={(value) =>
-                          updateAdjustments({
-                            effects: { sharpen: value },
-                          })
-                        }
-                      />
-                      <PropertyNumberField
-                        label="Noise"
-                        value={selectedAdjustments?.effects.noise ?? 0}
-                        min={0}
-                        max={100}
-                        step={1}
-                        decimals={0}
-                        onCommit={(value) =>
-                          updateAdjustments({
-                            effects: { noise: value },
-                          })
-                        }
-                      />
-                      <PropertyNumberField
-                        label="Vignette"
-                        value={selectedAdjustments?.effects.vignette ?? 0}
-                        min={0}
-                        max={100}
-                        step={1}
-                        decimals={0}
-                        onCommit={(value) =>
-                          updateAdjustments({
-                            effects: { vignette: value },
-                          })
-                        }
-                      />
-                    </div>
-                  </div>
-                </div>
-              </PropertySection>
-            </>
-          ) : null}
+                      <div className="space-y-2">
+                        <div className="text-[11px] font-medium text-muted-foreground">LUT</div>
+                        <div className="flex items-center gap-2">
+                          <select
+                            className="h-8 min-w-0 flex-1 rounded border border-border bg-background px-2 py-1 text-xs text-foreground"
+                            value={selectedAdjustments?.lutAssetId ?? ""}
+                            onChange={(event) =>
+                              updateAdjustments({
+                                lutAssetId: event.target.value || null,
+                              })
+                            }
+                          >
+                            <option value="">None</option>
+                            {lutAssets.map((lut) => (
+                              <option key={lut.id} value={lut.id}>
+                                {lut.fileName}
+                              </option>
+                            ))}
+                          </select>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-8 px-2"
+                            onClick={() => void loadLuts()}
+                            disabled={lutLoading}
+                          >
+                            {lutLoading ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <RefreshCw className="h-3.5 w-3.5" />
+                            )}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-8 gap-1 px-2"
+                            onClick={() => void handleLutImport()}
+                            disabled={lutLoading}
+                          >
+                            <Upload className="h-3.5 w-3.5" />
+                            Import
+                          </Button>
+                        </div>
+                        <div className="text-[11px] text-muted-foreground">
+                          LUT files are stored per project in <code>assets\luts</code>.
+                        </div>
+                      </div>
 
-          <div className="text-muted-foreground">
-            Enter values and press Enter or click away to commit. Undo still works with Ctrl/Cmd+Z.
+                      <div className="space-y-2">
+                        <div className="text-[11px] font-medium text-muted-foreground">
+                          Color correction
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <PropertyNumberField
+                            label="Temperature"
+                            value={selectedAdjustments?.colorCorrection.temperature ?? 0}
+                            min={-100}
+                            max={100}
+                            step={1}
+                            decimals={0}
+                            onCommit={(value) =>
+                              updateAdjustments({
+                                colorCorrection: { temperature: value },
+                              })
+                            }
+                          />
+                          <PropertyNumberField
+                            label="Tint"
+                            value={selectedAdjustments?.colorCorrection.tint ?? 0}
+                            min={-100}
+                            max={100}
+                            step={1}
+                            decimals={0}
+                            onCommit={(value) =>
+                              updateAdjustments({
+                                colorCorrection: { tint: value },
+                              })
+                            }
+                          />
+                          <PropertyNumberField
+                            label="Hue"
+                            value={selectedAdjustments?.colorCorrection.hue ?? 0}
+                            min={-100}
+                            max={100}
+                            step={1}
+                            decimals={0}
+                            onCommit={(value) =>
+                              updateAdjustments({
+                                colorCorrection: { hue: value },
+                              })
+                            }
+                          />
+                          <PropertyNumberField
+                            label="Saturation"
+                            value={selectedAdjustments?.colorCorrection.saturation ?? 0}
+                            min={-100}
+                            max={100}
+                            step={1}
+                            decimals={0}
+                            onCommit={(value) =>
+                              updateAdjustments({
+                                colorCorrection: { saturation: value },
+                              })
+                            }
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="text-[11px] font-medium text-muted-foreground">
+                          Lightness correction
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <PropertyNumberField
+                            label="Exposure"
+                            value={selectedAdjustments?.lightnessCorrection.exposure ?? 0}
+                            min={-100}
+                            max={100}
+                            step={1}
+                            decimals={0}
+                            onCommit={(value) =>
+                              updateAdjustments({
+                                lightnessCorrection: { exposure: value },
+                              })
+                            }
+                          />
+                          <PropertyNumberField
+                            label="Contrast"
+                            value={selectedAdjustments?.lightnessCorrection.contrast ?? 0}
+                            min={-100}
+                            max={100}
+                            step={1}
+                            decimals={0}
+                            onCommit={(value) =>
+                              updateAdjustments({
+                                lightnessCorrection: { contrast: value },
+                              })
+                            }
+                          />
+                          <PropertyNumberField
+                            label="Highlights"
+                            value={selectedAdjustments?.lightnessCorrection.highlights ?? 0}
+                            min={-100}
+                            max={100}
+                            step={1}
+                            decimals={0}
+                            onCommit={(value) =>
+                              updateAdjustments({
+                                lightnessCorrection: { highlights: value },
+                              })
+                            }
+                          />
+                          <PropertyNumberField
+                            label="Shadows"
+                            value={selectedAdjustments?.lightnessCorrection.shadows ?? 0}
+                            min={-100}
+                            max={100}
+                            step={1}
+                            decimals={0}
+                            onCommit={(value) =>
+                              updateAdjustments({
+                                lightnessCorrection: { shadows: value },
+                              })
+                            }
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="text-[11px] font-medium text-muted-foreground">
+                          Effects
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <PropertyNumberField
+                            label="Sharpen"
+                            value={selectedAdjustments?.effects.sharpen ?? 0}
+                            min={0}
+                            max={100}
+                            step={1}
+                            decimals={0}
+                            onCommit={(value) =>
+                              updateAdjustments({
+                                effects: { sharpen: value },
+                              })
+                            }
+                          />
+                          <PropertyNumberField
+                            label="Noise"
+                            value={selectedAdjustments?.effects.noise ?? 0}
+                            min={0}
+                            max={100}
+                            step={1}
+                            decimals={0}
+                            onCommit={(value) =>
+                              updateAdjustments({
+                                effects: { noise: value },
+                              })
+                            }
+                          />
+                          <PropertyNumberField
+                            label="Vignette"
+                            value={selectedAdjustments?.effects.vignette ?? 0}
+                            min={0}
+                            max={100}
+                            step={1}
+                            decimals={0}
+                            onCommit={(value) =>
+                              updateAdjustments({
+                                effects: { vignette: value },
+                              })
+                            }
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </PropertySection>
+                ) : (
+                  <PropertySection title="Adjust">
+                    <div className="text-muted-foreground">
+                      Adjustment properties are only available for visual clips.
+                    </div>
+                  </PropertySection>
+                )}
+              </TabsContent>
+            </Tabs>
+
+            <div className="text-muted-foreground">
+              Enter values and press Enter or click away to commit. Undo still works with Ctrl/Cmd+Z.
+            </div>
           </div>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-3 p-3 text-xs">
+        ) : (
+          <div className="flex flex-col gap-3 p-3 text-xs">
           <div className="rounded-md border border-border bg-muted/30 p-3">
             <div className="mb-2 text-sm font-medium text-foreground">Project</div>
             <div className="space-y-3 text-muted-foreground">
@@ -909,7 +1002,8 @@ export function PropertiesPanel() {
             Select a clip to edit timing, fades, and visual transform values.
           </div>
         </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
