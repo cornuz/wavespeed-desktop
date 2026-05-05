@@ -21,6 +21,7 @@ import {
   ZoomOut,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -49,13 +50,14 @@ import { useComposerRuntime } from "../context/ComposerRuntimeContext";
 import { formatTimelineTime } from "../utils/timeline";
 import {
   clamp,
-  getCenter,
-  getProjectScaledRect,
-  getTransformedRect,
+  getUniversalClipRect,
+  rotatePointYUpCW,
   snapRectToFrame,
-  type Rect,
+  universalRectToScreen,
+  screenPointToUniversal,
   type Size,
   type SnapGuides,
+  type UniversalRect,
 } from "../utils/playerTransform";
 import { cn } from "@/lib/utils";
 
@@ -92,7 +94,9 @@ function handoffMediaElementPlayback(
     }
 
     syncMediaElementTime(element, targetTime, threshold);
-    void element.play().catch(() => undefined);
+    void element.play().then(() => {
+      element.muted = false;
+    }).catch(() => undefined);
   };
 
   const handleLoadedMetadata = () => {
@@ -115,43 +119,33 @@ type Point = { x: number; y: number };
 function getHandleDirection(handle: ResizeHandle): Point {
   switch (handle) {
     case "nw":
-      return { x: -1, y: -1 };
+      return { x: -1, y: 1 }; // left, up
     case "ne":
-      return { x: 1, y: -1 };
+      return { x: 1, y: 1 }; // right, up
     case "se":
-      return { x: 1, y: 1 };
+      return { x: 1, y: -1 }; // right, down
     case "sw":
-      return { x: -1, y: 1 };
+      return { x: -1, y: -1 }; // left, down
   }
 }
 
-function rotatePoint(point: Point, radians: number): Point {
-  const cos = Math.cos(radians);
-  const sin = Math.sin(radians);
-  return {
-    x: point.x * cos - point.y * sin,
-    y: point.x * sin + point.y * cos,
-  };
-}
-
-function getRotatedOppositeCornerAnchor(
-  rect: Rect,
+function getRotatedOppositeCornerAnchorUniversal(
+  uRect: UniversalRect,
   handle: ResizeHandle,
   rotationDegrees: number,
 ): Point {
   const direction = getHandleDirection(handle);
-  const center = getCenter(rect);
-  const oppositeCornerOffset = rotatePoint(
+  const oppositeCornerOffset = rotatePointYUpCW(
     {
-      x: (-direction.x * rect.width) / 2,
-      y: (-direction.y * rect.height) / 2,
+      x: (-direction.x * uRect.width) / 2,
+      y: (-direction.y * uRect.height) / 2,
     },
     (rotationDegrees * Math.PI) / 180,
   );
 
   return {
-    x: center.x + oppositeCornerOffset.x,
-    y: center.y + oppositeCornerOffset.y,
+    x: uRect.centerX + oppositeCornerOffset.x,
+    y: uRect.centerY + oppositeCornerOffset.y,
   };
 }
 
@@ -214,16 +208,16 @@ const PLAYBACK_QUALITIES: Array<{
 type EditInteraction =
   | {
       type: "move";
-      originX: number;
-      originY: number;
-      startRect: Rect;
+      originScreenX: number;
+      originScreenY: number;
+      startUniversalRect: UniversalRect;
     }
   | {
       type: "resize";
       handle: ResizeHandle;
-      originX: number;
-      originY: number;
-      startRect: Rect;
+      originScreenX: number;
+      originScreenY: number;
+      startUniversalRect: UniversalRect;
       anchorPoint: Point;
     };
 
@@ -423,8 +417,10 @@ export function PlayerPanel() {
     pendingSequencePlaybackStartTime,
     isPlaying,
     isPlaybackWaiting,
+    sequencePreviewProgress,
     previewAsset,
     selectedVisualClip,
+    selectedClipIds,
     syncPlaybackToMediaClock,
     setPlaybackClockSource,
     togglePlayback,
@@ -434,15 +430,16 @@ export function PlayerPanel() {
     updateClipTransform,
   } = useComposerRuntime();
   const panelRef = useRef<HTMLDivElement | null>(null);
+  const viewportRef = useRef<HTMLDivElement | null>(null);
   const frameRef = useRef<HTMLDivElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const videoLayerRefs = useRef<Record<string, HTMLVideoElement | null>>({});
   const playerZoomControlRef = useRef<HTMLDivElement | null>(null);
 
-  const [frameSize, setFrameSize] = useState<Size | null>(null);
+  const [panelSize, setPanelSize] = useState<Size | null>(null);
   const [mediaSizes, setMediaSizes] = useState<Record<string, Size>>({});
   const [interaction, setInteraction] = useState<EditInteraction | null>(null);
-  const [draftRect, setDraftRect] = useState<Rect | null>(null);
+  const [draftRect, setDraftRect] = useState<UniversalRect | null>(null);
   const [guides, setGuides] = useState<SnapGuides>({
     vertical: [],
     horizontal: [],
@@ -576,45 +573,72 @@ export function PlayerPanel() {
         : null,
     [activeVisualLayers, selectedVisualClip],
   );
+  const projectSize = useMemo(
+    () => ({ width: project.width, height: project.height }),
+    [project.width, project.height],
+  );
+
+  const fitScale = useMemo(() => {
+    if (!panelSize) return 1;
+    return Math.min(
+      panelSize.width / project.width,
+      panelSize.height / project.height,
+    );
+  }, [panelSize, project.width, project.height]);
+
+  const baseScale = isFullscreen ? 1.0 : fitScale;
+  const viewScale = baseScale * playerZoom;
+
+  const screenCenter = useMemo(() => {
+    return { x: project.width * viewScale / 2, y: project.height * viewScale / 2 };
+  }, [project.width, project.height, viewScale]);
+
   const activeVisualRenderLayers = useMemo(
     () =>
-      frameSize
-        ? activeVisualLayers
-            .map((layer) => {
-              if (!layer.mediaSize || !layer.canonicalUrl) {
-                return null;
-              }
+      activeVisualLayers
+        .map((layer) => {
+          if (!layer.mediaSize || !layer.canonicalUrl) {
+            return null;
+          }
 
-              const baseRect = getProjectScaledRect(layer.mediaSize, frameSize, {
-                width: project.width,
-                height: project.height,
-              });
-              const rect = getTransformedRect(
-                baseRect,
-                frameSize,
-                layer.clip.transformOffsetX,
-                layer.clip.transformOffsetY,
-                layer.clip.transformScale,
-              );
+          const uRect = getUniversalClipRect(
+            layer.mediaSize,
+            layer.clip.transformOffsetX,
+            layer.clip.transformOffsetY,
+            layer.clip.transformScale,
+          );
+          const screenRect = universalRectToScreen(
+            uRect,
+            screenCenter.x,
+            screenCenter.y,
+            viewScale,
+          );
 
-              return {
-                ...layer,
-                rect,
-                rotationStyle: {
-                  transform: `rotate(${layer.clip.rotationZ}deg)`,
-                  transformOrigin: "center center",
-                },
-                adjustmentFilter: getVisualAdjustmentFilter(layer.clip),
-                blendMode: getVisualBlendMode(layer.clip),
-                temperatureOverlayStyle: getTemperatureOverlayStyle(layer.clip),
-                tintOverlayStyle: getTintOverlayStyle(layer.clip),
-                vignetteOverlayStyle: getVignetteOverlayStyle(layer.clip),
-                noiseOverlayStyle: getNoiseOverlayStyle(layer.clip),
-              };
-            })
-            .filter((layer) => layer !== null)
-        : [],
-    [activeVisualLayers, frameSize, project.height, project.width],
+          const isOffFrame =
+            uRect.centerX + uRect.width / 2 < -project.width / 2 ||
+            uRect.centerX - uRect.width / 2 > project.width / 2 ||
+            uRect.centerY + uRect.height / 2 < -project.height / 2 ||
+            uRect.centerY - uRect.height / 2 > project.height / 2;
+
+          return {
+            ...layer,
+            uRect,
+            screenRect,
+            isOffFrame,
+            rotationStyle: {
+              transform: `rotate(${layer.clip.rotationZ}deg)`,
+              transformOrigin: "center center",
+            },
+            adjustmentFilter: getVisualAdjustmentFilter(layer.clip),
+            blendMode: getVisualBlendMode(layer.clip),
+            temperatureOverlayStyle: getTemperatureOverlayStyle(layer.clip),
+            tintOverlayStyle: getTintOverlayStyle(layer.clip),
+            vignetteOverlayStyle: getVignetteOverlayStyle(layer.clip),
+            noiseOverlayStyle: getNoiseOverlayStyle(layer.clip),
+          };
+        })
+        .filter((layer): layer is NonNullable<typeof layer> => layer !== null),
+    [activeVisualLayers, screenCenter, viewScale, project.width, project.height],
   );
   const previewAssetUrl = useMemo(
     () =>
@@ -629,13 +653,10 @@ export function PlayerPanel() {
   );
   const projectFrameStyle = useMemo(
     () => ({
-      aspectRatio: `${project.width} / ${project.height}`,
-      width: project.width >= project.height ? "100%" : "auto",
-      height: project.width >= project.height ? "auto" : "100%",
-      maxWidth: "100%",
-      maxHeight: "100%",
+      width: project.width * viewScale,
+      height: project.height * viewScale,
     }),
-    [project.height, project.width],
+    [project.height, project.width, viewScale],
   );
   const projectRatioLabel = useMemo(
     () => getProjectRatioLabel(project.width, project.height),
@@ -643,14 +664,12 @@ export function PlayerPanel() {
   );
   const isPreviewVisualAsset =
     livePreviewAsset?.type === "image" || livePreviewAsset?.type === "video";
-  const effectivePlayerZoom = previewAsset ? 1 : playerZoom;
+  // Zoom is now applied via viewScale in universal→screen conversion
   const activeFrameStyle =
     previewAsset && isPreviewVisualAsset
       ? {
           width: "100%",
           height: "100%",
-          maxWidth: "100%",
-          maxHeight: "100%",
         }
       : projectFrameStyle;
   const selectedPlaybackQuality = useMemo(
@@ -660,21 +679,8 @@ export function PlayerPanel() {
     [playbackQuality],
   );
   const playbackSourceBadge = useMemo(() => {
-    if (previewAsset) {
-      return null;
-    }
-
-    if (isSequencePlaybackActive) {
-      return `${selectedPlaybackQuality.label} sequence preview`;
-    }
-
     return null;
-  }, [
-    isPlaybackWaiting,
-    isSequencePlaybackActive,
-    previewAsset,
-    selectedPlaybackQuality.label,
-  ]);
+  }, []);
   const sequencePreviewHint = useMemo(() => {
     if (previewAsset || !isPlaybackWaiting) {
       return null;
@@ -720,6 +726,17 @@ export function PlayerPanel() {
         return "Preparing sequence preview";
     }
   }, [isPlaybackWaiting, sequencePreview.status]);
+  const sequencePreviewProgressValue = useMemo(
+    () => clamp(sequencePreviewProgress, 0, 100),
+    [sequencePreviewProgress],
+  );
+  const sequencePreviewProgressLabel = useMemo(
+    () => `Rendering preview... ${Math.round(sequencePreviewProgressValue)}%`,
+    [sequencePreviewProgressValue],
+  );
+  const shouldShowSequencePreviewProgress =
+    !previewAsset &&
+    sequencePreview.status === "processing";
   const playbackClockMode = useMemo(() => {
     if (!isSequencePlaybackActive || previewAsset) {
       return "timeline";
@@ -730,28 +747,41 @@ export function PlayerPanel() {
 
   const baseRect = useMemo(
     () =>
-      frameSize && transformVisualLayer?.mediaSize
-        ? getProjectScaledRect(transformVisualLayer.mediaSize, frameSize, {
-            width: project.width,
-            height: project.height,
-          })
+      transformVisualLayer?.mediaSize
+        ? getUniversalClipRect(
+            transformVisualLayer.mediaSize,
+            0,
+            0,
+            1,
+          )
         : null,
-    [frameSize, project.height, project.width, transformVisualLayer?.mediaSize],
+    [transformVisualLayer?.mediaSize],
   );
   const persistedRect = useMemo(
     () =>
-      baseRect && frameSize && transformVisualLayer
-        ? getTransformedRect(
-            baseRect,
-            frameSize,
+      transformVisualLayer?.mediaSize
+        ? getUniversalClipRect(
+            transformVisualLayer.mediaSize,
             transformVisualLayer.clip.transformOffsetX,
             transformVisualLayer.clip.transformOffsetY,
             transformVisualLayer.clip.transformScale,
           )
         : null,
-    [baseRect, frameSize, transformVisualLayer],
+    [transformVisualLayer],
   );
   const displayedRect = draftRect ?? persistedRect;
+  const displayedScreenRect = useMemo(
+    () =>
+      displayedRect
+        ? universalRectToScreen(
+            displayedRect,
+            screenCenter.x,
+            screenCenter.y,
+            viewScale,
+          )
+        : null,
+    [displayedRect, screenCenter, viewScale],
+  );
   const isTransformMode = Boolean(
     transformVisualLayer &&
     !previewAsset &&
@@ -783,6 +813,11 @@ export function PlayerPanel() {
   }, [previewAsset]);
 
   useEffect(() => {
+    // Reset zoom to 1.0 when entering or exiting fullscreen
+    setPlayerZoom(1);
+  }, [isFullscreen]);
+
+  useEffect(() => {
     if (!showPlayerZoom) {
       return;
     }
@@ -798,17 +833,20 @@ export function PlayerPanel() {
   }, [showPlayerZoom]);
 
   useEffect(() => {
-    const frame = frameRef.current;
-    if (!frame) {
+    const viewport = viewportRef.current;
+    if (!viewport) {
       return;
     }
 
     const updateSize = () =>
-      setFrameSize({ width: frame.clientWidth, height: frame.clientHeight });
+      setPanelSize({
+        width: viewport.clientWidth,
+        height: viewport.clientHeight,
+      });
 
     updateSize();
     const observer = new ResizeObserver(updateSize);
-    observer.observe(frame);
+    observer.observe(viewport);
     return () => observer.disconnect();
   }, []);
 
@@ -976,35 +1014,47 @@ export function PlayerPanel() {
   }, [isPlaying, playhead, project.duration, stopPlayback]);
 
   useEffect(() => {
-    if (!interaction || !displayedRect || !frameSize) {
+    if (!interaction || !displayedRect) {
       return;
     }
 
     const aspectRatio = displayedRect.width / displayedRect.height;
     const rotationRadians =
       ((selectedVisualClipForTransform?.rotationZ ?? 0) * Math.PI) / 180;
+
     const handleMouseMove = (event: MouseEvent) => {
-      const dx = (event.clientX - interaction.originX) / effectivePlayerZoom;
-      const dy = (event.clientY - interaction.originY) / effectivePlayerZoom;
+      const currentUniversal = screenPointToUniversal(
+        event.clientX,
+        event.clientY,
+        screenCenter.x,
+        screenCenter.y,
+        viewScale,
+      );
+      const startUniversal = screenPointToUniversal(
+        interaction.originScreenX,
+        interaction.originScreenY,
+        screenCenter.x,
+        screenCenter.y,
+        viewScale,
+      );
+      const dx = currentUniversal.x - startUniversal.x;
+      const dy = currentUniversal.y - startUniversal.y;
 
       if (interaction.type === "move") {
-        const snapped = snapRectToFrame(
-          {
-            ...interaction.startRect,
-            x: interaction.startRect.x + dx,
-            y: interaction.startRect.y + dy,
-          },
-          frameSize,
-          10,
-        );
-        setDraftRect(snapped.rect);
+        const moved: UniversalRect = {
+          ...interaction.startUniversalRect,
+          centerX: interaction.startUniversalRect.centerX + dx,
+          centerY: interaction.startUniversalRect.centerY + dy,
+        };
+        const snapped = snapRectToFrame(moved, projectSize, 10);
+        setDraftRect(snapped.uRect);
         setGuides(snapped.guides);
         return;
       }
 
-      const startRect = interaction.startRect;
+      const startRect = interaction.startUniversalRect;
       const handleDirection = getHandleDirection(interaction.handle);
-      const diagonal = rotatePoint(
+      const diagonal = rotatePointYUpCW(
         {
           x: handleDirection.x,
           y: handleDirection.y / aspectRatio,
@@ -1020,7 +1070,7 @@ export function PlayerPanel() {
         y: startHandlePoint.y + dy,
       };
       const width = Math.max(
-        40,
+        10,
         ((draggedHandlePoint.x - interaction.anchorPoint.x) * diagonal.x +
           (draggedHandlePoint.y - interaction.anchorPoint.y) * diagonal.y) /
           (diagonal.x * diagonal.x + diagonal.y * diagonal.y),
@@ -1032,8 +1082,8 @@ export function PlayerPanel() {
       };
 
       setDraftRect({
-        x: center.x - width / 2,
-        y: center.y - height / 2,
+        centerX: center.x,
+        centerY: center.y,
         width,
         height,
       });
@@ -1046,15 +1096,13 @@ export function PlayerPanel() {
       setGuides({ vertical: [], horizontal: [] });
       setDraftRect(null);
 
-      if (!selectedVisualClipForTransform || !baseRect || !frameSize || !finalRect) {
+      if (!selectedVisualClipForTransform || !baseRect || !finalRect) {
         return;
       }
 
-      const baseCenter = getCenter(baseRect);
-      const finalCenter = getCenter(finalRect);
       void updateClipTransform(selectedVisualClipForTransform.id, {
-        transformOffsetX: (finalCenter.x - baseCenter.x) / frameSize.width,
-        transformOffsetY: (finalCenter.y - baseCenter.y) / frameSize.height,
+        transformOffsetX: finalRect.centerX,
+        transformOffsetY: finalRect.centerY,
         transformScale: clamp(finalRect.width / baseRect.width, 0.1, 10),
       });
     };
@@ -1069,9 +1117,10 @@ export function PlayerPanel() {
     baseRect,
     displayedRect,
     draftRect,
-    frameSize,
+    projectSize,
+    screenCenter,
+    viewScale,
     interaction,
-    effectivePlayerZoom,
     updateClipTransform,
     selectedVisualClipForTransform,
   ]);
@@ -1116,14 +1165,8 @@ export function PlayerPanel() {
         ) : null}
       </div>
 
-      <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-muted-foreground/20 p-3">
-        <div
-          className="flex h-full w-full items-center justify-center overflow-visible transition-transform duration-150"
-          style={{
-            transform: `scale(${effectivePlayerZoom})`,
-            transformOrigin: "center center",
-          }}
-        >
+      <div ref={viewportRef} className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-muted-foreground/20 p-3">
+        <div className="flex h-full w-full items-center justify-center overflow-visible">
           <div
             ref={frameRef}
             className="relative flex items-center justify-center overflow-visible bg-black"
@@ -1139,21 +1182,6 @@ export function PlayerPanel() {
                 previewAsset && isPreviewVisualAsset && "flex items-center justify-center",
               )}
             >
-              {guides.vertical.map((guide, index) => (
-                <div
-                  key={`vertical-${guide}-${index}`}
-                  className="pointer-events-none absolute bottom-0 top-0 z-20 w-px bg-cyan-300"
-                  style={{ left: guide }}
-                />
-              ))}
-              {guides.horizontal.map((guide, index) => (
-                <div
-                  key={`horizontal-${guide}-${index}`}
-                  className="pointer-events-none absolute left-0 right-0 z-20 h-px bg-cyan-300"
-                  style={{ top: guide }}
-                />
-              ))}
-
               {livePreviewAsset?.type === "image" && previewAssetUrl ? (
                 <img
                   src={previewAssetUrl}
@@ -1182,6 +1210,7 @@ export function PlayerPanel() {
                   src={sequencePreviewUrl}
                   className="h-full w-full object-contain"
                   playsInline
+                  muted
                   preload="auto"
                 />
               ) : activeVisualRenderLayers.length > 0 ? (
@@ -1191,16 +1220,19 @@ export function PlayerPanel() {
                       key={layer.clip.id}
                       className="absolute"
                       style={{
-                        left: layer.rect.x,
-                        top: layer.rect.y,
-                        width: layer.rect.width,
-                        height: layer.rect.height,
+                        left: layer.screenRect.x,
+                        top: layer.screenRect.y,
+                        width: layer.screenRect.width,
+                        height: layer.screenRect.height,
+                        opacity:
+                          selectedClipIds.includes(layer.clip.id) && layer.isOffFrame
+                            ? layer.effectiveOpacity * 0.5
+                            : layer.effectiveOpacity,
                       }}
                     >
                       <div
                         className="relative h-full w-full"
                         style={{
-                          opacity: layer.effectiveOpacity,
                           mixBlendMode: layer.blendMode,
                         }}
                       >
@@ -1253,93 +1285,124 @@ export function PlayerPanel() {
                               className="pointer-events-none absolute inset-0"
                               style={layer.noiseOverlayStyle}
                             />
-                          ) : null}
-                        </div>
-                      </div>
-                    </div>
+                ) : null}
+            </div>
+          </div>
+        </div>
                   ))}
                 </>
               ) : null}
-            </div>
 
-            {isPlaybackWaiting ? (
-              <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/55 px-6">
-                <div className="flex max-w-sm flex-col items-center gap-2 rounded-md border border-white/10 bg-black/75 px-4 py-3 text-center text-white">
-                  <LoaderCircle className="h-5 w-5 animate-spin" />
-                  <div className="text-sm font-medium">
-                    {waitingOverlayLabel ?? "Waiting for sequence preview"}
-                  </div>
-                  {sequencePreviewHint ? (
-                    <div className="text-xs text-white/70">{sequencePreviewHint}</div>
-                  ) : null}
-                </div>
-              </div>
-            ) : null}
-
-            {isTransformMode && displayedRect ? (
-              <>
-                <div
-                  className="absolute z-20 border border-white/80"
-                  style={{
-                    left: displayedRect.x,
-                    top: displayedRect.y,
-                    width: displayedRect.width,
-                    height: displayedRect.height,
-                    ...visualRotationStyle,
-                  }}
-                  onMouseDown={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    if (!displayedRect) return;
-                    setInteraction({
-                      type: "move",
-                      originX: event.clientX,
-                      originY: event.clientY,
-                      startRect: displayedRect,
-                    });
-                    setDraftRect(displayedRect);
-                  }}
-                >
-                  {(["nw", "ne", "se", "sw"] as const).map((handle) => (
-                    <button
-                      key={handle}
-                      type="button"
-                      className="absolute h-3 w-3 rounded-full border border-white bg-background"
-                      style={{
-                        left: handle.includes("e") ? "100%" : "0%",
-                        top: handle.includes("s") ? "100%" : "0%",
-                        cursor: getHandleResizeCursor(
-                          handle,
-                          selectedVisualClipForTransform?.rotationZ ?? 0,
-                        ),
-                        transform: `translate(-50%, -50%) scale(${1 / effectivePlayerZoom})`,
-                        transformOrigin: "center center",
-                      }}
+              {isTransformMode && displayedScreenRect ? (
+                <>
+                  {guides.vertical.map((guide, index) => (
+                    <div
+                      key={`vertical-${guide}-${index}`}
+                      className="pointer-events-none absolute bottom-0 top-0 z-20 w-px bg-cyan-300"
+                      style={{ left: screenCenter.x + guide * viewScale }}
+                    />
+                  ))}
+                  {guides.horizontal.map((guide, index) => (
+                    <div
+                      key={`horizontal-${guide}-${index}`}
+                      className="pointer-events-none absolute left-0 right-0 z-20 h-px bg-cyan-300"
+                      style={{ top: screenCenter.y - guide * viewScale }}
+                    />
+                  ))}
+                  <div
+                    className={cn(
+                      "absolute z-20 border border-white/80",
+                      !interaction && "cursor-grab",
+                      interaction?.type === "move" && "cursor-grabbing",
+                    )}
+                    style={{
+                      left: displayedScreenRect.x,
+                      top: displayedScreenRect.y,
+                      width: displayedScreenRect.width,
+                      height: displayedScreenRect.height,
+                      ...visualRotationStyle,
+                    }}
                       onMouseDown={(event) => {
                         event.preventDefault();
                         event.stopPropagation();
                         if (!displayedRect) return;
                         setInteraction({
-                          type: "resize",
-                          handle,
-                          originX: event.clientX,
-                          originY: event.clientY,
-                          startRect: displayedRect,
-                          anchorPoint: getRotatedOppositeCornerAnchor(
-                            displayedRect,
-                            handle,
-                            selectedVisualClipForTransform?.rotationZ ?? 0,
-                          ),
+                          type: "move",
+                          originScreenX: event.clientX,
+                          originScreenY: event.clientY,
+                          startUniversalRect: displayedRect,
                         });
                         setDraftRect(displayedRect);
                       }}
-                    />
-                  ))}
-                </div>
-              </>
-            ) : null}
+                    >
+                      {(["nw", "ne", "se", "sw"] as const).map((handle) => (
+                        <button
+                          key={handle}
+                          type="button"
+                          className="absolute h-3 w-3 rounded-full border border-white bg-background"
+                          style={{
+                            left: handle.includes("e") ? "100%" : "0%",
+                            top: handle.includes("s") ? "100%" : "0%",
+                            cursor: getHandleResizeCursor(
+                              handle,
+                              selectedVisualClipForTransform?.rotationZ ?? 0,
+                            ),
+                            transform: "translate(-50%, -50%)",
+                            transformOrigin: "center center",
+                          }}
+                          onMouseDown={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            if (!displayedRect) return;
+                            setInteraction({
+                              type: "resize",
+                              handle,
+                              originScreenX: event.clientX,
+                              originScreenY: event.clientY,
+                              startUniversalRect: displayedRect,
+                              anchorPoint: getRotatedOppositeCornerAnchorUniversal(
+                                displayedRect,
+                                handle,
+                                selectedVisualClipForTransform?.rotationZ ?? 0,
+                              ),
+                            });
+                            setDraftRect(displayedRect);
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </>
+                ) : null}
+            </div>
           </div>
         </div>
+
+        {isPlaybackWaiting ? (
+          <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/55">
+            <div className="flex max-w-sm flex-col items-center gap-3 rounded-md border border-white/10 bg-black/75 px-5 py-4 text-center text-white">
+              <LoaderCircle className="h-5 w-5 animate-spin" />
+              <div className="text-sm font-medium">
+                {waitingOverlayLabel ?? "Waiting for sequence preview"}
+              </div>
+              {shouldShowSequencePreviewProgress ? (
+                <div className="flex w-full flex-col gap-1.5">
+                  <div className="h-1.5 w-full rounded-full bg-white/20">
+                    <div
+                      className="h-full rounded-full bg-white/80 transition-all duration-300"
+                      style={{ width: `${sequencePreviewProgressValue}%` }}
+                    />
+                  </div>
+                  <div className="text-[11px] text-white/70">
+                    {sequencePreviewProgressLabel}
+                  </div>
+                </div>
+              ) : null}
+              {sequencePreviewHint ? (
+                <div className="text-xs text-white/70">{sequencePreviewHint}</div>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
 
       </div>
 
@@ -1456,7 +1519,7 @@ export function PlayerPanel() {
                           size="icon"
                           className="h-7 w-7"
                           onClick={() =>
-                            setPlayerZoom((value) => Math.max(0.5, value - 0.1))
+                            setPlayerZoom((value) => Math.max(0.25, value - 0.1))
                           }
                         >
                           <ZoomOut className="h-4 w-4" />
@@ -1467,8 +1530,8 @@ export function PlayerPanel() {
                     <div className="w-24 px-1">
                       <Slider
                         value={[playerZoom]}
-                        min={0.5}
-                        max={3}
+                        min={0.25}
+                        max={2}
                         step={0.05}
                         onValueChange={(values) => {
                           const nextZoom = values[0];
@@ -1486,7 +1549,7 @@ export function PlayerPanel() {
                           size="icon"
                           className="h-7 w-7"
                           onClick={() =>
-                            setPlayerZoom((value) => Math.min(3, value + 0.1))
+                            setPlayerZoom((value) => Math.min(2, value + 0.1))
                           }
                         >
                           <ZoomIn className="h-4 w-4" />

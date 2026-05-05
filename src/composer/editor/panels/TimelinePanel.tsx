@@ -59,6 +59,7 @@ type Interaction =
       type: "move";
       clip: Clip;
       originX: number;
+      groupInitialStates: Array<{ id: string; startTime: number; trackId: string }>;
     }
   | {
       type: "trim-left";
@@ -193,6 +194,7 @@ export function TimelinePanel() {
     tracks,
     clips,
     selectedClipId,
+    selectedClipIds,
     playhead,
     isPlaying,
     isPlaybackWaiting,
@@ -218,6 +220,7 @@ export function TimelinePanel() {
   const [dragOverTrackId, setDragOverTrackId] = useState<string | null>(null);
   const [interaction, setInteraction] = useState<Interaction | null>(null);
   const [draftClip, setDraftClip] = useState<Clip | null>(null);
+  const [draftGroupClips, setDraftGroupClips] = useState<Map<string, Clip>>(new Map());
   const [isDraggingPlayhead, setIsDraggingPlayhead] = useState(false);
   const [draggingTrackId, setDraggingTrackId] = useState<string | null>(null);
   const [trackDropTarget, setTrackDropTarget] = useState<TrackDropTarget | null>(null);
@@ -228,6 +231,7 @@ export function TimelinePanel() {
   const trackRowsRef = useRef<HTMLDivElement | null>(null);
   const previousZoomRef = useRef(zoom);
   const autoFitProjectRef = useRef<string | null>(null);
+  const groupDragRef = useRef<{ snappedDelta: number; targetTrackId: string } | null>(null);
   const [viewportWidth, setViewportWidth] = useState(MIN_VIEWPORT_WIDTH);
   const frameDuration = useMemo(() => getFrameDuration(project.fps), [project.fps]);
   const tracksById = useMemo(() => new Map(tracks.map((track) => [track.id, track])), [tracks]);
@@ -403,22 +407,31 @@ export function TimelinePanel() {
 
       if (interaction.type === "move") {
         setMoveGhostPointer({ x: event.clientX, y: event.clientY });
+        const hasGroup = interaction.groupInitialStates.length > 1;
         const sourceTrack = tracksById.get(baseClip.trackId);
-        const withinSourceTrackZone = isWithinSourceTrackDragZone(
-          event.clientY,
-          baseClip.trackId,
-        );
-        const hoveredTrack = resolveTrackFromClientY(event.clientY, baseClip.trackId);
-        const targetTrack =
-          !withinSourceTrackZone &&
-          sourceTrack &&
-          hoveredTrack &&
-          hoveredTrack.id !== sourceTrack.id &&
-          hoveredTrack.type === sourceTrack.type &&
-          !hoveredTrack.locked
-            ? hoveredTrack
-            : sourceTrack;
-        setIsCrossTrackDrag(Boolean(targetTrack && sourceTrack && targetTrack.id !== sourceTrack.id));
+
+        // Cross-track drag only allowed for single clip
+        let targetTrack = sourceTrack;
+        if (!hasGroup) {
+          const withinSourceTrackZone = isWithinSourceTrackDragZone(
+            event.clientY,
+            baseClip.trackId,
+          );
+          const hoveredTrack = resolveTrackFromClientY(event.clientY, baseClip.trackId);
+          targetTrack =
+            !withinSourceTrackZone &&
+            sourceTrack &&
+            hoveredTrack &&
+            hoveredTrack.id !== sourceTrack.id &&
+            hoveredTrack.type === sourceTrack.type &&
+            !hoveredTrack.locked
+              ? hoveredTrack
+              : sourceTrack;
+          setIsCrossTrackDrag(Boolean(targetTrack && sourceTrack && targetTrack.id !== sourceTrack.id));
+        } else {
+          setIsCrossTrackDrag(false);
+        }
+
         if (!targetTrack) {
           return;
         }
@@ -431,7 +444,26 @@ export function TimelinePanel() {
           trackClips,
           project.fps,
         );
+        const snappedDelta = nextStartTime - baseClip.startTime;
+        groupDragRef.current = { snappedDelta, targetTrackId: targetTrack.id };
         setDraftClip({ ...baseClip, startTime: nextStartTime, trackId: targetTrack.id });
+
+        // Update all group clips visually
+        if (hasGroup) {
+          const newDrafts = new Map<string, Clip>();
+          for (const initial of interaction.groupInitialStates) {
+            if (initial.id === baseClip.id) {
+              newDrafts.set(initial.id, { ...baseClip, startTime: nextStartTime, trackId: targetTrack.id });
+            } else {
+              const clipObj = clips.find((c) => c.id === initial.id);
+              if (clipObj) {
+                const clampedStart = Math.max(0, snapTimeToFrame(initial.startTime + snappedDelta, project.fps));
+                newDrafts.set(initial.id, { ...clipObj, startTime: clampedStart });
+              }
+            }
+          }
+          setDraftGroupClips(newDrafts);
+        }
         return;
       }
 
@@ -504,6 +536,7 @@ export function TimelinePanel() {
       const currentDraft = draftClip;
       setInteraction(null);
       setDraftClip(null);
+      setDraftGroupClips(new Map());
       setMoveGhostPointer(null);
       setIsCrossTrackDrag(false);
 
@@ -512,7 +545,18 @@ export function TimelinePanel() {
       }
 
       if (currentInteraction.type === "move") {
+        // Move the base clip
         void moveClip(currentDraft.id, currentDraft.startTime, currentDraft.trackId);
+        // Move other selected clips in the group — each stays on its own track
+        const groupDrag = groupDragRef.current;
+        if (groupDrag && currentInteraction.groupInitialStates.length > 1) {
+          for (const initial of currentInteraction.groupInitialStates) {
+            if (initial.id === currentDraft.id) continue;
+            const newStart = snapTimeToFrame(initial.startTime + groupDrag.snappedDelta, project.fps);
+            void moveClip(initial.id, Math.max(0, newStart), initial.trackId);
+          }
+        }
+        groupDragRef.current = null;
         return;
       }
 
@@ -530,7 +574,7 @@ export function TimelinePanel() {
       document.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [draftClip, frameDuration, interaction, moveClip, project.fps, trimClip, zoom]);
+  }, [clips, draftClip, draftGroupClips, frameDuration, interaction, moveClip, project.fps, trimClip, zoom]);
 
   const handleTimelineSeek = (
     event: MouseEvent<HTMLDivElement>,
@@ -1118,7 +1162,7 @@ export function TimelinePanel() {
                         className={cn(
                           "relative border-b border-border transition-colors",
                           dragOverTrackId === track.id && "bg-primary/10",
-                          interaction?.type === "move" && draftClip?.trackId === track.id && "bg-primary/5",
+                          interaction?.type === "move" && (draftClip?.trackId === track.id || [...draftGroupClips.values()].some((c) => c.trackId === track.id)) && "bg-primary/5",
                           isTrackDimmed(track) && "bg-muted/25",
                           track.locked && "cursor-not-allowed",
                         )}
@@ -1171,8 +1215,8 @@ export function TimelinePanel() {
                           if (isCrossTrackDrag && draftClip?.id === clip.id) {
                             return null;
                           }
-                          const renderedClip = draftClip?.id === clip.id ? draftClip : clip;
-                          const selected = renderedClip.id === selectedClipId;
+                          const renderedClip = draftGroupClips.get(clip.id) ?? (draftClip?.id === clip.id ? draftClip : clip);
+                          const selected = selectedClipIds.includes(renderedClip.id) || renderedClip.id === selectedClipId;
                           return (
                             <div
                               key={renderedClip.id}
@@ -1180,6 +1224,8 @@ export function TimelinePanel() {
                                 "absolute top-2 flex h-[44px] items-stretch overflow-hidden rounded-md border shadow-sm",
                                 getClipFill(track.type, selected),
                                 isTrackDimmed(track) && "opacity-40",
+                                selected && !interaction && "cursor-grab",
+                                selected && interaction?.type === "move" && "cursor-grabbing",
                               )}
                               style={{
                                 left: renderedClip.startTime * zoom,
@@ -1190,7 +1236,23 @@ export function TimelinePanel() {
                                   return;
                                 }
                                 event.stopPropagation();
-                                selectClip(renderedClip.id);
+                                const isAlreadySelected = selectedClipIds.includes(renderedClip.id);
+                                const hasMultiSelect = selectedClipIds.length > 1;
+                                // When clicking an already-selected clip in a group, keep the group
+                                if (isAlreadySelected && hasMultiSelect && !event.shiftKey) {
+                                  // Keep existing selection, don't replace
+                                } else {
+                                  selectClip(renderedClip.id, event.shiftKey);
+                                }
+                                const effectiveIds = selectedClipIds.includes(renderedClip.id)
+                                  ? selectedClipIds
+                                  : event.shiftKey
+                                    ? [...selectedClipIds, renderedClip.id]
+                                    : [renderedClip.id];
+                                const groupInitialStates = effectiveIds
+                                  .map((id) => clips.find((c) => c.id === id))
+                                  .filter((c): c is Clip => c != null)
+                                  .map((c) => ({ id: c.id, startTime: c.startTime, trackId: c.trackId }));
                                 setMoveGhostPointer({
                                   x: event.clientX,
                                   y: event.clientY,
@@ -1200,6 +1262,7 @@ export function TimelinePanel() {
                                   type: "move",
                                   clip,
                                   originX: event.clientX,
+                                  groupInitialStates,
                                 });
                                 setDraftClip(clip);
                               }}
@@ -1212,7 +1275,7 @@ export function TimelinePanel() {
                                     return;
                                   }
                                   event.stopPropagation();
-                                  selectClip(renderedClip.id);
+                                  selectClip(renderedClip.id, event.shiftKey);
                                   setInteraction({
                                     type: "trim-left",
                                     clip,
@@ -1238,7 +1301,7 @@ export function TimelinePanel() {
                                     return;
                                   }
                                   event.stopPropagation();
-                                  selectClip(renderedClip.id);
+                                  selectClip(renderedClip.id, event.shiftKey);
                                   setInteraction({
                                     type: "trim-right",
                                     clip,

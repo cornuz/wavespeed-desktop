@@ -1,11 +1,13 @@
 import {
-  getProjectScaledRect as getSharedProjectScaledRect,
-  getTransformedRect as getSharedTransformedRect,
+  getUniversalClipRect,
+  universalRectToScreen,
   type Rect,
   type Size,
+  type UniversalRect,
 } from "../../shared/compositionGeometry";
 
-export type { Rect, Size } from "../../shared/compositionGeometry";
+export type { Rect, Size, UniversalRect } from "../../shared/compositionGeometry";
+export { getUniversalClipRect, universalRectToScreen, screenPointToUniversal, rotatePointYUpCW } from "../../shared/compositionGeometry";
 
 export interface SnapGuides {
   vertical: number[];
@@ -28,50 +30,67 @@ export function getContainRect(media: Size, frame: Size): Rect {
   };
 }
 
-export const getProjectScaledRect = getSharedProjectScaledRect;
+/**
+ * Snaps a universal rect to frame guides.
+ * Guides are returned in universal coordinates.
+ */
+export function snapRectToFrame(
+  uRect: UniversalRect,
+  projectSize: Size,
+  thresholdPx: number,
+): { uRect: UniversalRect; guides: SnapGuides } {
+  const nextRect = { ...uRect };
+  const guides: SnapGuides = { vertical: [], horizontal: [] };
 
-export const getTransformedRect = getSharedTransformedRect;
+  // Snap center X to frame center (0)
+  if (Math.abs(nextRect.centerX) <= thresholdPx) {
+    nextRect.centerX = 0;
+    guides.vertical.push(0);
+  }
+
+  // Snap center Y to frame center (0)
+  if (Math.abs(nextRect.centerY) <= thresholdPx) {
+    nextRect.centerY = 0;
+    guides.horizontal.push(0);
+  }
+
+  const halfW = projectSize.width / 2;
+  const halfH = projectSize.height / 2;
+
+  // Snap left edge to left frame edge (-W/2)
+  const leftEdge = nextRect.centerX - nextRect.width / 2;
+  if (Math.abs(leftEdge + halfW) <= thresholdPx) {
+    nextRect.centerX = -halfW + nextRect.width / 2;
+    guides.vertical.push(-halfW);
+  }
+
+  // Snap right edge to right frame edge (+W/2)
+  const rightEdge = nextRect.centerX + nextRect.width / 2;
+  if (Math.abs(rightEdge - halfW) <= thresholdPx) {
+    nextRect.centerX = halfW - nextRect.width / 2;
+    guides.vertical.push(halfW);
+  }
+
+  // Snap top edge to top frame edge (+H/2)
+  const topEdge = nextRect.centerY + nextRect.height / 2;
+  if (Math.abs(topEdge - halfH) <= thresholdPx) {
+    nextRect.centerY = halfH - nextRect.height / 2;
+    guides.horizontal.push(halfH);
+  }
+
+  // Snap bottom edge to bottom frame edge (-H/2)
+  const bottomEdge = nextRect.centerY - nextRect.height / 2;
+  if (Math.abs(bottomEdge + halfH) <= thresholdPx) {
+    nextRect.centerY = -halfH + nextRect.height / 2;
+    guides.horizontal.push(-halfH);
+  }
+
+  return { uRect: nextRect, guides };
+}
 
 export function getCenter(rect: Rect) {
   return {
     x: rect.x + rect.width / 2,
     y: rect.y + rect.height / 2,
   };
-}
-
-export function snapRectToFrame(
-  rect: Rect,
-  frame: Size,
-  thresholdPx: number,
-): { rect: Rect; guides: SnapGuides } {
-  const nextRect = { ...rect };
-  const guides: SnapGuides = { vertical: [], horizontal: [] };
-  const center = getCenter(nextRect);
-
-  if (Math.abs(center.x - frame.width / 2) <= thresholdPx) {
-    nextRect.x += frame.width / 2 - center.x;
-    guides.vertical.push(frame.width / 2);
-  }
-  if (Math.abs(center.y - frame.height / 2) <= thresholdPx) {
-    nextRect.y += frame.height / 2 - center.y;
-    guides.horizontal.push(frame.height / 2);
-  }
-  if (Math.abs(nextRect.x) <= thresholdPx) {
-    nextRect.x = 0;
-    guides.vertical.push(0);
-  }
-  if (Math.abs(nextRect.x + nextRect.width - frame.width) <= thresholdPx) {
-    nextRect.x = frame.width - nextRect.width;
-    guides.vertical.push(frame.width);
-  }
-  if (Math.abs(nextRect.y) <= thresholdPx) {
-    nextRect.y = 0;
-    guides.horizontal.push(0);
-  }
-  if (Math.abs(nextRect.y + nextRect.height - frame.height) <= thresholdPx) {
-    nextRect.y = frame.height - nextRect.height;
-    guides.horizontal.push(frame.height);
-  }
-
-  return { rect: nextRect, guides };
 }

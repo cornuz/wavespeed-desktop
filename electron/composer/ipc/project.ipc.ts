@@ -34,7 +34,7 @@ import {
 } from "../ffmpeg";
 import { loadAssetMetadata, saveAssetMetadata } from "../asset-metadata";
 import { createDefaultTracks, listTracks } from "../db/tracks.repo";
-import { listClips } from "../db/clips.repo";
+import { listClips, updateClip } from "../db/clips.repo";
 import {
   disposeProjectSequencePreview,
   ensureProjectSequencePreview,
@@ -42,6 +42,10 @@ import {
   invalidateProjectSequencePreview,
   scheduleProjectSequencePreviewRefresh,
 } from "../sequence-preview";
+import {
+  createHeadlessRenderer,
+  destroyHeadlessRenderer,
+} from "../headless-renderer";
 import type {
   ComposerPlaybackQuality,
   ComposerProject,
@@ -308,6 +312,38 @@ function buildProject(
   } = readProjectMeta(projectId);
   const tracks = listTracks(projectId);
   const clips = listClips(projectId);
+
+  // Migrate old fractional transform values to universal pixel coordinates
+  const migratedClips = clips.map((clip) => {
+    if (
+      Math.abs(clip.transformOffsetX) < 5.0 &&
+      Math.abs(clip.transformOffsetY) < 5.0
+    ) {
+      return {
+        ...clip,
+        transformOffsetX: clip.transformOffsetX * width,
+        transformOffsetY: -clip.transformOffsetY * height,
+      };
+    }
+    return clip;
+  });
+  const hasMigrations = migratedClips.some(
+    (clip, index) =>
+      clip.transformOffsetX !== clips[index].transformOffsetX ||
+      clip.transformOffsetY !== clips[index].transformOffsetY,
+  );
+  if (hasMigrations) {
+    for (const clip of migratedClips) {
+      updateClip(projectId, clip.id, {
+        transformOffsetX: clip.transformOffsetX,
+        transformOffsetY: clip.transformOffsetY,
+      });
+    }
+    console.info(
+      `[Composer] Migrated clip transforms to universal coordinates for project ${projectId}`,
+    );
+  }
+
   return {
     ...summary,
     duration,
@@ -319,7 +355,7 @@ function buildProject(
     safeZoneMargin,
     sequencePreview: getProjectSequencePreview(projectId),
     tracks,
-    clips,
+    clips: hasMigrations ? migratedClips : clips,
     layoutPreset,
     layoutSizes,
   };
@@ -385,6 +421,7 @@ export function registerProjectIpc(): void {
       addProjectToRegistry(summary);
 
       const project = buildProject(id, summary);
+      await createHeadlessRenderer();
       project.sequencePreview = ensureProjectSequencePreview(id);
       return project;
     },
@@ -408,6 +445,7 @@ export function registerProjectIpc(): void {
       summary.lastOpenedAt = now;
 
       const project = buildProject(input.id, summary);
+      await createHeadlessRenderer();
       project.sequencePreview = ensureProjectSequencePreview(input.id);
       return project;
     },
@@ -435,6 +473,7 @@ export function registerProjectIpc(): void {
     "composer:project-close",
     async (_event, { id }: { id: string }): Promise<void> => {
       disposeProjectSequencePreview(id);
+      destroyHeadlessRenderer();
       persistProjectDatabaseNow(id);
       closeProjectDatabase(id);
     },
@@ -513,7 +552,9 @@ export function registerProjectIpc(): void {
             : []),
         ];
         if (invalidationCauses.length > 0) {
-          invalidateProjectSequencePreview(input.id, [...invalidationCauses]);
+          invalidateProjectSequencePreview(input.id, [...invalidationCauses], {
+            fullReset: true,
+          });
           void scheduleProjectSequencePreviewRefresh(input.id);
         }
       }
@@ -523,7 +564,7 @@ export function registerProjectIpc(): void {
   ipcMain.handle(
     "composer:sequence-preview-get",
     async (_event, input: GetSequencePreviewInput) =>
-      getProjectSequencePreview(input.projectId),
+      ensureProjectSequencePreview(input.projectId),
   );
 
   ipcMain.handle(

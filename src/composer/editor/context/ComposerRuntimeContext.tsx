@@ -102,12 +102,14 @@ interface ComposerRuntimeContextValue {
   clips: Clip[];
   previewAsset: ComposerAsset | null;
   selectedClipId: string | null;
+  selectedClipIds: string[];
   selectedClip: Clip | null;
   selectedVisualClip: Clip | null;
   playhead: number;
   pendingSequencePlaybackStartTime: number | null;
   isPlaying: boolean;
   isPlaybackWaiting: boolean;
+  sequencePreviewProgress: number;
   zoom: number;
   timelineDuration: number;
   canUndo: boolean;
@@ -119,7 +121,7 @@ interface ComposerRuntimeContextValue {
   togglePlayback: () => void;
   pausePlayback: () => void;
   stopPlayback: (time?: number) => void;
-  selectClip: (clipId: string | null) => void;
+  selectClip: (clipId: string | null, addToSelection?: boolean) => void;
   previewLibraryAsset: (asset: ComposerAsset | null) => void;
   setZoom: (value: number) => void;
   addTrack: (type: Track["type"], placement?: AddTrackPlacement) => Promise<void>;
@@ -330,11 +332,13 @@ export function ComposerRuntimeProvider({
   const setClips = useComposerProjectStore((state) => state.setClips);
   const [previewAsset, setPreviewAsset] = useState<ComposerAsset | null>(null);
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
+  const [selectedClipIds, setSelectedClipIds] = useState<string[]>([]);
   const [playhead, setPlayhead] = useState(0);
   const [pendingSequencePlaybackStartTime, setPendingSequencePlaybackStartTime] =
     useState<number | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isPlaybackWaiting, setIsPlaybackWaiting] = useState(false);
+  const [sequencePreviewProgress, setSequencePreviewProgress] = useState(0);
   const [playbackClockSource, setPlaybackClockSourceState] = useState<
     "timeline" | "media"
   >("timeline");
@@ -343,6 +347,8 @@ export function ComposerRuntimeProvider({
   const playbackRef = useRef({ rafId: 0, startedAt: 0, originPlayhead: 0 });
   const playheadRef = useRef(playhead);
   const durationCacheRef = useRef<Record<string, number>>({});
+  const sequencePreviewStateLogRef = useRef("");
+  const sequencePreviewProgressLogRef = useRef("");
 
   const tracks = useMemo(
     () => [...project.tracks].sort((left, right) => left.order - right.order),
@@ -429,11 +435,139 @@ export function ComposerRuntimeProvider({
       const currentProject = useComposerProjectStore.getState().currentProject;
       if (currentProject?.id === project.id) {
         patchCurrentProject({ sequencePreview: nextSequencePreview });
+        const logKey = [
+          nextSequencePreview.status,
+          nextSequencePreview.requestSignature,
+          nextSequencePreview.filePath ?? "",
+          nextSequencePreview.errorMessage ?? "",
+        ].join("|");
+        if (sequencePreviewStateLogRef.current !== logKey) {
+          sequencePreviewStateLogRef.current = logKey;
+          console.info("[Composer Preview] state", {
+            projectId: project.id,
+            status: nextSequencePreview.status,
+            requestSignature: nextSequencePreview.requestSignature,
+            filePath: nextSequencePreview.filePath ?? null,
+            errorMessage: nextSequencePreview.errorMessage ?? null,
+          });
+        }
+        if (
+          nextSequencePreview.status === "ready" ||
+          nextSequencePreview.status === "stale" ||
+          nextSequencePreview.status === "missing" ||
+          nextSequencePreview.status === "error"
+        ) {
+          setSequencePreviewProgress(0);
+        }
       }
     } catch {
       // Keep current renderer state when IPC refresh is unavailable.
     }
   }, [patchCurrentProject, project.id]);
+
+  useEffect(() => {
+    const unsubscribe = composerSequencePreviewIpc.onProgress((payload) => {
+      if (typeof payload === "number") {
+        setSequencePreviewProgress(clamp(payload, 0, 100));
+        return;
+      }
+
+      if (!payload || typeof payload !== "object") {
+        return;
+      }
+
+      const progressPayload = payload as {
+        projectId?: unknown;
+        requestSignature?: unknown;
+        status?: unknown;
+        percent?: unknown;
+        progress?: unknown;
+        overallProgress?: unknown;
+        overallPercent?: unknown;
+        segmentIndex?: unknown;
+        totalSegments?: unknown;
+        frameIndex?: unknown;
+        totalFrames?: unknown;
+        errorMessage?: unknown;
+      };
+
+      if (
+        typeof progressPayload.projectId === "string" &&
+        progressPayload.projectId !== project.id
+      ) {
+        return;
+      }
+
+      const nextProgress =
+        typeof progressPayload.overallPercent === "number"
+          ? progressPayload.overallPercent
+          : typeof progressPayload.overallProgress === "number"
+          ? progressPayload.overallProgress
+          : typeof progressPayload.progress === "number"
+            ? progressPayload.progress
+            : typeof progressPayload.percent === "number"
+              ? progressPayload.percent
+              : null;
+
+      if (nextProgress != null) {
+        setSequencePreviewProgress(clamp(nextProgress, 0, 100));
+        const bucket = Math.floor(clamp(nextProgress, 0, 100) / 10);
+        const logKey = [
+          typeof progressPayload.requestSignature === "string"
+            ? progressPayload.requestSignature
+            : "",
+          typeof progressPayload.status === "string" ? progressPayload.status : "processing",
+          bucket,
+          typeof progressPayload.segmentIndex === "number"
+            ? progressPayload.segmentIndex
+            : -1,
+          typeof progressPayload.totalSegments === "number"
+            ? progressPayload.totalSegments
+            : -1,
+          typeof progressPayload.errorMessage === "string"
+            ? progressPayload.errorMessage
+            : "",
+        ].join("|");
+        if (sequencePreviewProgressLogRef.current !== logKey) {
+          sequencePreviewProgressLogRef.current = logKey;
+          console.info("[Composer Preview] progress", {
+            projectId: project.id,
+            requestSignature:
+              typeof progressPayload.requestSignature === "string"
+                ? progressPayload.requestSignature
+                : null,
+            status:
+              typeof progressPayload.status === "string"
+                ? progressPayload.status
+                : "processing",
+            overallPercent: clamp(nextProgress, 0, 100),
+            segmentIndex:
+              typeof progressPayload.segmentIndex === "number"
+                ? progressPayload.segmentIndex
+                : null,
+            totalSegments:
+              typeof progressPayload.totalSegments === "number"
+                ? progressPayload.totalSegments
+                : null,
+            frameIndex:
+              typeof progressPayload.frameIndex === "number"
+                ? progressPayload.frameIndex
+                : null,
+            totalFrames:
+              typeof progressPayload.totalFrames === "number"
+                ? progressPayload.totalFrames
+                : null,
+            errorMessage:
+              typeof progressPayload.errorMessage === "string"
+                ? progressPayload.errorMessage
+                : null,
+          });
+        }
+      }
+    });
+
+    return unsubscribe;
+  }, [project.id]);
 
   const pushUndo = useCallback((entry: UndoEntry) => {
     setUndoStack((previous) => [...previous.slice(-(MAX_UNDO - 1)), entry]);
@@ -578,8 +712,15 @@ export function ComposerRuntimeProvider({
       project.sequencePreview.status === "ready" &&
       typeof project.sequencePreview.filePath === "string" &&
       project.sequencePreview.filePath.length > 0;
-    const requestedStartTime = playheadRef.current;
+    const atEnd = playheadRef.current >= project.duration - 0.5 / project.fps;
+    const requestedStartTime = atEnd ? 0 : playheadRef.current;
     setSelectedClipId(null);
+    setSelectedClipIds([]);
+
+    if (atEnd) {
+      playheadRef.current = 0;
+      setPlayhead(0);
+    }
 
     if (!sequencePreviewReady) {
       setPendingSequencePlaybackStartTime(requestedStartTime);
@@ -596,14 +737,27 @@ export function ComposerRuntimeProvider({
     isPlaybackWaiting,
     isPlaying,
     previewAsset,
+    project.duration,
+    project.fps,
     project.sequencePreview.filePath,
     project.sequencePreview.status,
     stopPlayback,
   ]);
 
-  const selectClip = useCallback((clipId: string | null) => {
+  const selectClip = useCallback((clipId: string | null, addToSelection?: boolean) => {
     setPreviewAsset(null);
-    setSelectedClipId(clipId);
+    if (addToSelection && clipId) {
+      setSelectedClipIds((current) => {
+        const next = current.includes(clipId)
+          ? current.filter((id) => id !== clipId)
+          : [...current, clipId];
+        setSelectedClipId(next.length > 0 ? next[next.length - 1] : null);
+        return next;
+      });
+    } else {
+      setSelectedClipId(clipId);
+      setSelectedClipIds(clipId ? [clipId] : []);
+    }
   }, []);
 
   const previewLibraryAsset = useCallback((asset: ComposerAsset | null) => {
@@ -612,6 +766,7 @@ export function ComposerRuntimeProvider({
     setPendingSequencePlaybackStartTime(null);
     if (asset) {
       setSelectedClipId(null);
+      setSelectedClipIds([]);
       setIsPlaying(false);
       setPlaybackClockSourceState("timeline");
     }
@@ -632,9 +787,9 @@ export function ComposerRuntimeProvider({
         throw new Error("Track is locked");
       }
 
-      const expectedTrack = getTrackForType(getLiveProject().tracks, asset.type);
-      if (!expectedTrack || expectedTrack.id !== trackId) {
-        throw new Error(`"${asset.type}" assets must be dropped on a matching track`);
+      const expectedType = asset.type === "audio" ? "audio" : asset.type === "lut" ? null : "video";
+      if (!expectedType || track.type !== expectedType) {
+        throw new Error(`"${asset.type}" assets must be dropped on a ${expectedType ?? "matching"} track`);
       }
 
       // Use working path if available (for transcoded videos), otherwise use filePath
@@ -662,6 +817,7 @@ export function ComposerRuntimeProvider({
       updateClipList([...getLiveProject().clips, createdClip]);
       setPreviewAsset(null);
       setSelectedClipId(createdClip.id);
+      setSelectedClipIds([createdClip.id]);
       pushUndo({ type: "delete-added", clipId: createdClip.id });
     },
     [frameDuration, getLiveProject, getMediaDuration, project.fps, project.id, pushUndo, updateClipList],
@@ -697,6 +853,10 @@ export function ComposerRuntimeProvider({
         (updatedTrack.locked || !updatedTrack.visible)
       ) {
         setSelectedClipId(null);
+        setSelectedClipIds((current) => current.filter((id) => {
+          const clip = getLiveProject().clips.find((c) => c.id === id);
+          return clip?.trackId !== trackId;
+        }));
       }
     },
     [getLiveProject, project.id, selectedClipId, updateTrackList],
@@ -914,37 +1074,44 @@ export function ComposerRuntimeProvider({
   );
 
   const splitSelectedClip = useCallback(async () => {
-    const currentClip = getLiveProject().clips.find((clip) => clip.id === selectedClipId);
-    if (!currentClip) {
-      return;
-    }
-    const currentTrack = getLiveProject().tracks.find((track) => track.id === currentClip.trackId);
-    if (currentTrack?.locked) {
+    const idsToSplit = selectedClipIds.length > 0 ? selectedClipIds : selectedClipId ? [selectedClipId] : [];
+    if (idsToSplit.length === 0) {
       return;
     }
 
-    const splitOffset = snapTimeToFrame(playhead - currentClip.startTime, project.fps);
-    if (splitOffset <= MIN_CLIP_DURATION || splitOffset >= currentClip.duration - MIN_CLIP_DURATION) {
-      return;
-    }
+    const liveClips = getLiveProject().clips;
+    const liveTracks = getLiveProject().tracks;
+    let remainingClips = [...liveClips];
+    const newRightClipIds: string[] = [];
 
-    const originalTrimEnd = getTrimEnd(currentClip);
-    const leftClip = await composerClipIpc.update({
-      projectId: project.id,
-      clipId: currentClip.id,
-      duration: splitOffset,
-      trimEnd: snapTimeToFrame(originalTrimEnd + (currentClip.duration - splitOffset), project.fps),
-    });
+    for (const clipId of idsToSplit) {
+      const currentClip = remainingClips.find((clip) => clip.id === clipId);
+      if (!currentClip) continue;
+      const currentTrack = liveTracks.find((track) => track.id === currentClip.trackId);
+      if (currentTrack?.locked) continue;
+
+      const splitOffset = snapTimeToFrame(playhead - currentClip.startTime, project.fps);
+      if (splitOffset <= MIN_CLIP_DURATION || splitOffset >= currentClip.duration - MIN_CLIP_DURATION) {
+        continue;
+      }
+
+      const originalTrimEnd = getTrimEnd(currentClip);
+      const leftClip = await composerClipIpc.update({
+        projectId: project.id,
+        clipId: currentClip.id,
+        duration: splitOffset,
+        trimEnd: snapTimeToFrame(originalTrimEnd + (currentClip.duration - splitOffset), project.fps),
+      });
 
       const rightClip = await composerClipIpc.add({
         projectId: project.id,
         trackId: currentClip.trackId,
         sourceType: currentClip.sourceType,
         sourcePath: currentClip.sourcePath,
-      sourceAssetId: currentClip.sourceAssetId,
-      startTime: snapTimeToFrame(playhead, project.fps),
+        sourceAssetId: currentClip.sourceAssetId,
+        startTime: snapTimeToFrame(playhead, project.fps),
         duration: Math.max(frameDuration, snapTimeToFrame(currentClip.duration - splitOffset, project.fps)),
-       trimStart: snapTimeToFrame(currentClip.trimStart + splitOffset, project.fps),
+        trimStart: snapTimeToFrame(currentClip.trimStart + splitOffset, project.fps),
         trimEnd: originalTrimEnd,
         speed: currentClip.speed,
         transformOffsetX: currentClip.transformOffsetX,
@@ -960,40 +1127,57 @@ export function ComposerRuntimeProvider({
         fadeOutDuration: currentClip.fadeOutDuration,
       });
 
-    updateClipList([
-      ...getLiveProject().clips
+      remainingClips = remainingClips
         .filter((clip) => clip.id !== currentClip.id)
-        .concat(leftClip, rightClip),
-    ]);
-    setPreviewAsset(null);
-    setSelectedClipId(rightClip.id);
-    pushUndo({
-      type: "restore-split",
-      original: currentClip,
-      createdClipId: rightClip.id,
-    });
-  }, [frameDuration, getLiveProject, playhead, project.fps, project.id, pushUndo, selectedClipId, updateClipList]);
+        .concat(leftClip, rightClip);
+      newRightClipIds.push(rightClip.id);
+
+      pushUndo({ type: "restore-split", original: currentClip, createdClipId: rightClip.id });
+    }
+
+    if (newRightClipIds.length > 0) {
+      updateClipList(remainingClips);
+      setPreviewAsset(null);
+      setSelectedClipId(newRightClipIds[newRightClipIds.length - 1]);
+      setSelectedClipIds(newRightClipIds);
+    }
+  }, [frameDuration, getLiveProject, playhead, project.fps, project.id, pushUndo, selectedClipId, selectedClipIds, updateClipList]);
 
   const deleteSelectedClip = useCallback(async () => {
-    const currentClip = getLiveProject().clips.find((clip) => clip.id === selectedClipId);
-    if (!currentClip) {
-      return;
-    }
-    const currentTrack = getLiveProject().tracks.find((track) => track.id === currentClip.trackId);
-    if (currentTrack?.locked) {
+    const idsToDelete = selectedClipIds.length > 0 ? selectedClipIds : selectedClipId ? [selectedClipId] : [];
+    if (idsToDelete.length === 0) {
       return;
     }
 
-    await composerClipIpc.delete({
-      projectId: project.id,
-      clipId: currentClip.id,
+    const liveClips = getLiveProject().clips;
+    const liveTracks = getLiveProject().tracks;
+    const clipsToDelete = idsToDelete
+      .map((id) => liveClips.find((clip) => clip.id === id))
+      .filter((clip): clip is Clip => clip != null);
+
+    const unlockedClips = clipsToDelete.filter((clip) => {
+      const track = liveTracks.find((t) => t.id === clip.trackId);
+      return track && !track.locked;
     });
 
-    updateClipList(getLiveProject().clips.filter((clip) => clip.id !== currentClip.id));
+    if (unlockedClips.length === 0) {
+      return;
+    }
+
+    for (const clip of unlockedClips) {
+      await composerClipIpc.delete({ projectId: project.id, clipId: clip.id });
+    }
+
+    const deletedIds = new Set(unlockedClips.map((clip) => clip.id));
+    updateClipList(liveClips.filter((clip) => !deletedIds.has(clip.id)));
     setPreviewAsset(null);
     setSelectedClipId(null);
-    pushUndo({ type: "restore-deleted", clip: currentClip });
-  }, [getLiveProject, project.id, pushUndo, selectedClipId, updateClipList]);
+    setSelectedClipIds([]);
+
+    for (const clip of unlockedClips) {
+      pushUndo({ type: "restore-deleted", clip });
+    }
+  }, [getLiveProject, project.id, pushUndo, selectedClipId, selectedClipIds, updateClipList]);
 
   const undo = useCallback(async () => {
     const previousEntry = undoStack[undoStack.length - 1];
@@ -1014,6 +1198,7 @@ export function ComposerRuntimeProvider({
         );
         if (selectedClipId === previousEntry.clipId) {
           setSelectedClipId(null);
+          setSelectedClipIds((current) => current.filter((id) => id !== previousEntry.clipId));
         }
         break;
       }
@@ -1045,6 +1230,7 @@ export function ComposerRuntimeProvider({
         });
         updateClipList([...getLiveProject().clips, restoredClip]);
         setSelectedClipId(restoredClip.id);
+        setSelectedClipIds([restoredClip.id]);
         break;
       }
       case "restore-updated": {
@@ -1075,6 +1261,7 @@ export function ComposerRuntimeProvider({
           ),
         );
         setSelectedClipId(previousEntry.clipId);
+        setSelectedClipIds([previousEntry.clipId]);
         break;
       }
       case "restore-split": {
@@ -1109,6 +1296,7 @@ export function ComposerRuntimeProvider({
             .map((clip) => (clip.id === restoredClip.id ? restoredClip : clip)),
         );
         setSelectedClipId(restoredClip.id);
+        setSelectedClipIds([restoredClip.id]);
         break;
       }
     }
@@ -1129,11 +1317,22 @@ export function ComposerRuntimeProvider({
   ]);
 
   useEffect(() => {
+    if (isPlaybackWaiting) {
+      setIsPlaybackWaiting(false);
+      setPendingSequencePlaybackStartTime(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clips, tracks]);
+
+  useEffect(() => {
     if (previewAsset) {
       return;
     }
 
-    if (!isPlaybackWaiting && project.sequencePreview.status !== "processing") {
+    if (
+      project.sequencePreview.status === "error" ||
+      (!isPlaybackWaiting && project.sequencePreview.status !== "processing")
+    ) {
       return;
     }
 
@@ -1176,12 +1375,25 @@ export function ComposerRuntimeProvider({
   ]);
 
   useEffect(() => {
+    if (
+      project.sequencePreview.status === "ready" ||
+      project.sequencePreview.status === "stale" ||
+      project.sequencePreview.status === "missing" ||
+      project.sequencePreview.status === "error"
+    ) {
+      setSequencePreviewProgress(0);
+    }
+  }, [project.sequencePreview.status]);
+
+  useEffect(() => {
     setPreviewAsset(null);
     setSelectedClipId(null);
+    setSelectedClipIds([]);
     setPlayhead(0);
     setPendingSequencePlaybackStartTime(null);
     setIsPlaying(false);
     setIsPlaybackWaiting(false);
+    setSequencePreviewProgress(0);
     setPlaybackClockSourceState("timeline");
     setUndoStack([]);
   }, [project.id]);
@@ -1190,6 +1402,16 @@ export function ComposerRuntimeProvider({
     if (selectedClipId && !clips.some((clip) => clip.id === selectedClipId)) {
       setSelectedClipId(null);
     }
+    setSelectedClipIds((current) => {
+      const valid = current.filter((id) => clips.some((clip) => clip.id === id));
+      if (valid.length !== current.length) {
+        if (selectedClipId && !valid.includes(selectedClipId)) {
+          setSelectedClipId(valid.length > 0 ? valid[valid.length - 1] : null);
+        }
+        return valid;
+      }
+      return current;
+    });
   }, [clips, selectedClipId]);
 
   useEffect(() => {
@@ -1285,12 +1507,14 @@ export function ComposerRuntimeProvider({
       clips,
       previewAsset,
       selectedClipId,
+      selectedClipIds,
       selectedClip,
       selectedVisualClip,
       playhead,
       pendingSequencePlaybackStartTime,
       isPlaying,
       isPlaybackWaiting,
+      sequencePreviewProgress,
       zoom,
       timelineDuration,
       canUndo: undoStack.length > 0,
@@ -1330,6 +1554,7 @@ export function ComposerRuntimeProvider({
       deleteSelectedClip,
       isPlaying,
       isPlaybackWaiting,
+      sequencePreviewProgress,
       moveClip,
       pausePlayback,
       playhead,
@@ -1343,6 +1568,7 @@ export function ComposerRuntimeProvider({
       selectClip,
       selectedClip,
       selectedClipId,
+      selectedClipIds,
       selectedVisualClip,
       splitSelectedClip,
       stopPlayback,

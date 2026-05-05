@@ -1,9 +1,11 @@
 import { spawn } from "child_process";
 import { createHash } from "crypto";
-import { existsSync, mkdirSync, readdirSync, rmSync } from "fs";
+import { BrowserWindow } from "electron";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from "fs";
 import { extname, join, normalize, resolve } from "path";
 import stringify from "json-stable-stringify";
 import { normalizeClipAdjustments } from "../../src/composer/shared/clipAdjustments";
+import { getUniversalClipRect, universalRectToScreen } from "../../src/composer/shared/compositionGeometry";
 import type {
   Clip,
   ClipBlendMode,
@@ -13,19 +15,45 @@ import type {
   ComposerSequencePreviewRequest,
   Track,
 } from "../../src/composer/types/project";
-import { getComposedClipRect } from "../../src/composer/shared/compositionGeometry";
 import { loadAssetMetadata } from "./asset-metadata";
 import { loadRegistry } from "./db/project-registry";
+import { getProjectDatabase } from "./db/connection";
 import { listClips } from "./db/clips.repo";
 import { listTracks } from "./db/tracks.repo";
 import {
   getStoredSequencePreview,
   saveStoredSequencePreview,
 } from "./db/sequence-preview.repo";
-import { getProjectDatabase } from "./db/connection";
 import { ensureComposerFfmpegToolsAvailable } from "./ffmpeg";
+import {
+  createHeadlessRenderer,
+  renderSegmentInHeadlessRenderer,
+  setHeadlessRendererProgressListener,
+} from "./headless-renderer";
+import {
+  buildConcatList,
+  computeOverallProgress,
+  concatSegments,
+  createInitialManifest,
+  deleteSegments,
+  getNextDirtySegment,
+  isManifestReusable,
+  loadSegmentManifest,
+  markAllDirty,
+  markDirty,
+  markRendered,
+  saveSegmentManifest,
+  writeSegment,
+} from "./segment-cache";
+import type {
+  HeadlessRenderClip,
+  RenderSegmentProgress,
+  RenderSegmentRequest,
+  SegmentManifest,
+  SequencePreviewProgressEvent,
+} from "./sequence-preview-contract";
 
-export const SEQUENCE_PREVIEW_REQUEST_VERSION = 5;
+export const SEQUENCE_PREVIEW_REQUEST_VERSION = 6;
 const SEQUENCE_PREVIEW_EDIT_DEBOUNCE_MS = 600;
 const SEQUENCE_PREVIEW_RECONCILE_INTERVAL_MS = 15_000;
 
@@ -35,46 +63,6 @@ const SEQUENCE_PREVIEW_SCALE_BY_QUALITY: Record<ComposerPlaybackQuality, number>
   high: 0.85,
   med: 0.7,
   low: 0.55,
-};
-
-const SEQUENCE_PREVIEW_ENCODE_PROFILES: Record<
-  ComposerPlaybackQuality,
-  {
-    videoBitrate: string;
-    maxRate: string;
-    bufSize: string;
-    crf: string;
-    audioBitrate: string;
-  }
-> = {
-  full: {
-    videoBitrate: "5000k",
-    maxRate: "6500k",
-    bufSize: "13000k",
-    crf: "20",
-    audioBitrate: "192k",
-  },
-  high: {
-    videoBitrate: "3200k",
-    maxRate: "4200k",
-    bufSize: "8400k",
-    crf: "22",
-    audioBitrate: "128k",
-  },
-  med: {
-    videoBitrate: "2000k",
-    maxRate: "2600k",
-    bufSize: "5200k",
-    crf: "23",
-    audioBitrate: "96k",
-  },
-  low: {
-    videoBitrate: "1200k",
-    maxRate: "1600k",
-    bufSize: "3200k",
-    crf: "24",
-    audioBitrate: "80k",
-  },
 };
 
 interface ProjectSequencePreviewSettings {
@@ -111,9 +99,36 @@ interface ProjectSequencePreviewJobState {
   scheduledTimer: ReturnType<typeof setTimeout> | null;
 }
 
+interface DirtyRange {
+  startTime: number;
+  endTime: number;
+}
+
+interface PendingInvalidationState {
+  dirtyRange: DirtyRange | null;
+  fullReset: boolean;
+}
+
 const activeSequencePreviewJobs = new Map<string, ProjectSequencePreviewJobState>();
 const trackedSequencePreviewProjects = new Set<string>();
+const pendingSequencePreviewInvalidations = new Map<string, PendingInvalidationState>();
+const sequencePreviewProgressLogBuckets = new Map<string, number>();
 let sequencePreviewReconcileTimer: ReturnType<typeof setInterval> | null = null;
+
+function logSequencePreviewDebug(
+  message: string,
+  details?: Record<string, unknown>,
+): void {
+  if (details) {
+    console.info(`[Composer Preview] ${message}`, details);
+    return;
+  }
+  console.info(`[Composer Preview] ${message}`);
+}
+
+function clearSequencePreviewProgressLog(projectId: string, requestSignature: string): void {
+  sequencePreviewProgressLogBuckets.delete(`${projectId}:${requestSignature}`);
+}
 
 function computeHash(input: unknown): string {
   return createHash("sha256")
@@ -151,53 +166,7 @@ function clampSignedPercent(value: number): number {
   return Math.min(Math.max(value, -100), 100);
 }
 
-function clampUnsignedPercent(value: number): number {
-  if (!Number.isFinite(value)) {
-    return 0;
-  }
-  return Math.min(Math.max(value, 0), 100);
-}
-
-function clampUnit(value: number): number {
-  if (!Number.isFinite(value)) {
-    return 0;
-  }
-  return Math.min(Math.max(value, 0), 1);
-}
-
-function getProjectLutsDir(projectId: string): string {
-  return join(getProjectAssetsDir(projectId), "luts");
-}
-
-function resolveProjectLutPath(projectId: string, lutAssetId: string | null): string | null {
-  if (!lutAssetId) {
-    return null;
-  }
-
-  const lutDir = getProjectLutsDir(projectId);
-  const resolvedPath = normalize(join(lutDir, lutAssetId));
-  const normalizedDir = normalize(lutDir);
-  const normalizedDirPrefix = normalizedDir.endsWith("\\")
-    ? normalizedDir
-    : `${normalizedDir}\\`;
-  if (
-    !resolvedPath.startsWith(normalizedDirPrefix) ||
-    !existsSync(resolvedPath)
-  ) {
-    return null;
-  }
-
-  return resolvedPath;
-}
-
-function escapeFfmpegFilterPath(filePath: string): string {
-  return filePath
-    .replace(/\\/g, "/")
-    .replace(/:/g, "\\:")
-    .replace(/'/g, "\\'");
-}
-
-function getFfmpegBlendMode(mode: ClipBlendMode): string | null {
+function getCanvasBlendMode(mode: ClipBlendMode): GlobalCompositeOperation {
   switch (mode) {
     case "multiply":
       return "multiply";
@@ -206,144 +175,80 @@ function getFfmpegBlendMode(mode: ClipBlendMode): string | null {
     case "overlay":
       return "overlay";
     case "soft-light":
-      return "softlight";
+      return "soft-light";
     case "darken":
       return "darken";
     case "lighten":
       return "lighten";
+    case "normal":
     default:
-      return null;
+      return "source-over";
   }
 }
 
-function buildClipCurvesFilter(shadows: number, highlights: number): string | null {
-  if (shadows === 0 && highlights === 0) {
-    return null;
-  }
-
-  const shadowFactor = clampSignedPercent(shadows) / 100;
-  const highlightFactor = clampSignedPercent(highlights) / 100;
-  const points = [
-    `0/${formatFilterNumber(clampUnit(Math.max(0, shadowFactor * 0.08)))}`,
-    `0.25/${formatFilterNumber(clampUnit(0.25 + shadowFactor * 0.18))}`,
-    `0.75/${formatFilterNumber(clampUnit(0.75 + highlightFactor * 0.18))}`,
-    `1/${formatFilterNumber(clampUnit(1 + highlightFactor * 0.08))}`,
-  ];
-  return `curves=all='${points.join(" ")}'`;
-}
-
-function buildClipAdjustmentFilters(projectId: string, clip: Clip): string[] {
+function buildCssFilter(clip: Clip): string {
   const adjustments = normalizeClipAdjustments(clip.adjustments);
   const filters: string[] = [];
-  const temperature = clampSignedPercent(adjustments.colorCorrection.temperature) / 100;
-  const tint = clampSignedPercent(adjustments.colorCorrection.tint) / 100;
-  const hue = clampSignedPercent(adjustments.colorCorrection.hue) * 1.8;
-  const saturation =
-    1 + clampSignedPercent(adjustments.colorCorrection.saturation) / 100;
-  const exposure =
-    clampSignedPercent(adjustments.lightnessCorrection.exposure) / 200;
-  const contrast =
-    1 + clampSignedPercent(adjustments.lightnessCorrection.contrast) / 100;
-  const curvesFilter = buildClipCurvesFilter(
-    adjustments.lightnessCorrection.shadows,
-    adjustments.lightnessCorrection.highlights,
-  );
-  const sharpen = clampUnsignedPercent(adjustments.effects.sharpen);
-  const noise = clampUnsignedPercent(adjustments.effects.noise);
-  const vignette = clampUnsignedPercent(adjustments.effects.vignette);
-  const lutPath = resolveProjectLutPath(projectId, adjustments.lutAssetId);
+  const exposure = clampSignedPercent(adjustments.lightnessCorrection.exposure);
+  const contrast = clampSignedPercent(adjustments.lightnessCorrection.contrast);
+  const saturation = clampSignedPercent(adjustments.colorCorrection.saturation);
+  const hue = clampSignedPercent(adjustments.colorCorrection.hue);
 
-  if (temperature !== 0 || tint !== 0) {
-    filters.push(
-      `colorbalance=rm=${formatFilterNumber(temperature * 0.35 + tint * 0.2)}:gm=${formatFilterNumber(-tint * 0.2)}:bm=${formatFilterNumber(-temperature * 0.35)}`,
-    );
+  if (exposure !== 0) {
+    filters.push(`brightness(${(1 + exposure / 200).toFixed(4)})`);
   }
-  if (hue !== 0 || saturation !== 1) {
-    filters.push(
-      `hue=h=${formatFilterNumber(hue)}:s=${formatFilterNumber(Math.max(0, saturation))}`,
-    );
+  if (contrast !== 0) {
+    filters.push(`contrast(${(1 + contrast / 100).toFixed(4)})`);
   }
-  if (exposure !== 0 || contrast !== 1) {
-    filters.push(
-      `eq=brightness=${formatFilterNumber(exposure)}:contrast=${formatFilterNumber(Math.max(0, contrast))}`,
-    );
+  if (saturation !== 0) {
+    filters.push(`saturate(${(1 + saturation / 100).toFixed(4)})`);
   }
-  if (curvesFilter) {
-    filters.push(curvesFilter);
-  }
-  if (lutPath) {
-    filters.push("format=rgb24");
-    filters.push(`lut3d=file='${escapeFfmpegFilterPath(lutPath)}':interp=tetrahedral`);
-  }
-  if (sharpen > 0) {
-    filters.push(
-      `unsharp=5:5:${formatFilterNumber(sharpen / 20)}:5:5:0`,
-    );
-  }
-  if (noise > 0) {
-    filters.push(`noise=alls=${formatFilterNumber(noise * 0.25)}:allf=t+u`);
-  }
-  if (vignette > 0) {
-    const vignetteAngle = Math.max(0.35, 1.35 - vignette * 0.008);
-    filters.push(
-      `vignette=angle=${formatFilterNumber(vignetteAngle)}:x0=W/2:y0=H/2:mode=forward`,
-    );
+  if (hue !== 0) {
+    filters.push(`hue-rotate(${(hue * 1.8).toFixed(4)}deg)`);
   }
 
-  return filters;
+  return filters.length > 0 ? filters.join(" ") : "none";
 }
 
-function computeClipRenderedDuration(
-  clip: Clip,
-  clipSourceDuration: number,
-  clipVisibleDuration: number,
-  inputKind: ResolvedPreviewMediaSource["inputKind"],
-): number {
-  if (inputKind === "image") {
-    return clipVisibleDuration;
+function mergeDirtyRanges(
+  current: DirtyRange | null,
+  next: DirtyRange | null,
+): DirtyRange | null {
+  if (!current) {
+    return next;
   }
-
-  return clampClipDuration(
-    Math.min(
-      clipVisibleDuration,
-      clipSourceDuration / Math.max(clip.speed, 0.01),
-    ),
-  );
-}
-
-function getSequencePreviewOutputDimensions(
-  request: ComposerSequencePreviewRequest,
-): { width: number; height: number } {
-  const scale = SEQUENCE_PREVIEW_SCALE_BY_QUALITY[request.playbackQuality];
+  if (!next) {
+    return current;
+  }
   return {
-    width: normalizeEvenDimension(request.projectWidth * scale),
-    height: normalizeEvenDimension(request.projectHeight * scale),
+    startTime: Math.min(current.startTime, next.startTime),
+    endTime: Math.max(current.endTime, next.endTime),
   };
 }
 
-function getProjectSequencePreviewSettings(
+function rememberSequencePreviewInvalidation(
   projectId: string,
-): ProjectSequencePreviewSettings {
-  const db = getProjectDatabase(projectId);
-  if (!db) {
-    throw new Error(`Project ${projectId} is not open`);
-  }
-
-  const result = db.exec(
-    `SELECT duration, fps, width, height, playback_quality FROM meta LIMIT 1`,
-  );
-  const row = result[0]?.values?.[0];
-  if (!row) {
-    throw new Error(`Project ${projectId} meta row missing`);
-  }
-
-  return {
-    duration: row[0] as number,
-    fps: row[1] as number,
-    width: row[2] as number,
-    height: row[3] as number,
-    playbackQuality: ((row[4] as string) || "med") as ComposerPlaybackQuality,
+  options: { dirtyRange?: DirtyRange | null; fullReset?: boolean } = {},
+): void {
+  const previous = pendingSequencePreviewInvalidations.get(projectId) ?? {
+    dirtyRange: null,
+    fullReset: false,
   };
+  pendingSequencePreviewInvalidations.set(projectId, {
+    dirtyRange: mergeDirtyRanges(previous.dirtyRange, options.dirtyRange ?? null),
+    fullReset: previous.fullReset || options.fullReset === true,
+  });
+}
+
+function consumeSequencePreviewInvalidation(
+  projectId: string,
+): PendingInvalidationState {
+  const pending = pendingSequencePreviewInvalidations.get(projectId) ?? {
+    dirtyRange: null,
+    fullReset: false,
+  };
+  pendingSequencePreviewInvalidations.delete(projectId);
+  return pending;
 }
 
 function getProjectSummary(projectId: string) {
@@ -469,6 +374,41 @@ export function computeProjectTimelineSignature(projectId: string): string {
   }));
 
   return computeHash({ tracks, clips });
+}
+
+function getSequencePreviewOutputDimensions(
+  request: ComposerSequencePreviewRequest,
+): { width: number; height: number } {
+  const scale = SEQUENCE_PREVIEW_SCALE_BY_QUALITY[request.playbackQuality];
+  return {
+    width: normalizeEvenDimension(request.projectWidth * scale),
+    height: normalizeEvenDimension(request.projectHeight * scale),
+  };
+}
+
+function getProjectSequencePreviewSettings(
+  projectId: string,
+): ProjectSequencePreviewSettings {
+  const db = getProjectDatabase(projectId);
+  if (!db) {
+    throw new Error(`Project ${projectId} is not open`);
+  }
+
+  const result = db.exec(
+    `SELECT duration, fps, width, height, playback_quality FROM meta LIMIT 1`,
+  );
+  const row = result[0]?.values?.[0];
+  if (!row) {
+    throw new Error(`Project ${projectId} meta row missing`);
+  }
+
+  return {
+    duration: row[0] as number,
+    fps: row[1] as number,
+    width: row[2] as number,
+    height: row[3] as number,
+    playbackQuality: ((row[4] as string) || "med") as ComposerPlaybackQuality,
+  };
 }
 
 export function buildCurrentSequencePreviewRequest(
@@ -618,6 +558,7 @@ function shouldRefreshProjectSequencePreview(
   return (
     current.status === "missing" ||
     current.status === "stale" ||
+    current.status === "error" ||
     (current.status === "processing" && !isSequencePreviewJobActive(projectId))
   );
 }
@@ -666,10 +607,22 @@ function trackProjectSequencePreview(projectId: string): void {
   ensureSequencePreviewReconcileLoop();
 }
 
+function broadcastSequencePreviewProgress(
+  event: SequencePreviewProgressEvent,
+): void {
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (window.isDestroyed()) {
+      continue;
+    }
+    window.webContents.send("composer:sequence-preview-progress", event);
+  }
+}
+
 export function disposeProjectSequencePreview(projectId: string): void {
   clearScheduledSequencePreviewRefresh(projectId);
   activeSequencePreviewJobs.delete(projectId);
   trackedSequencePreviewProjects.delete(projectId);
+  pendingSequencePreviewInvalidations.delete(projectId);
   maybeStopSequencePreviewReconcileLoop();
 }
 
@@ -752,8 +705,10 @@ export function getProjectSequencePreview(
 export function invalidateProjectSequencePreview(
   projectId: string,
   causes: ComposerSequencePreviewInvalidationCause[],
+  options: { dirtyRange?: DirtyRange | null; fullReset?: boolean } = {},
 ): ComposerSequencePreview {
   const current = getProjectSequencePreview(projectId);
+  rememberSequencePreviewInvalidation(projectId, options);
   const dedupedCauses = Array.from(
     new Set([...current.invalidationReasons, ...causes]),
   );
@@ -775,7 +730,7 @@ function markProjectSequencePreviewProcessing(
   current: ComposerSequencePreview,
 ): ComposerSequencePreview {
   const now = new Date().toISOString();
-  return saveStoredSequencePreview(projectId, {
+  const processing = saveStoredSequencePreview(projectId, {
     ...current,
     status: "processing",
     errorMessage: undefined,
@@ -787,6 +742,26 @@ function markProjectSequencePreviewProcessing(
       current.filePath ??
       getProjectSequencePreviewFilePath(projectId, current.requestSignature),
   });
+  broadcastSequencePreviewProgress({
+    projectId,
+    requestSignature: processing.requestSignature,
+    status: "processing",
+    overallPercent: 0,
+    segmentIndex: null,
+    totalSegments: 0,
+    segmentPercent: null,
+    frameIndex: null,
+    totalFrames: null,
+    updatedAt: now,
+  });
+  clearSequencePreviewProgressLog(projectId, processing.requestSignature);
+  logSequencePreviewDebug("job marked processing", {
+    projectId,
+    requestSignature: processing.requestSignature,
+    playbackQuality: processing.playbackQuality,
+    outputPath: processing.filePath,
+  });
+  return processing;
 }
 
 function markProjectSequencePreviewReadyForSignature(
@@ -799,7 +774,7 @@ function markProjectSequencePreviewReadyForSignature(
     return current;
   }
   const now = new Date().toISOString();
-  return saveStoredSequencePreview(projectId, {
+  const ready = saveStoredSequencePreview(projectId, {
     ...current,
     status: "ready",
     filePath,
@@ -808,6 +783,25 @@ function markProjectSequencePreviewReadyForSignature(
     updatedAt: now,
     completedAt: now,
   });
+  broadcastSequencePreviewProgress({
+    projectId,
+    requestSignature,
+    status: "ready",
+    overallPercent: 100,
+    segmentIndex: null,
+    totalSegments: 0,
+    segmentPercent: null,
+    frameIndex: null,
+    totalFrames: null,
+    updatedAt: now,
+  });
+  clearSequencePreviewProgressLog(projectId, requestSignature);
+  logSequencePreviewDebug("job ready", {
+    projectId,
+    requestSignature,
+    filePath,
+  });
+  return ready;
 }
 
 function markProjectSequencePreviewErrorForSignature(
@@ -820,7 +814,7 @@ function markProjectSequencePreviewErrorForSignature(
     return current;
   }
   const now = new Date().toISOString();
-  return saveStoredSequencePreview(projectId, {
+  const failed = saveStoredSequencePreview(projectId, {
     ...current,
     status: "error",
     errorMessage,
@@ -829,21 +823,35 @@ function markProjectSequencePreviewErrorForSignature(
     completedAt: now,
     lastRequestedAt: current.lastRequestedAt ?? now,
   });
+  broadcastSequencePreviewProgress({
+    projectId,
+    requestSignature,
+    status: "error",
+    overallPercent: 0,
+    segmentIndex: null,
+    totalSegments: 0,
+    segmentPercent: null,
+    frameIndex: null,
+    totalFrames: null,
+    updatedAt: now,
+    errorMessage,
+  });
+  clearSequencePreviewProgressLog(projectId, requestSignature);
+  logSequencePreviewDebug("job errored", {
+    projectId,
+    requestSignature,
+    errorMessage,
+  });
+  return failed;
 }
 
 function runFfprobe(filePath: string): Promise<MediaProbeResult | null> {
-  return new Promise<MediaProbeResult | null>((resolve) => {
-    const proc = spawn("ffprobe", [
-      "-v",
-      "quiet",
-      "-of",
-      "json",
-      "-show_format",
-      "-show_streams",
-      filePath,
-    ], {
-      windowsHide: true,
-    });
+  return new Promise<MediaProbeResult | null>((resolveResult) => {
+    const proc = spawn(
+      "ffprobe",
+      ["-v", "quiet", "-of", "json", "-show_format", "-show_streams", filePath],
+      { windowsHide: true },
+    );
 
     let stdout = "";
     let settled = false;
@@ -853,7 +861,7 @@ function runFfprobe(filePath: string): Promise<MediaProbeResult | null> {
         return;
       }
       settled = true;
-      resolve(value);
+      resolveResult(value);
     };
 
     proc.stdout.on("data", (chunk) => {
@@ -886,7 +894,10 @@ function runFfprobe(filePath: string): Promise<MediaProbeResult | null> {
           audioStream?.duration,
         ]
           .map((value) => (value != null ? Number(value) : null))
-          .filter((value): value is number => value != null && Number.isFinite(value) && value > 0);
+          .filter(
+            (value): value is number =>
+              value != null && Number.isFinite(value) && value > 0,
+          );
 
         finish({
           hasVideo: videoStream != null,
@@ -902,27 +913,6 @@ function runFfprobe(filePath: string): Promise<MediaProbeResult | null> {
   });
 }
 
-function buildAtempoFilter(speed: number): string {
-  if (!Number.isFinite(speed) || speed <= 0) {
-    return "atempo=1";
-  }
-
-  const filters: string[] = [];
-  let remaining = speed;
-
-  while (remaining > 2) {
-    filters.push("atempo=2");
-    remaining /= 2;
-  }
-  while (remaining < 0.5) {
-    filters.push("atempo=0.5");
-    remaining /= 0.5;
-  }
-
-  filters.push(`atempo=${remaining.toFixed(5)}`);
-  return filters.join(",");
-}
-
 function buildClipSourceDuration(clip: Clip, probe: MediaProbeResult | null): number {
   const desiredSourceDuration = clip.duration * Math.max(clip.speed, 0.01);
   if (!probe?.duration || clip.trimEnd == null) {
@@ -936,6 +926,24 @@ function buildClipSourceDuration(clip: Clip, probe: MediaProbeResult | null): nu
   return clampClipDuration(Math.min(desiredSourceDuration, availableDuration));
 }
 
+function computeClipRenderedDuration(
+  clip: Clip,
+  clipSourceDuration: number,
+  clipVisibleDuration: number,
+  inputKind: ResolvedPreviewMediaSource["inputKind"],
+): number {
+  if (inputKind === "image") {
+    return clipVisibleDuration;
+  }
+
+  return clampClipDuration(
+    Math.min(
+      clipVisibleDuration,
+      clipSourceDuration / Math.max(clip.speed, 0.01),
+    ),
+  );
+}
+
 function computeRenderedVideoPlacement(
   probe: MediaProbeResult | null,
   outputWidth: number,
@@ -945,21 +953,42 @@ function computeRenderedVideoPlacement(
   clip: Clip,
 ): { width: number; height: number; x: number; y: number } {
   const sourceWidth = probe?.width && probe.width > 0 ? probe.width : projectWidth;
-  const sourceHeight = probe?.height && probe.height > 0 ? probe.height : projectHeight;
-  return getComposedClipRect(
-    { width: sourceWidth, height: sourceHeight },
-    { width: outputWidth, height: outputHeight },
-    { width: projectWidth, height: projectHeight },
-    clip,
+  const sourceHeight =
+    probe?.height && probe.height > 0 ? probe.height : projectHeight;
+  return universalRectToScreen(
+    getUniversalClipRect(
+      { width: sourceWidth, height: sourceHeight },
+      clip.transformOffsetX,
+      clip.transformOffsetY,
+      clip.transformScale,
+    ),
+    outputWidth / 2,
+    outputHeight / 2,
+    outputWidth / projectWidth,
   );
 }
 
-function formatFilterNumber(value: number): string {
-  if (!Number.isFinite(value)) {
-    return "0";
-  }
+function parseSvgDimensions(filePath: string): { width: number; height: number } | null {
+  try {
+    const content = readFileSync(filePath, "utf-8");
+    const viewBoxMatch = content.match(/viewBox=["']([^"']+)["']/i);
+    const widthMatch = content.match(/\bwidth=["'](\d+(?:\.\d+)?)(px)?["']/i);
+    const heightMatch = content.match(/\bheight=["'](\d+(?:\.\d+)?)(px)?["']/i);
 
-  return value.toFixed(4).replace(/\.?0+$/, "");
+    if (widthMatch && heightMatch) {
+      return { width: parseFloat(widthMatch[1]), height: parseFloat(heightMatch[1]) };
+    }
+
+    if (viewBoxMatch) {
+      const parts = viewBoxMatch[1].split(/[\s,]+/).map(Number);
+      if (parts.length === 4 && parts[2] > 0 && parts[3] > 0) {
+        return { width: parts[2], height: parts[3] };
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
 }
 
 async function resolveClipMediaSource(
@@ -988,38 +1017,32 @@ async function resolveClipMediaSource(
   const cachedProbe = probeCache.get(selectedPath) ?? runFfprobe(selectedPath);
   probeCache.set(selectedPath, cachedProbe);
 
+  let probe = await cachedProbe;
+
+  if (extension === ".svg" && (!probe || !probe.width || probe.width <= 0)) {
+    const svgDims = parseSvgDimensions(selectedPath);
+    if (svgDims) {
+      probe = {
+        ...(probe ?? {}),
+        width: svgDims.width,
+        height: svgDims.height,
+      } as MediaProbeResult;
+    }
+  }
+
   return {
     path: selectedPath,
-    probe: await cachedProbe,
+    probe,
     inputKind,
   };
 }
 
-async function renderProjectSequencePreview(
-  projectId: string,
-  plan: SequencePreviewRenderPlan,
-): Promise<void> {
-  await ensureComposerFfmpegToolsAvailable();
-
+function getOrderedClips(projectId: string): Array<{ clip: Clip; track: Track }> {
   const tracks = listTracks(projectId);
   const clips = listClips(projectId);
   const trackMap = new Map(tracks.map((track) => [track.id, track]));
-  const assetsMetadata = loadAssetMetadata(getProjectAssetsDir(projectId));
-  const probeCache = new Map<string, Promise<MediaProbeResult | null>>();
-  const outputDimensions = getSequencePreviewOutputDimensions(plan.request);
-  const outputDuration = clampClipDuration(plan.request.duration);
-  const ffmpegArgs: string[] = [
-    "-f",
-    "lavfi",
-    "-i",
-    `color=c=black:s=${outputDimensions.width}x${outputDimensions.height}:r=${plan.request.fps}:d=${outputDuration}`,
-  ];
-  const filterLines: string[] = ["[0:v]format=rgba[v0]"];
-  const audioLabels: string[] = [];
-  let videoCompositeLabel = "v0";
-  let inputIndex = 1;
 
-  const orderedClips = clips
+  return clips
     .map((clip) => ({ clip, track: trackMap.get(clip.trackId) }))
     .filter((entry): entry is { clip: Clip; track: Track } => entry.track != null)
     .sort((left, right) => {
@@ -1031,17 +1054,27 @@ async function renderProjectSequencePreview(
       }
       return left.clip.createdAt.localeCompare(right.clip.createdAt);
     });
+}
 
-  for (const { clip, track } of orderedClips) {
+async function buildHeadlessRenderClips(
+  projectId: string,
+  plan: SequencePreviewRenderPlan,
+): Promise<HeadlessRenderClip[]> {
+  const assetsMetadata = loadAssetMetadata(getProjectAssetsDir(projectId));
+  const probeCache = new Map<string, Promise<MediaProbeResult | null>>();
+  const outputDimensions = getSequencePreviewOutputDimensions(plan.request);
+  const clips: HeadlessRenderClip[] = [];
+
+  for (const { clip, track } of getOrderedClips(projectId)) {
     if (!clip.sourcePath || clip.duration <= 0 || clip.startTime >= plan.request.duration) {
       continue;
     }
 
-      const resolvedSource = await resolveClipMediaSource(
-        clip,
-        assetsMetadata,
-        probeCache,
-      );
+    const resolvedSource = await resolveClipMediaSource(
+      clip,
+      assetsMetadata,
+      probeCache,
+    );
     if (!resolvedSource) {
       continue;
     }
@@ -1059,220 +1092,279 @@ async function renderProjectSequencePreview(
       clipVisibleDuration,
       resolvedSource.inputKind,
     );
-    const inputPath = resolvedSource.path;
 
-    if (resolvedSource.inputKind === "image") {
-      ffmpegArgs.push("-loop", "1", "-t", String(clipVisibleDuration), "-i", inputPath);
-    } else {
-      if (clip.trimStart > 0) {
-        ffmpegArgs.push("-ss", String(clip.trimStart));
-      }
-      ffmpegArgs.push("-t", String(clipSourceDuration), "-i", inputPath);
-    }
+    const adjustments = normalizeClipAdjustments(clip.adjustments);
+    const hasVisual =
+      track.type === "video" &&
+      track.visible &&
+      (resolvedSource.inputKind === "image" || resolvedSource.probe?.hasVideo !== false);
+    const hasAudio = !track.muted && resolvedSource.probe?.hasAudio === true;
+    const placement = hasVisual
+      ? computeRenderedVideoPlacement(
+          resolvedSource.probe,
+          outputDimensions.width,
+          outputDimensions.height,
+          plan.request.projectWidth,
+          plan.request.projectHeight,
+          clip,
+        )
+      : null;
 
-    const currentInputIndex = inputIndex;
-    inputIndex += 1;
+    clips.push({
+      id: clip.id,
+      sourcePath: resolvedSource.path,
+      inputKind: resolvedSource.inputKind,
+      startTime: clip.startTime,
+      duration: clip.duration,
+      renderedDuration: clipRenderedDuration,
+      trimStart: clip.trimStart,
+      speed: Math.max(clip.speed, 0.01),
+      createdAt: clip.createdAt,
+      hasVisual,
+      hasAudio,
+      rect: placement,
+      opacity: clampOpacity(clip.opacity),
+      blendMode: getCanvasBlendMode(adjustments.blendMode),
+      filter: buildCssFilter(clip),
+      rotation: clip.rotationZ,
+      fadeInDuration: clampFadeDuration(clip.fadeInDuration, clipRenderedDuration),
+      fadeOutDuration: clampFadeDuration(
+        clip.fadeOutDuration,
+        Math.max(0, clipRenderedDuration),
+      ),
+      sourceDuration: resolvedSource.probe?.duration ?? null,
+    });
+  }
 
-    if (track.type === "video" && track.visible && resolvedSource.probe?.hasVideo !== false) {
-      const clipAdjustments = normalizeClipAdjustments(clip.adjustments);
-      const placement = computeRenderedVideoPlacement(
-        resolvedSource.probe,
+  return clips;
+}
+
+function normalizeManifest(manifest: SegmentManifest): SegmentManifest {
+  return {
+    ...manifest,
+    segments: manifest.segments.map((segment, index) => ({
+      ...segment,
+      index,
+      dirty: segment.dirty || !segment.file || !existsSync(segment.file),
+      file:
+        typeof segment.file === "string" && existsSync(segment.file)
+          ? segment.file
+          : null,
+    })),
+  };
+}
+
+function prepareSegmentManifest(
+  projectId: string,
+  plan: SequencePreviewRenderPlan,
+  pendingInvalidation: PendingInvalidationState,
+): SegmentManifest {
+  const outputDimensions = getSequencePreviewOutputDimensions(plan.request);
+  const existingManifest = normalizeManifest(
+    loadSegmentManifest(projectId) ??
+      createInitialManifest(
+        plan.request.duration,
         outputDimensions.width,
         outputDimensions.height,
-        plan.request.projectWidth,
-        plan.request.projectHeight,
-        clip,
-      );
-      const sourceVideoLabel = `srcv${currentInputIndex}`;
-      const nextCompositeLabel = `v${currentInputIndex}`;
-      const visualOpacity = clampOpacity(clip.opacity);
-      const fadeInDuration = clampFadeDuration(
-        clip.fadeInDuration,
-        clipRenderedDuration,
-      );
-      const fadeOutDuration = clampFadeDuration(
-        clip.fadeOutDuration,
-        Math.max(0, clipRenderedDuration - fadeInDuration),
-      );
-      const overlayCenterX = placement.x + placement.width / 2;
-      const overlayCenterY = placement.y + placement.height / 2;
-      const setPtsExpr =
-        clip.speed !== 1
-          ? `(PTS-STARTPTS)/${Math.max(clip.speed, 0.01)}+${clip.startTime}/TB`
-          : `PTS-STARTPTS+${clip.startTime}/TB`;
-      const videoFilters = [
-        `setpts=${setPtsExpr}`,
-        `scale=${formatFilterNumber(placement.width)}:${formatFilterNumber(placement.height)}:flags=lanczos`,
-        "setsar=1",
-        ...buildClipAdjustmentFilters(projectId, clip),
-        "format=rgba",
-      ];
-      if (fadeInDuration > 0) {
-        videoFilters.push(
-          `fade=t=in:st=${formatFilterNumber(clip.startTime)}:d=${formatFilterNumber(fadeInDuration)}:alpha=1`,
-        );
-      }
-      if (fadeOutDuration > 0) {
-        videoFilters.push(
-          `fade=t=out:st=${formatFilterNumber(clip.startTime + clipRenderedDuration - fadeOutDuration)}:d=${formatFilterNumber(fadeOutDuration)}:alpha=1`,
-        );
-      }
-      if (visualOpacity !== 1) {
-        videoFilters.push(`colorchannelmixer=aa=${formatFilterNumber(visualOpacity)}`);
-      }
-      if (clip.rotationZ !== 0) {
-        videoFilters.push(
-          `rotate=${formatFilterNumber((clip.rotationZ * Math.PI) / 180)}:ow='rotw(iw)':oh='roth(ih)':c=none`,
-        );
-      }
-      filterLines.push(
-        `[${currentInputIndex}:v]${videoFilters.join(",")}[${sourceVideoLabel}]`,
-      );
-      const blendMode = getFfmpegBlendMode(clipAdjustments.blendMode);
-      if (blendMode) {
-        const clipCanvasLabel = `layer${currentInputIndex}`;
-        const blendLabel = `blend${currentInputIndex}`;
-        const maskedLabel = `masked${currentInputIndex}`;
-        const maskLabel = `mask${currentInputIndex}`;
-        filterLines.push(
-          `color=c=black@0.0:s=${outputDimensions.width}x${outputDimensions.height}:r=${plan.request.fps}:d=${outputDuration},format=rgba[blank${currentInputIndex}]`,
-        );
-        filterLines.push(
-          `[blank${currentInputIndex}][${sourceVideoLabel}]overlay=${formatFilterNumber(overlayCenterX)}-w/2:${formatFilterNumber(overlayCenterY)}-h/2:eof_action=pass:repeatlast=0[${clipCanvasLabel}]`,
-        );
-        filterLines.push(`[${clipCanvasLabel}]alphaextract[${maskLabel}]`);
-        filterLines.push(
-          `[${clipCanvasLabel}][${videoCompositeLabel}]blend=all_mode=${blendMode}:c3_mode=normal[${blendLabel}]`,
-        );
-        filterLines.push(
-          `[${videoCompositeLabel}][${blendLabel}][${maskLabel}]maskedmerge[${maskedLabel}]`,
-        );
-        videoCompositeLabel = maskedLabel;
-      } else {
-        filterLines.push(
-          `[${videoCompositeLabel}][${sourceVideoLabel}]overlay=${formatFilterNumber(overlayCenterX)}-w/2:${formatFilterNumber(overlayCenterY)}-h/2:eof_action=pass:repeatlast=0[${nextCompositeLabel}]`,
-        );
-        videoCompositeLabel = nextCompositeLabel;
-      }
-    }
+        plan.request.fps,
+        plan.requestSignature,
+      ),
+  );
 
-    if (!track.muted && resolvedSource.probe?.hasAudio) {
-      const baseAudioLabel = `srca${currentInputIndex}`;
-      const delayedAudioLabel = `a${currentInputIndex}`;
-      const audioFilters = [`atrim=duration=${clipSourceDuration}`, "asetpts=PTS-STARTPTS"];
-      if (clip.speed !== 1) {
-        audioFilters.push(buildAtempoFilter(Math.max(clip.speed, 0.01)));
-      }
-      const audioFadeInDuration = clampFadeDuration(
-        clip.fadeInDuration,
-        clipRenderedDuration,
-      );
-      const audioFadeOutDuration = clampFadeDuration(
-        clip.fadeOutDuration,
-        Math.max(0, clipRenderedDuration - audioFadeInDuration),
-      );
-      if (audioFadeInDuration > 0) {
-        audioFilters.push(
-          `afade=t=in:st=0:d=${formatFilterNumber(audioFadeInDuration)}`,
-        );
-      }
-      if (audioFadeOutDuration > 0) {
-        audioFilters.push(
-          `afade=t=out:st=${formatFilterNumber(clipRenderedDuration - audioFadeOutDuration)}:d=${formatFilterNumber(audioFadeOutDuration)}`,
-        );
-      }
-      audioFilters.push(`adelay=${Math.max(0, Math.round(clip.startTime * 1000))}:all=1`);
-      filterLines.push(
-        `[${currentInputIndex}:a]${audioFilters.join(",")}[${baseAudioLabel}]`,
-      );
-      filterLines.push(`[${baseAudioLabel}]anull[${delayedAudioLabel}]`);
-      audioLabels.push(delayedAudioLabel);
-    }
-  }
-
-  if (audioLabels.length === 1) {
-    filterLines.push(`[${audioLabels[0]}]anull[aout]`);
-  } else if (audioLabels.length > 1) {
-    filterLines.push(
-      `${audioLabels.map((label) => `[${label}]`).join("")}amix=inputs=${audioLabels.length}:normalize=0:dropout_transition=0,aresample=async=1:first_pts=0[aout]`,
-    );
-  }
-
-  const encodeProfile = SEQUENCE_PREVIEW_ENCODE_PROFILES[plan.request.playbackQuality];
-  if (existsSync(plan.outputPath)) {
-    try {
-      rmSync(plan.outputPath, { force: true });
-    } catch {
-      /* ignore cleanup failure */
-    }
-  }
-
-  await new Promise<void>((resolve, reject) => {
-    let stderr = "";
-    const proc = spawn(
-      "ffmpeg",
-      [
-        ...ffmpegArgs,
-        "-filter_complex",
-        filterLines.join(";"),
-        "-map",
-        `[${videoCompositeLabel}]`,
-        ...(audioLabels.length > 0 ? ["-map", "[aout]"] : ["-an"]),
-        "-r",
-        String(plan.request.fps),
-        "-t",
-        String(outputDuration),
-        "-c:v",
-        "libx264",
-        "-preset",
-        "veryfast",
-        "-crf",
-        encodeProfile.crf,
-        "-b:v",
-        encodeProfile.videoBitrate,
-        "-maxrate",
-        encodeProfile.maxRate,
-        "-bufsize",
-        encodeProfile.bufSize,
-        "-pix_fmt",
-        "yuv420p",
-        "-movflags",
-        "+faststart",
-        ...(audioLabels.length > 0
-          ? ["-c:a", "aac", "-b:a", encodeProfile.audioBitrate]
-          : []),
-        "-y",
-        plan.outputPath,
-      ],
-      {
-        windowsHide: true,
-      },
-    );
-
-    proc.stderr.on("data", (chunk) => {
-      stderr += chunk.toString();
-    });
-
-    proc.once("error", (error) => {
-      reject(error);
-    });
-
-    proc.once("exit", (code) => {
-      if (code === 0 && existsSync(plan.outputPath)) {
-        resolve();
-        return;
-      }
-      reject(new Error(stderr || `FFmpeg exited with code ${code}`));
-    });
+  const reusable = isManifestReusable(existingManifest, {
+    duration: plan.request.duration,
+    outputWidth: outputDimensions.width,
+    outputHeight: outputDimensions.height,
+    fps: plan.request.fps,
   });
+
+  let manifest = reusable
+    ? { ...existingManifest, requestSignature: plan.requestSignature }
+    : createInitialManifest(
+        plan.request.duration,
+        outputDimensions.width,
+        outputDimensions.height,
+        plan.request.fps,
+        plan.requestSignature,
+      );
+
+  if (!reusable || pendingInvalidation.fullReset) {
+    manifest = createInitialManifest(
+      plan.request.duration,
+      outputDimensions.width,
+      outputDimensions.height,
+      plan.request.fps,
+      plan.requestSignature,
+    );
+  } else if (
+    existingManifest.requestSignature !== plan.requestSignature &&
+    pendingInvalidation.dirtyRange == null
+  ) {
+    manifest = markAllDirty(manifest);
+  }
+
+  if (pendingInvalidation.dirtyRange) {
+    manifest = markDirty(
+      manifest,
+      pendingInvalidation.dirtyRange.startTime,
+      pendingInvalidation.dirtyRange.endTime,
+    );
+  }
+
+  return saveSegmentManifest(projectId, manifest);
+}
+
+async function renderProjectSequencePreview(
+  projectId: string,
+  plan: SequencePreviewRenderPlan,
+): Promise<void> {
+  await ensureComposerFfmpegToolsAvailable();
+  await createHeadlessRenderer();
+
+  const currentPreview = getProjectSequencePreview(projectId);
+  const pendingInvalidation = consumeSequencePreviewInvalidation(projectId);
+  let manifest = prepareSegmentManifest(projectId, plan, pendingInvalidation);
+  const renderClips = await buildHeadlessRenderClips(projectId, plan);
+  logSequencePreviewDebug("render plan prepared", {
+    projectId,
+    requestSignature: plan.requestSignature,
+    playbackQuality: plan.request.playbackQuality,
+    duration: plan.request.duration,
+    fps: plan.request.fps,
+    outputPath: plan.outputPath,
+    clipCount: renderClips.length,
+    segmentCount: manifest.segments.length,
+    dirtySegmentCount: manifest.segments.filter((segment) => segment.dirty).length,
+  });
+
+  const emitSegmentProgress = (progress: RenderSegmentProgress) => {
+    const totalSegments = manifest.segments.length;
+    const overallPercent = computeOverallProgress(
+      manifest,
+      progress.segmentId,
+      progress.percent,
+    );
+    broadcastSequencePreviewProgress({
+      projectId,
+      requestSignature: plan.requestSignature,
+      status: "processing",
+      overallPercent,
+      segmentIndex: progress.segmentIndex,
+      totalSegments,
+      segmentPercent: progress.percent,
+      frameIndex: progress.frameIndex,
+      totalFrames: progress.totalFrames,
+      updatedAt: new Date().toISOString(),
+    });
+    const logKey = `${projectId}:${plan.requestSignature}`;
+    const progressBucket = Math.floor(clampOpacity(overallPercent / 100) * 10);
+    if (sequencePreviewProgressLogBuckets.get(logKey) !== progressBucket) {
+      sequencePreviewProgressLogBuckets.set(logKey, progressBucket);
+      logSequencePreviewDebug("progress", {
+        projectId,
+        requestSignature: plan.requestSignature,
+        overallPercent: Number(overallPercent.toFixed(1)),
+        segmentIndex: progress.segmentIndex + 1,
+        totalSegments,
+        frameIndex: progress.frameIndex,
+        totalFrames: progress.totalFrames,
+      });
+    }
+  };
+
+  setHeadlessRendererProgressListener(emitSegmentProgress);
+
+  try {
+    while (true) {
+      const segment = getNextDirtySegment(manifest);
+      if (!segment) {
+        break;
+      }
+
+      const request: RenderSegmentRequest = {
+        projectId,
+        requestSignature: plan.requestSignature,
+        playbackQuality: plan.request.playbackQuality,
+        segmentId: segment.id,
+        segmentIndex: segment.index,
+        startTime: segment.startTime,
+        endTime: segment.endTime,
+        outputWidth: manifest.outputWidth,
+        outputHeight: manifest.outputHeight,
+        fps: manifest.fps,
+        clips: renderClips,
+      };
+
+      logSequencePreviewDebug("rendering segment", {
+        projectId,
+        requestSignature: plan.requestSignature,
+        segmentId: segment.id,
+        segmentIndex: segment.index + 1,
+        totalSegments: manifest.segments.length,
+        startTime: segment.startTime,
+        endTime: segment.endTime,
+      });
+      const buffer = await renderSegmentInHeadlessRenderer(request);
+      const filePath = writeSegment(projectId, segment, buffer);
+      manifest = markRendered(manifest, segment.id, filePath);
+      saveSegmentManifest(projectId, manifest);
+      logSequencePreviewDebug("segment rendered", {
+        projectId,
+        requestSignature: plan.requestSignature,
+        segmentId: segment.id,
+        segmentIndex: segment.index + 1,
+        totalSegments: manifest.segments.length,
+        filePath,
+      });
+      deleteSegments(
+        projectId,
+        buildConcatList(manifest),
+      );
+    }
+  } finally {
+    setHeadlessRendererProgressListener(null);
+  }
+
+  const segmentPaths = buildConcatList(manifest);
+  logSequencePreviewDebug("concatenating segments", {
+    projectId,
+    requestSignature: plan.requestSignature,
+    segmentCount: segmentPaths.length,
+    outputPath: plan.outputPath,
+  });
+  await concatSegments(segmentPaths, plan.outputPath);
+  deleteSegments(projectId, segmentPaths);
+  logSequencePreviewDebug("concat completed", {
+    projectId,
+    requestSignature: plan.requestSignature,
+    outputPath: plan.outputPath,
+  });
+
+  if (
+    currentPreview.requestSignature !== plan.requestSignature &&
+    existsSync(plan.outputPath)
+  ) {
+    const latestPreview = getProjectSequencePreview(projectId);
+    if (latestPreview.requestSignature !== plan.requestSignature) {
+      rmSync(plan.outputPath, { force: true });
+      return;
+    }
+  }
 }
 
 async function runProjectSequencePreviewJob(
   projectId: string,
   plan: SequencePreviewRenderPlan,
 ): Promise<void> {
+  const jobStart = performance.now();
   try {
     await renderProjectSequencePreview(projectId, plan);
+    const elapsed = ((performance.now() - jobStart) / 1000).toFixed(2);
+    logSequencePreviewDebug("job completed", {
+      projectId,
+      requestSignature: plan.requestSignature,
+      durationSeconds: elapsed,
+    });
     const readyPreview = markProjectSequencePreviewReadyForSignature(
       projectId,
       plan.requestSignature,
@@ -1288,8 +1380,15 @@ async function runProjectSequencePreviewJob(
       rmSync(plan.outputPath, { force: true });
     }
   } catch (error) {
+    const elapsed = ((performance.now() - jobStart) / 1000).toFixed(2);
     const message =
       error instanceof Error ? error.message : "Failed to generate sequence preview";
+    logSequencePreviewDebug("job errored", {
+      projectId,
+      requestSignature: plan.requestSignature,
+      durationSeconds: elapsed,
+      error: message,
+    });
     try {
       if (existsSync(plan.outputPath)) {
         rmSync(plan.outputPath, { force: true });
@@ -1319,6 +1418,12 @@ function startProjectSequencePreviewJob(projectId: string): ComposerSequencePrev
   clearScheduledSequencePreviewRefresh(projectId);
   jobState.running = true;
   jobState.rerunRequested = false;
+  logSequencePreviewDebug("starting job", {
+    projectId,
+    requestSignature: processing.requestSignature,
+    status: current.status,
+    outputPath: plan.outputPath,
+  });
 
   void runProjectSequencePreviewJob(projectId, plan)
     .catch((error) => {
@@ -1370,6 +1475,13 @@ export function scheduleProjectSequencePreviewRefresh(
   trackProjectSequencePreview(projectId);
   const current = getProjectSequencePreview(projectId);
   const needsWork = shouldRefreshProjectSequencePreview(projectId, current);
+  logSequencePreviewDebug("schedule refresh", {
+    projectId,
+    status: current.status,
+    requestSignature: current.requestSignature,
+    needsWork,
+    debounceMs: options.debounceMs ?? SEQUENCE_PREVIEW_EDIT_DEBOUNCE_MS,
+  });
 
   if (!needsWork) {
     clearScheduledSequencePreviewRefresh(projectId);
@@ -1422,4 +1534,11 @@ export function ensureProjectSequencePreview(
   projectId: string,
 ): ComposerSequencePreview {
   return scheduleProjectSequencePreviewRefresh(projectId, { debounceMs: 0 });
+}
+
+export function buildDirtyRangeForClip(clip: Pick<Clip, "startTime" | "duration">): DirtyRange {
+  return {
+    startTime: Math.max(0, clip.startTime),
+    endTime: Math.max(clip.startTime, clip.startTime + Math.max(0.04, clip.duration)),
+  };
 }

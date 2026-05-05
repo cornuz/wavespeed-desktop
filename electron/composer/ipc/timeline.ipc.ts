@@ -10,10 +10,12 @@ import {
 } from "../db/tracks.repo";
 import {
   createClip,
+  getClipById,
   updateClip,
   deleteClip,
 } from "../db/clips.repo";
 import {
+  buildDirtyRangeForClip,
   invalidateProjectSequencePreview,
   scheduleProjectSequencePreviewRefresh,
 } from "../sequence-preview";
@@ -34,7 +36,9 @@ export function registerTimelineIpc(): void {
     "composer:track-add",
     async (_event, input: AddTrackInput): Promise<Track> => {
       const track = createTrack(input.projectId, input.name, input.type);
-      invalidateProjectSequencePreview(input.projectId, ["timeline"]);
+      invalidateProjectSequencePreview(input.projectId, ["timeline"], {
+        fullReset: true,
+      });
       void scheduleProjectSequencePreviewRefresh(input.projectId);
       return track;
     },
@@ -55,7 +59,9 @@ export function registerTimelineIpc(): void {
         input.visible !== undefined ||
         input.order !== undefined
       ) {
-        invalidateProjectSequencePreview(input.projectId, ["timeline"]);
+        invalidateProjectSequencePreview(input.projectId, ["timeline"], {
+          fullReset: true,
+        });
         void scheduleProjectSequencePreviewRefresh(input.projectId);
       }
       return track;
@@ -66,7 +72,9 @@ export function registerTimelineIpc(): void {
     "composer:track-delete",
     async (_event, input: DeleteTrackInput): Promise<void> => {
       deleteTrack(input.projectId, input.trackId);
-      invalidateProjectSequencePreview(input.projectId, ["timeline"]);
+      invalidateProjectSequencePreview(input.projectId, ["timeline"], {
+        fullReset: true,
+      });
       void scheduleProjectSequencePreviewRefresh(input.projectId);
     },
   );
@@ -100,7 +108,9 @@ export function registerTimelineIpc(): void {
         fadeOutDuration: input.fadeOutDuration,
         createdAt: input.createdAt,
       });
-      invalidateProjectSequencePreview(input.projectId, ["timeline"]);
+      invalidateProjectSequencePreview(input.projectId, ["timeline"], {
+        dirtyRange: buildDirtyRangeForClip(clip),
+      });
       void scheduleProjectSequencePreviewRefresh(input.projectId);
       return clip;
     },
@@ -109,6 +119,7 @@ export function registerTimelineIpc(): void {
   ipcMain.handle(
     "composer:clip-update",
     async (_event, input: UpdateClipInput): Promise<Clip> => {
+      const previousClip = getClipById(input.projectId, input.clipId);
       const clip = updateClip(input.projectId, input.clipId, {
         startTime: input.startTime,
         duration: input.duration,
@@ -128,7 +139,18 @@ export function registerTimelineIpc(): void {
         fadeInDuration: input.fadeInDuration,
         fadeOutDuration: input.fadeOutDuration,
       });
-      invalidateProjectSequencePreview(input.projectId, ["timeline"]);
+      invalidateProjectSequencePreview(input.projectId, ["timeline"], {
+        dirtyRange: {
+          startTime: Math.min(
+            buildDirtyRangeForClip(previousClip).startTime,
+            buildDirtyRangeForClip(clip).startTime,
+          ),
+          endTime: Math.max(
+            buildDirtyRangeForClip(previousClip).endTime,
+            buildDirtyRangeForClip(clip).endTime,
+          ),
+        },
+      });
       void scheduleProjectSequencePreviewRefresh(input.projectId);
       return clip;
     },
@@ -137,8 +159,11 @@ export function registerTimelineIpc(): void {
   ipcMain.handle(
     "composer:clip-delete",
     async (_event, input: DeleteClipInput): Promise<void> => {
+      const clip = getClipById(input.projectId, input.clipId);
       deleteClip(input.projectId, input.clipId);
-      invalidateProjectSequencePreview(input.projectId, ["timeline"]);
+      invalidateProjectSequencePreview(input.projectId, ["timeline"], {
+        dirtyRange: buildDirtyRangeForClip(clip),
+      });
       void scheduleProjectSequencePreviewRefresh(input.projectId);
     },
   );

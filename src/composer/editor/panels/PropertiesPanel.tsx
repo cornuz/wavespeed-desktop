@@ -460,23 +460,23 @@ export function PropertiesPanel() {
                 <div className="grid grid-cols-2 gap-2">
                   <PropertyNumberField
                     label="Position X"
-                    value={(selectedClip.transformOffsetX + 0.5) * project.width}
+                    value={selectedClip.transformOffsetX}
                     step={1}
                     decimals={2}
                     onCommit={(value) =>
                       void updateClip(selectedClip.id, {
-                        transformOffsetX: value / project.width - 0.5,
+                        transformOffsetX: value,
                       })
                     }
                   />
                   <PropertyNumberField
                     label="Position Y"
-                    value={(selectedClip.transformOffsetY + 0.5) * project.height}
+                    value={selectedClip.transformOffsetY}
                     step={1}
                     decimals={2}
                     onCommit={(value) =>
                       void updateClip(selectedClip.id, {
-                        transformOffsetY: value / project.height - 0.5,
+                        transformOffsetY: value,
                       })
                     }
                   />

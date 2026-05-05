@@ -35,6 +35,7 @@ import type {
   ImportLutsInput,
   ImportLutsByPathsInput,
 } from "@/composer/types/ipc";
+import type { ComposerAPI } from "@/types/electron";
 import type {
   ComposerProject,
   ComposerProjectSummary,
@@ -49,13 +50,7 @@ import type {
 
 function getApi() {
   if (typeof window === "undefined") return undefined;
-  return (
-    window as Window & {
-      composerAPI?: {
-        invoke: (channel: string, args?: unknown) => Promise<unknown>;
-      };
-    }
-  ).composerAPI;
+  return (window as Window & { composerAPI?: ComposerAPI }).composerAPI;
 }
 
 export function invoke<C extends ComposerIpcChannelName>(
@@ -121,6 +116,16 @@ export const composerSequencePreviewIpc = {
     input: InvalidateSequencePreviewInput,
   ): Promise<ComposerSequencePreview> =>
     invoke("composer:sequence-preview-invalidate", input),
+
+  onProgress: (callback: (payload: unknown) => void): (() => void) => {
+    const api = getApi();
+    if (!api) {
+      return () => undefined;
+    }
+
+    api.on("composer:sequence-preview-progress", callback);
+    return () => api.removeListener("composer:sequence-preview-progress", callback);
+  },
 };
 
 // ─── Track IPC ────────────────────────────────────────────────────────────────

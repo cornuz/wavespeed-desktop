@@ -7,6 +7,7 @@ import { registerAssetsIpc } from "./ipc/assets.ipc";
 import { registerLutsIpc } from "./ipc/luts.ipc";
 import { registerTimelineIpc } from "./ipc/timeline.ipc";
 import { closeAllProjectDatabases } from "./db/connection";
+import { destroyHeadlessRenderer } from "./headless-renderer";
 
 export async function initComposerModule(): Promise<void> {
   console.log("[Composer] Initializing Composer module...");
@@ -20,5 +21,6 @@ export async function initComposerModule(): Promise<void> {
 }
 
 export function closeComposerDatabases(): void {
+  destroyHeadlessRenderer();
   closeAllProjectDatabases();
 }
