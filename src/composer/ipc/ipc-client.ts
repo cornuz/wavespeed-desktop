@@ -27,6 +27,8 @@ import type {
   AddClipInput,
   UpdateClipInput,
   DeleteClipInput,
+  ResolveTimelineLutProxyInput,
+  ResolveTimelineLutProxyResult,
   ListAssetsInput,
   ImportAssetsInput,
   ImportAssetsByPathsInput,
@@ -34,8 +36,10 @@ import type {
   ListLutsInput,
   ImportLutsInput,
   ImportLutsByPathsInput,
+  ResolveLutInput,
 } from "@/composer/types/ipc";
 import type { ComposerAPI } from "@/types/electron";
+import type { ResolvedComposerLut } from "@/composer/shared/luts";
 import type {
   ComposerProject,
   ComposerProjectSummary,
@@ -152,6 +156,11 @@ export const composerClipIpc = {
 
   delete: (input: DeleteClipInput): Promise<void> =>
     invoke("composer:clip-delete", input),
+
+  resolveTimelineLutProxy: (
+    input: ResolveTimelineLutProxyInput,
+  ): Promise<ResolveTimelineLutProxyResult> =>
+    invoke("composer:clip-resolve-timeline-lut-proxy", input),
 };
 
 // ─── Asset IPC ───────────────────────────────────────────────────────────────
@@ -182,4 +191,7 @@ export const composerLutIpc = {
   importFromPaths: (
     input: ImportLutsByPathsInput,
   ): Promise<ComposerLutAsset[]> => invoke("composer:lut-import-from-paths", input),
+
+  resolve: (input: ResolveLutInput): Promise<ResolvedComposerLut | null> =>
+    invoke("composer:lut-resolve", input),
 };

@@ -18,6 +18,7 @@ import type {
   LayoutSizesMap,
   ComposerPlaybackQuality,
 } from "./project";
+import type { ResolvedComposerLut } from "../shared/luts";
 
 // ─── Input / result shapes ────────────────────────────────────────────────────
 
@@ -118,6 +119,8 @@ export interface AddClipInput {
   transformOffsetX?: number;
   transformOffsetY?: number;
   transformScale?: number;
+  flipHorizontal?: boolean;
+  flipVertical?: boolean;
   rotationZ?: number;
   opacity?: number;
   brightness?: number;
@@ -141,6 +144,8 @@ export interface UpdateClipInput {
   transformOffsetX?: number;
   transformOffsetY?: number;
   transformScale?: number;
+  flipHorizontal?: boolean;
+  flipVertical?: boolean;
   rotationZ?: number;
   opacity?: number;
   brightness?: number;
@@ -154,6 +159,18 @@ export interface UpdateClipInput {
 export interface DeleteClipInput {
   projectId: string;
   clipId: string;
+}
+
+export interface ResolveTimelineLutProxyInput {
+  projectId: string;
+  clipId: string;
+}
+
+export interface ResolveTimelineLutProxyResult {
+  derivedMediaId: string | null;
+  path: string | null;
+  status: "processing" | "ready" | "error" | null;
+  operationLabel: string | null;
 }
 
 // ─── Asset inputs ─────────────────────────────────────────────────────────────
@@ -187,6 +204,11 @@ export interface ImportLutsInput {
 export interface ImportLutsByPathsInput {
   projectId: string;
   sourcePaths: string[];
+}
+
+export interface ResolveLutInput {
+  projectId: string;
+  lutAssetId: string | null;
 }
 
 // ─── Channel map ─────────────────────────────────────────────────────────────
@@ -273,6 +295,10 @@ export type ComposerIpcChannels = {
     args: DeleteClipInput;
     result: void;
   };
+  "composer:clip-resolve-timeline-lut-proxy": {
+    args: ResolveTimelineLutProxyInput;
+    result: ResolveTimelineLutProxyResult;
+  };
 
   // Project-local assets
   "composer:asset-list": {
@@ -302,6 +328,10 @@ export type ComposerIpcChannels = {
   "composer:lut-import-from-paths": {
     args: ImportLutsByPathsInput;
     result: ComposerLutAsset[];
+  };
+  "composer:lut-resolve": {
+    args: ResolveLutInput;
+    result: ResolvedComposerLut | null;
   };
 };
 

@@ -46,11 +46,176 @@ function buildHeadlessRendererHtml(): string {
 
       const canvas = document.getElementById('composer-headless-canvas');
       const imageCache = new Map();
+      const processedImageCache = new Map();
       const videoCache = new Map();
       const audioCache = new Map();
 
       function clamp(value, min, max) {
         return Math.min(Math.max(value, min), max);
+      }
+
+      function clamp01(value) {
+        return clamp(value, 0, 1);
+      }
+
+      function getCubeLutOffset(size, redIndex, greenIndex, blueIndex) {
+        return ((blueIndex * size + greenIndex) * size + redIndex) * 3;
+      }
+
+      function normalizeLutInput(value, min, max) {
+        if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) {
+          return clamp01(value);
+        }
+        return clamp01((value - min) / (max - min));
+      }
+
+      function lerp(a, b, amount) {
+        return a + (b - a) * amount;
+      }
+
+      function sampleCubeLut(lut, red, green, blue) {
+        const size = Number.isInteger(lut?.size) ? lut.size : 0;
+        if (size < 2 || !lut?.values) {
+          return [red, green, blue];
+        }
+
+        const domainMin = Array.isArray(lut.domainMin) ? lut.domainMin : [0, 0, 0];
+        const domainMax = Array.isArray(lut.domainMax) ? lut.domainMax : [1, 1, 1];
+        const values = lut.values;
+        const maxIndex = size - 1;
+
+        const normalizedRed = normalizeLutInput(red, domainMin[0], domainMax[0]) * maxIndex;
+        const normalizedGreen = normalizeLutInput(green, domainMin[1], domainMax[1]) * maxIndex;
+        const normalizedBlue = normalizeLutInput(blue, domainMin[2], domainMax[2]) * maxIndex;
+
+        const redLow = Math.floor(normalizedRed);
+        const greenLow = Math.floor(normalizedGreen);
+        const blueLow = Math.floor(normalizedBlue);
+        const redHigh = Math.min(maxIndex, redLow + 1);
+        const greenHigh = Math.min(maxIndex, greenLow + 1);
+        const blueHigh = Math.min(maxIndex, blueLow + 1);
+
+        const redMix = normalizedRed - redLow;
+        const greenMix = normalizedGreen - greenLow;
+        const blueMix = normalizedBlue - blueLow;
+
+        const sample = (redIndex, greenIndex, blueIndex) => {
+          const offset = getCubeLutOffset(size, redIndex, greenIndex, blueIndex);
+          return [
+            values[offset] ?? red,
+            values[offset + 1] ?? green,
+            values[offset + 2] ?? blue,
+          ];
+        };
+
+        const c000 = sample(redLow, greenLow, blueLow);
+        const c100 = sample(redHigh, greenLow, blueLow);
+        const c010 = sample(redLow, greenHigh, blueLow);
+        const c110 = sample(redHigh, greenHigh, blueLow);
+        const c001 = sample(redLow, greenLow, blueHigh);
+        const c101 = sample(redHigh, greenLow, blueHigh);
+        const c011 = sample(redLow, greenHigh, blueHigh);
+        const c111 = sample(redHigh, greenHigh, blueHigh);
+
+        const redPlane0 = [
+          lerp(c000[0], c100[0], redMix),
+          lerp(c000[1], c100[1], redMix),
+          lerp(c000[2], c100[2], redMix),
+        ];
+        const redPlane1 = [
+          lerp(c010[0], c110[0], redMix),
+          lerp(c010[1], c110[1], redMix),
+          lerp(c010[2], c110[2], redMix),
+        ];
+        const redPlane2 = [
+          lerp(c001[0], c101[0], redMix),
+          lerp(c001[1], c101[1], redMix),
+          lerp(c001[2], c101[2], redMix),
+        ];
+        const redPlane3 = [
+          lerp(c011[0], c111[0], redMix),
+          lerp(c011[1], c111[1], redMix),
+          lerp(c011[2], c111[2], redMix),
+        ];
+
+        const greenPlane0 = [
+          lerp(redPlane0[0], redPlane1[0], greenMix),
+          lerp(redPlane0[1], redPlane1[1], greenMix),
+          lerp(redPlane0[2], redPlane1[2], greenMix),
+        ];
+        const greenPlane1 = [
+          lerp(redPlane2[0], redPlane3[0], greenMix),
+          lerp(redPlane2[1], redPlane3[1], greenMix),
+          lerp(redPlane2[2], redPlane3[2], greenMix),
+        ];
+
+        return [
+          clamp01(lerp(greenPlane0[0], greenPlane1[0], blueMix)),
+          clamp01(lerp(greenPlane0[1], greenPlane1[1], blueMix)),
+          clamp01(lerp(greenPlane0[2], greenPlane1[2], blueMix)),
+        ];
+      }
+
+      function applyCubeLutToImageData(imageData, lut) {
+        const data = imageData.data;
+        for (let index = 0; index < data.length; index += 4) {
+          if (data[index + 3] === 0) {
+            continue;
+          }
+
+          const [red, green, blue] = sampleCubeLut(
+            lut,
+            data[index] / 255,
+            data[index + 1] / 255,
+            data[index + 2] / 255,
+          );
+          data[index] = Math.round(red * 255);
+          data[index + 1] = Math.round(green * 255);
+          data[index + 2] = Math.round(blue * 255);
+        }
+      }
+
+      function getProcessedImageCacheKey(clip, width, height) {
+        return [
+          clip.sourcePath,
+          width,
+          height,
+          clip.lut?.cacheKey || '',
+        ].join('|');
+      }
+
+      async function loadProcessedImage(clip, rect) {
+        const width = Math.max(1, Math.round(rect.width));
+        const height = Math.max(1, Math.round(rect.height));
+        const cacheKey = getProcessedImageCacheKey(clip, width, height);
+
+        if (!processedImageCache.has(cacheKey)) {
+          processedImageCache.set(cacheKey, (async () => {
+            const image = await loadImage(clip.sourcePath);
+            const offscreen = document.createElement('canvas');
+            offscreen.width = width;
+            offscreen.height = height;
+            const offscreenCtx = offscreen.getContext('2d', { willReadFrequently: true });
+            if (!offscreenCtx) {
+              throw new Error('Failed to create LUT processing context');
+            }
+
+            offscreenCtx.clearRect(0, 0, width, height);
+            offscreenCtx.drawImage(image, 0, 0, width, height);
+
+            const imageData = offscreenCtx.getImageData(0, 0, width, height);
+            applyCubeLutToImageData(imageData, clip.lut.lut);
+            offscreenCtx.putImageData(imageData, 0, 0);
+            return offscreen;
+          })());
+        }
+
+        try {
+          return await processedImageCache.get(cacheKey);
+        } catch (error) {
+          processedImageCache.delete(cacheKey);
+          throw error;
+        }
       }
 
       function fileUrlFromPath(filePath) {
@@ -201,6 +366,11 @@ function buildHeadlessRendererHtml(): string {
             continue;
           }
 
+          const shouldApplyImageLut =
+            clip.inputKind === 'image' &&
+            clip.lutApplication === 'cube-image' &&
+            clip.lut;
+
           ctx.save();
           ctx.globalCompositeOperation = clip.blendMode || 'source-over';
           ctx.globalAlpha = alpha;
@@ -212,9 +382,24 @@ function buildHeadlessRendererHtml(): string {
           if (clip.rotation) {
             ctx.rotate((clip.rotation * Math.PI) / 180);
           }
+          if (clip.flipHorizontal || clip.flipVertical) {
+            ctx.scale(clip.flipHorizontal ? -1 : 1, clip.flipVertical ? -1 : 1);
+          }
 
           if (clip.inputKind === 'image') {
-            const image = await loadImage(clip.sourcePath);
+            let image = await loadImage(clip.sourcePath);
+            if (shouldApplyImageLut) {
+              try {
+                image = await loadProcessedImage(clip, rect);
+              } catch (error) {
+                console.warn('[Composer Preview][renderer] image LUT skipped ' + JSON.stringify({
+                  clipId: clip.id,
+                  lutAssetId: clip.requestedLutAssetId,
+                  errorMessage: error instanceof Error ? error.message : String(error),
+                }));
+                ctx.filter = clip.filter || 'none';
+              }
+            }
             ctx.drawImage(
               image,
               -rect.width / 2,

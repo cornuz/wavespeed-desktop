@@ -73,6 +73,7 @@ export function createDefaultClipAdjustments(): ClipAdjustments {
       shadows: 0,
     },
     effects: {
+      blur: 0,
       sharpen: 0,
       noise: 0,
       vignette: 0,

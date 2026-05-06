@@ -40,15 +40,17 @@ type EditableClipPatch = Partial<
     | "trackId"
     | "transformOffsetX"
     | "transformOffsetY"
-      | "transformScale"
-      | "rotationZ"
-      | "opacity"
-      | "brightness"
-      | "contrast"
-      | "saturation"
-      | "adjustments"
-      | "fadeInDuration"
-      | "fadeOutDuration"
+    | "transformScale"
+    | "flipHorizontal"
+    | "flipVertical"
+    | "rotationZ"
+    | "opacity"
+    | "brightness"
+    | "contrast"
+    | "saturation"
+    | "adjustments"
+    | "fadeInDuration"
+    | "fadeOutDuration"
   >
 >;
 
@@ -63,6 +65,8 @@ type ClipUndoSnapshot = Pick<
   | "transformOffsetX"
   | "transformOffsetY"
   | "transformScale"
+  | "flipHorizontal"
+  | "flipVertical"
   | "rotationZ"
   | "opacity"
   | "brightness"
@@ -188,6 +192,8 @@ function getUndoClipSnapshot(clip: Clip): ClipUndoSnapshot {
     transformOffsetX: clip.transformOffsetX,
     transformOffsetY: clip.transformOffsetY,
     transformScale: clip.transformScale,
+    flipHorizontal: clip.flipHorizontal,
+    flipVertical: clip.flipVertical,
     rotationZ: clip.rotationZ,
     opacity: clip.opacity,
     brightness: clip.brightness,
@@ -1016,6 +1022,8 @@ export function ComposerRuntimeProvider({
         transformOffsetX: sourceClip.transformOffsetX,
         transformOffsetY: sourceClip.transformOffsetY,
         transformScale: sourceClip.transformScale,
+        flipHorizontal: sourceClip.flipHorizontal,
+        flipVertical: sourceClip.flipVertical,
         rotationZ: sourceClip.rotationZ,
         opacity: sourceClip.opacity,
         brightness: sourceClip.brightness,
@@ -1169,6 +1177,8 @@ export function ComposerRuntimeProvider({
         transformOffsetX: currentClip.transformOffsetX,
         transformOffsetY: currentClip.transformOffsetY,
         transformScale: currentClip.transformScale,
+        flipHorizontal: currentClip.flipHorizontal,
+        flipVertical: currentClip.flipVertical,
         rotationZ: currentClip.rotationZ,
         opacity: currentClip.opacity,
         brightness: currentClip.brightness,
@@ -1271,6 +1281,8 @@ export function ComposerRuntimeProvider({
           transformOffsetX: previousEntry.clip.transformOffsetX,
           transformOffsetY: previousEntry.clip.transformOffsetY,
           transformScale: previousEntry.clip.transformScale,
+          flipHorizontal: previousEntry.clip.flipHorizontal,
+          flipVertical: previousEntry.clip.flipVertical,
           rotationZ: previousEntry.clip.rotationZ,
           opacity: previousEntry.clip.opacity,
           brightness: previousEntry.clip.brightness,
@@ -1298,6 +1310,8 @@ export function ComposerRuntimeProvider({
           transformOffsetX: previousEntry.previous.transformOffsetX,
           transformOffsetY: previousEntry.previous.transformOffsetY,
           transformScale: previousEntry.previous.transformScale,
+          flipHorizontal: previousEntry.previous.flipHorizontal,
+          flipVertical: previousEntry.previous.flipVertical,
           rotationZ: previousEntry.previous.rotationZ,
           opacity: previousEntry.previous.opacity,
           brightness: previousEntry.previous.brightness,
@@ -1333,6 +1347,8 @@ export function ComposerRuntimeProvider({
           transformOffsetX: previousEntry.original.transformOffsetX,
           transformOffsetY: previousEntry.original.transformOffsetY,
           transformScale: previousEntry.original.transformScale,
+          flipHorizontal: previousEntry.original.flipHorizontal,
+          flipVertical: previousEntry.original.flipVertical,
           rotationZ: previousEntry.original.rotationZ,
           opacity: previousEntry.original.opacity,
           brightness: previousEntry.original.brightness,

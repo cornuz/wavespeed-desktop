@@ -1,8 +1,16 @@
+import type { ParsedCubeLut } from "../../src/composer/shared/luts";
+
 export interface HeadlessRenderRect {
   x: number;
   y: number;
   width: number;
   height: number;
+}
+
+export interface HeadlessRenderResolvedLut {
+  assetId: string;
+  cacheKey: string;
+  lut: ParsedCubeLut;
 }
 
 export interface HeadlessRenderClip {
@@ -21,6 +29,11 @@ export interface HeadlessRenderClip {
   opacity: number;
   blendMode: GlobalCompositeOperation;
   filter: string;
+  requestedLutAssetId: string | null;
+  lutApplication: "none" | "cube-image";
+  lut: HeadlessRenderResolvedLut | null;
+  flipHorizontal: boolean;
+  flipVertical: boolean;
   rotation: number;
   fadeInDuration: number;
   fadeOutDuration: number;

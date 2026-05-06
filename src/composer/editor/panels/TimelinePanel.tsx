@@ -38,6 +38,7 @@ import { Slider } from "@/components/ui/slider";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/useToast";
+import { composerClipIpc } from "@/composer/ipc/ipc-client";
 import type { Clip, ComposerAsset, Track } from "@/composer/types/project";
 import { useComposerRuntime } from "../context/ComposerRuntimeContext";
 import {
@@ -90,6 +91,14 @@ type TrackDropTarget = {
 type PointerPosition = {
   x: number;
   y: number;
+};
+
+type TimelineLutProxyState = {
+  status: "loading" | "ready" | "error";
+  path: string | null;
+  derivedMediaId?: string | null;
+  operationLabel?: string | null;
+  requestKey: string;
 };
 
 function clamp(value: number, min: number, max: number): number {
@@ -237,6 +246,9 @@ export function TimelinePanel() {
   const [trackDropTarget, setTrackDropTarget] = useState<TrackDropTarget | null>(null);
   const [moveGhostPointer, setMoveGhostPointer] = useState<PointerPosition | null>(null);
   const [isCrossTrackDrag, setIsCrossTrackDrag] = useState(false);
+  const [timelineLutProxyStates, setTimelineLutProxyStates] = useState<
+    Record<string, TimelineLutProxyState>
+  >({});
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const trackListRef = useRef<HTMLDivElement | null>(null);
   const rulerRef = useRef<HTMLDivElement | null>(null);
@@ -256,6 +268,26 @@ export function TimelinePanel() {
   const maxZoom = useMemo(() => project.fps * MAX_FRAME_PIXEL_WIDTH, [project.fps]);
   const frameRuler = useMemo(() => shouldUseFrameRuler(zoom, project.fps), [project.fps, zoom]);
   const timelineWidth = Math.max(timelineDuration * zoom, viewportWidth);
+  const timelineLutProxyRequests = useMemo(
+    () =>
+      clips
+        .filter(
+          (clip) =>
+            typeof clip.sourcePath === "string" &&
+            clip.sourcePath.length > 0 &&
+            typeof clip.adjustments?.lutAssetId === "string" &&
+            clip.adjustments.lutAssetId.length > 0,
+        )
+        .map((clip) => ({
+          clipId: clip.id,
+          requestKey: `${clip.sourcePath ?? ""}|${clip.adjustments?.lutAssetId ?? ""}`,
+          existingProxyPath:
+            typeof clip.lutProxyPath === "string" && clip.lutProxyPath.length > 0
+              ? clip.lutProxyPath
+              : null,
+        })),
+    [clips],
+  );
   const rulerTicks = useMemo(() => {
     if (frameRuler) {
       const frameWidth = getFramePixelWidth(zoom, project.fps);
@@ -309,6 +341,115 @@ export function TimelinePanel() {
       setZoom(boundedZoom);
     }
   }, [maxZoom, minZoom, setZoom, zoom]);
+
+  useEffect(() => {
+    if (!project.id) {
+      return;
+    }
+
+    const requestMap = new Map(
+      timelineLutProxyRequests.map((request) => [request.clipId, request]),
+    );
+
+    setTimelineLutProxyStates((current) => {
+      const next: Record<string, TimelineLutProxyState> = {};
+      for (const request of timelineLutProxyRequests) {
+        if (request.existingProxyPath) {
+          next[request.clipId] = {
+            status: "ready",
+            path: request.existingProxyPath,
+            derivedMediaId:
+              clips.find((clip) => clip.id === request.clipId)?.derivedMediaId ?? null,
+            operationLabel: "LUT",
+            requestKey: request.requestKey,
+          };
+          continue;
+        }
+
+        const previous = current[request.clipId];
+        next[request.clipId] =
+          previous && previous.requestKey === request.requestKey
+            ? previous
+            : {
+                status: "loading",
+                path: null,
+                requestKey: request.requestKey,
+              };
+      }
+      return next;
+    });
+
+    const pendingRequests = timelineLutProxyRequests.filter(
+      (request) => !request.existingProxyPath,
+    );
+    if (pendingRequests.length === 0) {
+      return;
+    }
+
+    let cancelled = false;
+
+    void Promise.all(
+      pendingRequests.map(async (request) => {
+        try {
+          const resolved = await composerClipIpc.resolveTimelineLutProxy({
+            projectId: project.id,
+            clipId: request.clipId,
+          });
+
+          return {
+            clipId: request.clipId,
+            requestKey: request.requestKey,
+            status: resolved.status ?? "ready",
+            path: resolved.path,
+            derivedMediaId: resolved.derivedMediaId,
+            operationLabel: resolved.operationLabel,
+          };
+        } catch (error) {
+          return {
+            clipId: request.clipId,
+            requestKey: request.requestKey,
+            status: "error" as const,
+            path: null,
+            derivedMediaId: null,
+            operationLabel: null,
+            errorMessage: error instanceof Error ? error.message : "Failed to resolve LUT proxy.",
+          };
+        }
+      }),
+    ).then((results) => {
+      if (cancelled) {
+        return;
+      }
+
+      setTimelineLutProxyStates((current) => {
+        const next = { ...current };
+        for (const result of results) {
+          if (!requestMap.has(result.clipId)) {
+            delete next[result.clipId];
+            continue;
+          }
+          if (result.status === "error") {
+            console.warn(
+              `Failed to resolve LUT proxy for clip ${result.clipId} in TimelinePanel`,
+              result.errorMessage,
+            );
+          }
+          next[result.clipId] = {
+            status: result.status,
+            path: result.path,
+            derivedMediaId: result.derivedMediaId,
+            operationLabel: result.operationLabel,
+            requestKey: result.requestKey,
+          };
+        }
+        return next;
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [project.id, timelineLutProxyRequests]);
 
   useEffect(() => {
     if (viewportWidth <= 0 || autoFitProjectRef.current === project.id) {
@@ -759,71 +900,119 @@ export function TimelinePanel() {
     onClipMouseDown?: (event: MouseEvent<HTMLDivElement>) => void;
     interactive?: boolean;
     clipKey: string;
-  }) => (
-    <div
-      key={clipKey}
-      className={cn(
-        "absolute top-2 flex h-[44px] items-stretch overflow-hidden rounded-md border shadow-sm",
-        getClipFill(track.type, selected),
-        isTrackDimmed(track) && "opacity-40",
-        interactive && selected && !interaction && "cursor-grab",
-        interactive && selected && interaction?.type === "move" && "cursor-grabbing",
-        !interactive && "pointer-events-none",
-      )}
-      style={{
-        left: renderedClip.startTime * zoom,
-        width: Math.max(renderedClip.duration * zoom, 18),
-      }}
-      onMouseDown={onClipMouseDown}
-    >
-      <button
-        type="button"
-        className="w-2 shrink-0 cursor-ew-resize bg-black/20 hover:bg-black/30"
-        onMouseDown={(event) => {
-          if (!interactive || track.locked) {
-            return;
-          }
-          event.stopPropagation();
-          selectClip(renderedClip.id, event.shiftKey);
-          setInteraction({
-            type: "trim-left",
-            clip: sourceClip,
-            originX: event.clientX,
-          });
-          setDraftClip(sourceClip);
+  }) => {
+    const clipLutState = timelineLutProxyStates[sourceClip.id] ?? null;
+    const hasLut =
+      typeof renderedClip.adjustments?.lutAssetId === "string" &&
+      renderedClip.adjustments.lutAssetId.length > 0;
+    const hasDerivedVisual = Boolean(renderedClip.derivedMediaId || clipLutState?.derivedMediaId);
+    const isLutGenerating =
+      hasLut &&
+      hasDerivedVisual &&
+      clipLutState?.status === "loading";
+    const isLutReady =
+      hasLut &&
+      hasDerivedVisual &&
+      (Boolean(renderedClip.lutProxyPath) || clipLutState?.status === "ready");
+    const isLutError = hasLut && clipLutState?.status === "error";
+
+    return (
+      <div
+        key={clipKey}
+        className={cn(
+          "absolute top-2 flex h-[44px] items-stretch overflow-hidden rounded-md border shadow-sm",
+          getClipFill(track.type, selected),
+          isTrackDimmed(track) && "opacity-40",
+          interactive && selected && !interaction && "cursor-grab",
+          interactive && selected && interaction?.type === "move" && "cursor-grabbing",
+          !interactive && "pointer-events-none",
+        )}
+        style={{
+          left: renderedClip.startTime * zoom,
+          width: Math.max(renderedClip.duration * zoom, 18),
         }}
-        aria-label="Trim clip start"
-        tabIndex={interactive ? 0 : -1}
-      />
-      <div className="flex min-w-0 flex-1 flex-col justify-center px-2 text-left">
-        <div className="truncate text-xs font-medium text-white">
-          {renderedClip.sourcePath?.split(/[\\/]/).pop() ?? "Clip"}
+        onMouseDown={onClipMouseDown}
+      >
+        {hasDerivedVisual ? (
+          <div
+            className="pointer-events-none absolute inset-0"
+            style={{
+              backgroundImage:
+                isLutGenerating
+                  ? "repeating-linear-gradient(135deg, rgba(255,136,0,0.18) 0px, rgba(255,136,0,0.18) 8px, rgba(255,255,255,0.08) 8px, rgba(255,255,255,0.08) 16px)"
+                  : "repeating-linear-gradient(135deg, rgba(0,255,0,0.14) 0px, rgba(0,255,0,0.14) 8px, rgba(255,255,255,0.06) 8px, rgba(255,255,255,0.06) 16px)",
+              backgroundSize: "24px 24px",
+              animation: isLutGenerating
+                ? "composer-lut-generating-stripes 0.9s linear infinite"
+                : undefined,
+            }}
+          />
+        ) : null}
+        <button
+          type="button"
+          className="relative z-10 w-2 shrink-0 cursor-ew-resize bg-black/20 hover:bg-black/30"
+          onMouseDown={(event) => {
+            if (!interactive || track.locked) {
+              return;
+            }
+            event.stopPropagation();
+            selectClip(renderedClip.id, event.shiftKey);
+            setInteraction({
+              type: "trim-left",
+              clip: sourceClip,
+              originX: event.clientX,
+            });
+            setDraftClip(sourceClip);
+          }}
+          aria-label="Trim clip start"
+          tabIndex={interactive ? 0 : -1}
+        />
+        <div className="relative z-10 flex min-w-0 flex-1 flex-col justify-center px-2 text-left">
+          <div className="truncate text-xs font-medium text-white">
+            {renderedClip.sourcePath?.split(/[\\/]/).pop() ?? "Clip"}
+          </div>
+          <div className="truncate text-[10px] text-white/80">
+            <span>{renderedClip.duration.toFixed(2)}s</span>
+            <span className="px-1">-</span>
+            <span>{Math.round(renderedClip.duration * project.fps)}f</span>
+            {hasLut ? (
+              <>
+                <span className="px-1">-</span>
+                <span
+                  className={cn(
+                    isLutGenerating && "text-[#f80]",
+                    isLutReady && "text-[#0f0]",
+                    isLutError && "text-red-300",
+                  )}
+                >
+                  {isLutGenerating ? "LUT generating" : isLutError ? "LUT error" : "LUT"}
+                </span>
+              </>
+            ) : null}
+          </div>
         </div>
-        <div className="text-[10px] text-white/80">
-          {renderedClip.duration.toFixed(2)}s · {Math.round(renderedClip.duration * project.fps)}f
-        </div>
+        <button
+          type="button"
+          className="relative z-10 w-2 shrink-0 cursor-ew-resize bg-black/20 hover:bg-black/30"
+          onMouseDown={(event) => {
+            if (!interactive || track.locked) {
+              return;
+            }
+            event.stopPropagation();
+            selectClip(renderedClip.id, event.shiftKey);
+            setInteraction({
+              type: "trim-right",
+              clip: sourceClip,
+              originX: event.clientX,
+            });
+            setDraftClip(sourceClip);
+          }}
+          aria-label="Trim clip end"
+          tabIndex={interactive ? 0 : -1}
+        />
       </div>
-      <button
-        type="button"
-        className="w-2 shrink-0 cursor-ew-resize bg-black/20 hover:bg-black/30"
-        onMouseDown={(event) => {
-          if (!interactive || track.locked) {
-            return;
-          }
-          event.stopPropagation();
-          selectClip(renderedClip.id, event.shiftKey);
-          setInteraction({
-            type: "trim-right",
-            clip: sourceClip,
-            originX: event.clientX,
-          });
-          setDraftClip(sourceClip);
-        }}
-        aria-label="Trim clip end"
-        tabIndex={interactive ? 0 : -1}
-      />
-    </div>
-  );
+    );
+  };
 
   const moveGhostModel = useMemo(() => {
     if (
@@ -947,6 +1136,12 @@ export function TimelinePanel() {
 
   return (
     <div className="flex h-full w-full flex-col border-t border-border bg-background">
+      <style>{`
+        @keyframes composer-lut-generating-stripes {
+          0% { background-position: 0 0; }
+          100% { background-position: 24px 0; }
+        }
+      `}</style>
       <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
         <Layers className="h-4 w-4 text-muted-foreground" />
         <span className="flex-1 text-sm font-medium text-muted-foreground">Timeline</span>

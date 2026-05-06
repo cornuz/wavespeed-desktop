@@ -42,8 +42,40 @@ function getLegacySaturation(adjustments: Clip["adjustments"]): number {
   return 1 + adjustments.colorCorrection.saturation / 100;
 }
 
+function ensureClipFlipColumns(projectId: string): void {
+  const db = getProjectDatabase(projectId);
+  if (!db) {
+    throw new Error(`Project ${projectId} is not open`);
+  }
+
+  const info = db.exec(`PRAGMA table_info(clips)`);
+  const columns = new Set((info[0]?.values ?? []).map((row) => row[1] as string));
+  let didAlter = false;
+
+  if (!columns.has("flip_horizontal")) {
+    db.run(`ALTER TABLE clips ADD COLUMN flip_horizontal INTEGER NOT NULL DEFAULT 0`);
+    didAlter = true;
+  }
+  if (!columns.has("flip_vertical")) {
+    db.run(`ALTER TABLE clips ADD COLUMN flip_vertical INTEGER NOT NULL DEFAULT 0`);
+    didAlter = true;
+  }
+  if (!columns.has("lut_proxy_path")) {
+    db.run(`ALTER TABLE clips ADD COLUMN lut_proxy_path TEXT`);
+    didAlter = true;
+  }
+  if (!columns.has("derived_media_id")) {
+    db.run(`ALTER TABLE clips ADD COLUMN derived_media_id TEXT REFERENCES derived_media(id)`);
+    didAlter = true;
+  }
+
+  if (didAlter) {
+    persistProjectDatabase(projectId);
+  }
+}
+
 function rowToClip(row: unknown[]): Clip {
-  const adjustments = parseStoredAdjustments(row[17]);
+  const adjustments = parseStoredAdjustments(row[19]);
   return {
     id: row[0] as string,
     trackId: row[1] as string,
@@ -58,15 +90,19 @@ function rowToClip(row: unknown[]): Clip {
     transformOffsetX: row[10] as number,
     transformOffsetY: row[11] as number,
     transformScale: row[12] as number,
-    rotationZ: (row[13] as number | null) ?? 0,
-    opacity: (row[14] as number | null) ?? 1,
-    fadeInDuration: (row[15] as number | null) ?? 0,
-    fadeOutDuration: (row[16] as number | null) ?? 0,
+    flipHorizontal: Boolean(row[13]),
+    flipVertical: Boolean(row[14]),
+    rotationZ: (row[15] as number | null) ?? 0,
+    opacity: (row[16] as number | null) ?? 1,
+    fadeInDuration: (row[17] as number | null) ?? 0,
+    fadeOutDuration: (row[18] as number | null) ?? 0,
     brightness: getLegacyBrightness(adjustments),
     contrast: getLegacyContrast(adjustments),
     saturation: getLegacySaturation(adjustments),
     adjustments,
-    createdAt: row[18] as string,
+    derivedMediaId: (row[20] as string | null) ?? null,
+    lutProxyPath: (row[21] as string | null) ?? null,
+    createdAt: row[22] as string,
   };
 }
 
@@ -74,12 +110,14 @@ const SELECT_COLUMNS = `
   id, track_id, source_type, source_path, source_asset_id,
   start_time, duration, trim_start, trim_end, speed,
   transform_offset_x, transform_offset_y, transform_scale,
-  rotation_z, opacity, fade_in_duration, fade_out_duration, adjustments_json, created_at
+  flip_horizontal, flip_vertical, rotation_z, opacity,
+  fade_in_duration, fade_out_duration, adjustments_json, derived_media_id, lut_proxy_path, created_at
 `;
 
 // ─── Queries ──────────────────────────────────────────────────────────────────
 
 export function listClips(projectId: string): Clip[] {
+  ensureClipFlipColumns(projectId);
   const db = getProjectDatabase(projectId);
   if (!db) throw new Error(`Project ${projectId} is not open`);
 
@@ -90,6 +128,7 @@ export function listClips(projectId: string): Clip[] {
 }
 
 export function listClipsByTrack(projectId: string, trackId: string): Clip[] {
+  ensureClipFlipColumns(projectId);
   const db = getProjectDatabase(projectId);
   if (!db) throw new Error(`Project ${projectId} is not open`);
 
@@ -113,20 +152,25 @@ export function createClip(
     trimStart?: number;
     trimEnd?: number | null;
     speed?: number;
-    transformOffsetX?: number;
-    transformOffsetY?: number;
+      transformOffsetX?: number;
+      transformOffsetY?: number;
       transformScale?: number;
+      flipHorizontal?: boolean;
+      flipVertical?: boolean;
       rotationZ?: number;
       opacity?: number;
       brightness?: number;
-      contrast?: number;
-      saturation?: number;
+       contrast?: number;
+       saturation?: number;
+       derivedMediaId?: string | null;
+       lutProxyPath?: string | null;
       adjustments?: ClipAdjustmentsPatch;
       fadeInDuration?: number;
       fadeOutDuration?: number;
       createdAt?: string;
   },
 ): Clip {
+  ensureClipFlipColumns(projectId);
   const db = getProjectDatabase(projectId);
   if (!db) throw new Error(`Project ${projectId} is not open`);
 
@@ -138,8 +182,12 @@ export function createClip(
   const transformOffsetX = input.transformOffsetX ?? 0;
   const transformOffsetY = input.transformOffsetY ?? 0;
   const transformScale = input.transformScale ?? 1;
+  const flipHorizontal = input.flipHorizontal ?? false;
+  const flipVertical = input.flipVertical ?? false;
   const rotationZ = input.rotationZ ?? 0;
   const opacity = input.opacity ?? 1;
+  const derivedMediaId = input.derivedMediaId ?? null;
+  const lutProxyPath = input.lutProxyPath ?? null;
   const fadeInDuration = input.fadeInDuration ?? 0;
   const fadeOutDuration = input.fadeOutDuration ?? 0;
   const adjustments = mergeClipAdjustments(createDefaultClipAdjustments(), {
@@ -169,11 +217,11 @@ export function createClip(
 
   db.run(
     `INSERT INTO clips
-       (id, track_id, source_type, source_path, source_asset_id,
-         start_time, duration, trim_start, trim_end, speed,
-         transform_offset_x, transform_offset_y, transform_scale,
-         rotation_z, opacity, fade_in_duration, fade_out_duration, adjustments_json, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        (id, track_id, source_type, source_path, source_asset_id,
+          start_time, duration, trim_start, trim_end, speed,
+          transform_offset_x, transform_offset_y, transform_scale,
+          flip_horizontal, flip_vertical, rotation_z, opacity, fade_in_duration, fade_out_duration, adjustments_json, derived_media_id, lut_proxy_path, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
     [
       id,
       input.trackId,
@@ -188,11 +236,15 @@ export function createClip(
       transformOffsetX,
       transformOffsetY,
       transformScale,
+      Number(flipHorizontal),
+      Number(flipVertical),
       rotationZ,
       opacity,
       fadeInDuration,
       fadeOutDuration,
       JSON.stringify(adjustments),
+      derivedMediaId,
+      lutProxyPath,
       now,
     ],
   );
@@ -212,6 +264,8 @@ export function createClip(
     transformOffsetX,
     transformOffsetY,
     transformScale,
+    flipHorizontal,
+    flipVertical,
     rotationZ,
     opacity,
     brightness: getLegacyBrightness(adjustments),
@@ -220,6 +274,8 @@ export function createClip(
     fadeInDuration,
     fadeOutDuration,
     adjustments,
+    derivedMediaId,
+    lutProxyPath,
     createdAt: now,
   };
 }
@@ -239,11 +295,15 @@ export function updateClip(
       | "transformOffsetX"
       | "transformOffsetY"
       | "transformScale"
+      | "flipHorizontal"
+      | "flipVertical"
       | "rotationZ"
       | "opacity"
       | "brightness"
       | "contrast"
-      | "saturation"
+       | "saturation"
+       | "derivedMediaId"
+       | "lutProxyPath"
       | "fadeInDuration"
       | "fadeOutDuration"
     >
@@ -251,6 +311,7 @@ export function updateClip(
     adjustments?: ClipAdjustmentsPatch;
   },
 ): Clip {
+  ensureClipFlipColumns(projectId);
   const db = getProjectDatabase(projectId);
   if (!db) throw new Error(`Project ${projectId} is not open`);
 
@@ -266,8 +327,12 @@ export function updateClip(
   if (patch.transformOffsetX !== undefined) { fields.push("transform_offset_x = ?"); values.push(patch.transformOffsetX); }
   if (patch.transformOffsetY !== undefined) { fields.push("transform_offset_y = ?"); values.push(patch.transformOffsetY); }
   if (patch.transformScale !== undefined) { fields.push("transform_scale = ?"); values.push(patch.transformScale); }
+  if (patch.flipHorizontal !== undefined) { fields.push("flip_horizontal = ?"); values.push(Number(patch.flipHorizontal)); }
+  if (patch.flipVertical !== undefined) { fields.push("flip_vertical = ?"); values.push(Number(patch.flipVertical)); }
   if (patch.rotationZ !== undefined) { fields.push("rotation_z = ?"); values.push(patch.rotationZ); }
   if (patch.opacity !== undefined) { fields.push("opacity = ?"); values.push(patch.opacity); }
+  if ("derivedMediaId" in patch) { fields.push("derived_media_id = ?"); values.push(patch.derivedMediaId ?? null); }
+  if ("lutProxyPath" in patch) { fields.push("lut_proxy_path = ?"); values.push(patch.lutProxyPath ?? null); }
   if (patch.fadeInDuration !== undefined) { fields.push("fade_in_duration = ?"); values.push(patch.fadeInDuration); }
   if (patch.fadeOutDuration !== undefined) { fields.push("fade_out_duration = ?"); values.push(patch.fadeOutDuration); }
   if (
@@ -325,6 +390,7 @@ export function deleteClip(projectId: string, clipId: string): void {
 }
 
 export function getClipById(projectId: string, clipId: string): Clip {
+  ensureClipFlipColumns(projectId);
   const db = getProjectDatabase(projectId);
   if (!db) throw new Error(`Project ${projectId} is not open`);
 

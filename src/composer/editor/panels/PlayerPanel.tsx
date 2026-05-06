@@ -36,6 +36,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
+  composerClipIpc,
   composerAssetIpc,
   composerProjectIpc,
 } from "@/composer/ipc/ipc-client";
@@ -94,9 +95,12 @@ function handoffMediaElementPlayback(
     }
 
     syncMediaElementTime(element, targetTime, threshold);
-    void element.play().then(() => {
-      element.muted = false;
-    }).catch(() => undefined);
+    void element
+      .play()
+      .then(() => {
+        element.muted = false;
+      })
+      .catch(() => undefined);
   };
 
   const handleLoadedMetadata = () => {
@@ -226,10 +230,10 @@ function isImagePath(path: string | null | undefined): boolean {
 }
 
 function getCanonicalSourcePath(
-  clip: { sourcePath: string | null } | null,
+  clip: { sourcePath: string | null; lutProxyPath?: string | null } | null,
   asset: ComposerAsset | null,
 ): string | null {
-  return asset?.workingPath ?? clip?.sourcePath ?? asset?.filePath ?? null;
+  return clip?.lutProxyPath ?? asset?.workingPath ?? clip?.sourcePath ?? asset?.filePath ?? null;
 }
 
 function findAssetForClip(
@@ -277,7 +281,12 @@ function getProjectRatioLabel(width: number, height: number): string {
 
 function getActiveVisualClipsAtTime(
   clips: Clip[],
-  tracks: { id: string; type: "video" | "audio"; order: number; visible: boolean }[],
+  tracks: {
+    id: string;
+    type: "video" | "audio";
+    order: number;
+    visible: boolean;
+  }[],
   playhead: number,
 ): Clip[] {
   const sortedVisibleVideoTrackIds = tracks
@@ -295,9 +304,11 @@ function getActiveVisualClipsAtTime(
   );
 }
 
-function getVisualAdjustmentFilter(clip: {
-  adjustments: Clip["adjustments"];
-} | null): string | undefined {
+function getVisualAdjustmentFilter(
+  clip: {
+    adjustments: Clip["adjustments"];
+  } | null,
+): string | undefined {
   if (!clip) {
     return undefined;
   }
@@ -309,6 +320,9 @@ function getVisualAdjustmentFilter(clip: {
     `saturate(${Math.max(0, 1 + adjustments.colorCorrection.saturation / 100)})`,
     Math.abs(adjustments.colorCorrection.hue) > 0.1
       ? `hue-rotate(${adjustments.colorCorrection.hue * 1.8}deg)`
+      : null,
+    adjustments.effects.blur > 0.001
+      ? `blur(${Math.min(Math.max(adjustments.effects.blur, 0), 50)}px)`
       : null,
   ].filter(Boolean);
 
@@ -331,7 +345,9 @@ function getTemperatureOverlayStyle(
     return undefined;
   }
 
-  const { temperature } = normalizeClipAdjustments(clip.adjustments).colorCorrection;
+  const { temperature } = normalizeClipAdjustments(
+    clip.adjustments,
+  ).colorCorrection;
   if (Math.abs(temperature) < 0.1) {
     return undefined;
   }
@@ -357,7 +373,8 @@ function getTintOverlayStyle(
   }
 
   return {
-    backgroundColor: tint >= 0 ? "rgba(255, 90, 205, 1)" : "rgba(120, 255, 160, 1)",
+    backgroundColor:
+      tint >= 0 ? "rgba(255, 90, 205, 1)" : "rgba(120, 255, 160, 1)",
     mixBlendMode: "soft-light",
     opacity: Math.min(Math.abs(tint) / 100, 1) * 0.18,
   };
@@ -433,7 +450,6 @@ export function PlayerPanel() {
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const frameRef = useRef<HTMLDivElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const videoLayerRefs = useRef<Record<string, HTMLVideoElement | null>>({});
   const playerZoomControlRef = useRef<HTMLDivElement | null>(null);
 
   const [panelSize, setPanelSize] = useState<Size | null>(null);
@@ -448,6 +464,16 @@ export function PlayerPanel() {
   const [playerZoom, setPlayerZoom] = useState(1);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [libraryAssets, setLibraryAssets] = useState<ComposerAsset[]>([]);
+  const [resolvedInstanceLutProxyPaths, setResolvedInstanceLutProxyPaths] = useState<
+    Record<
+      string,
+      {
+        status: "loading" | "ready" | "error";
+        path: string | null;
+        requestKey: string;
+      }
+    >
+  >({});
   const playbackQuality = project.playbackQuality ?? "med";
 
   const handlePlaybackQualityChange = useCallback(
@@ -484,6 +510,10 @@ export function PlayerPanel() {
   useEffect(() => {
     void loadLibraryAssets();
   }, [loadLibraryAssets]);
+
+  useEffect(() => {
+    setResolvedInstanceLutProxyPaths({});
+  }, [project.id]);
 
   useEffect(() => {
     if (!project.id) {
@@ -546,7 +576,11 @@ export function PlayerPanel() {
             : 1;
         const fadeOutFactor =
           clip.fadeOutDuration > 0
-            ? clamp((clip.duration - clipLocalTime) / clip.fadeOutDuration, 0, 1)
+            ? clamp(
+                (clip.duration - clipLocalTime) / clip.fadeOutDuration,
+                0,
+                1,
+              )
             : 1;
 
         return {
@@ -554,6 +588,7 @@ export function PlayerPanel() {
           asset,
           canonicalPath,
           canonicalUrl,
+          lutAssetId: normalizeClipAdjustments(clip.adjustments).lutAssetId,
           clipLocalTime,
           effectiveOpacity: clamp(
             clip.opacity * Math.min(fadeInFactor, fadeOutFactor),
@@ -565,11 +600,109 @@ export function PlayerPanel() {
       }),
     [activeVisualClips, getAssetUrl, libraryAssets, mediaSizes, playhead],
   );
+  const activeInstanceLutProxyRequests = useMemo(
+    () =>
+      activeVisualLayers
+        .filter(
+          (layer) =>
+            typeof layer.clip.sourcePath === "string" &&
+            layer.clip.sourcePath.length > 0 &&
+            typeof layer.lutAssetId === "string" &&
+            layer.lutAssetId.length > 0,
+        )
+        .map((layer) => ({
+          clipId: layer.clip.id,
+          requestKey: `${layer.clip.sourcePath ?? ""}|${layer.lutAssetId ?? ""}`,
+        })),
+    [activeVisualLayers],
+  );
+  useEffect(() => {
+    if (!project.id) {
+      return;
+    }
+
+    const pendingProxyRequests = activeInstanceLutProxyRequests.filter(
+      ({ clipId, requestKey }) =>
+        resolvedInstanceLutProxyPaths[clipId] == null ||
+        resolvedInstanceLutProxyPaths[clipId]?.requestKey !== requestKey,
+    );
+    if (pendingProxyRequests.length === 0) {
+      return;
+    }
+
+    let cancelled = false;
+
+    setResolvedInstanceLutProxyPaths((current) => {
+      const next = { ...current };
+      pendingProxyRequests.forEach(({ clipId, requestKey }) => {
+        next[clipId] = {
+          status: "loading",
+          path: null,
+          requestKey,
+        };
+      });
+      return next;
+    });
+
+    void Promise.all(
+      pendingProxyRequests.map(async ({ clipId, requestKey }) => {
+        try {
+          const resolved = await composerClipIpc.resolveTimelineLutProxy({
+            projectId: project.id,
+            clipId,
+          });
+
+          return {
+            clipId,
+            status: resolved.status ?? "ready",
+            path: resolved.path,
+            requestKey,
+          };
+        } catch (error) {
+          return {
+            clipId,
+            status: "error" as const,
+            path: null,
+            requestKey,
+            errorMessage: error instanceof Error ? error.message : "Failed to resolve LUT proxy.",
+          };
+        }
+      }),
+    ).then((results) => {
+      if (cancelled) {
+        return;
+      }
+
+      setResolvedInstanceLutProxyPaths((current) => {
+        const next = { ...current };
+        results.forEach(({ clipId, status, path, requestKey, errorMessage }) => {
+          if (status === "error" && errorMessage) {
+            console.warn(
+              `Failed to resolve LUT proxy for clip ${clipId} in PlayerPanel`,
+              errorMessage,
+            );
+          }
+
+          next[clipId] = {
+            status,
+            path,
+            requestKey,
+          };
+        });
+        return next;
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeInstanceLutProxyRequests, project.id, resolvedInstanceLutProxyPaths]);
   const transformVisualLayer = useMemo(
     () =>
       selectedVisualClip
-        ? activeVisualLayers.find((layer) => layer.clip.id === selectedVisualClip.id) ??
-          null
+        ? (activeVisualLayers.find(
+            (layer) => layer.clip.id === selectedVisualClip.id,
+          ) ?? null)
         : null,
     [activeVisualLayers, selectedVisualClip],
   );
@@ -590,7 +723,10 @@ export function PlayerPanel() {
   const viewScale = baseScale * playerZoom;
 
   const screenCenter = useMemo(() => {
-    return { x: project.width * viewScale / 2, y: project.height * viewScale / 2 };
+    return {
+      x: (project.width * viewScale) / 2,
+      y: (project.height * viewScale) / 2,
+    };
   }, [project.width, project.height, viewScale]);
 
   const activeVisualRenderLayers = useMemo(
@@ -616,10 +752,20 @@ export function PlayerPanel() {
 
           return {
             ...layer,
+            canonicalPath:
+              layer.clip.lutProxyPath ??
+              resolvedInstanceLutProxyPaths[layer.clip.id]?.path ??
+              layer.canonicalPath,
+            canonicalUrl:
+              getAssetUrl(
+                layer.clip.lutProxyPath ??
+                  resolvedInstanceLutProxyPaths[layer.clip.id]?.path ??
+                  layer.canonicalPath,
+              ) ?? layer.canonicalUrl,
             uRect,
             screenRect,
             rotationStyle: {
-              transform: `rotate(${layer.clip.rotationZ}deg)`,
+              transform: `rotate(${layer.clip.rotationZ}deg) scaleX(${layer.clip.flipHorizontal ? -1 : 1}) scaleY(${layer.clip.flipVertical ? -1 : 1})`,
               transformOrigin: "center center",
             },
             adjustmentFilter: getVisualAdjustmentFilter(layer.clip),
@@ -631,13 +777,22 @@ export function PlayerPanel() {
           };
         })
         .filter((layer): layer is NonNullable<typeof layer> => layer !== null),
-    [activeVisualLayers, screenCenter, viewScale, project.width, project.height],
+    [
+      activeVisualLayers,
+      getAssetUrl,
+      resolvedInstanceLutProxyPaths,
+      screenCenter,
+      viewScale,
+      project.width,
+      project.height,
+    ],
   );
   const selectedVisualRenderLayer = useMemo(
     () =>
       selectedVisualClip
-        ? activeVisualRenderLayers.find((layer) => layer.clip.id === selectedVisualClip.id) ??
-          null
+        ? (activeVisualRenderLayers.find(
+            (layer) => layer.clip.id === selectedVisualClip.id,
+          ) ?? null)
         : null,
     [activeVisualRenderLayers, selectedVisualClip],
   );
@@ -689,6 +844,31 @@ export function PlayerPanel() {
   const playbackSourceBadge = useMemo(() => {
     return null;
   }, []);
+  const unsupportedLiveVideoLutMessage = useMemo(() => {
+    if (previewAsset || isSequencePlaybackActive) {
+      return null;
+    }
+
+    return activeVisualLayers.some(
+      (layer) =>
+        Boolean(layer.lutAssetId) &&
+        !isImagePath(layer.clip.sourcePath) &&
+        !(
+          typeof layer.clip.lutProxyPath === "string" && layer.clip.lutProxyPath.length > 0
+        ) &&
+        !(
+          typeof resolvedInstanceLutProxyPaths[layer.clip.id]?.path === "string" &&
+          resolvedInstanceLutProxyPaths[layer.clip.id]?.path.length > 0
+        ),
+    )
+      ? "Video LUT proxy is still generating."
+      : null;
+  }, [
+    activeVisualLayers,
+    isSequencePlaybackActive,
+    previewAsset,
+    resolvedInstanceLutProxyPaths,
+  ]);
   const sequencePreviewHint = useMemo(() => {
     if (previewAsset || !isPlaybackWaiting) {
       return null;
@@ -743,8 +923,7 @@ export function PlayerPanel() {
     [sequencePreviewProgressValue],
   );
   const shouldShowSequencePreviewProgress =
-    !previewAsset &&
-    sequencePreview.status === "processing";
+    !previewAsset && sequencePreview.status === "processing";
   const playbackClockMode = useMemo(() => {
     if (!isSequencePlaybackActive || previewAsset) {
       return "timeline";
@@ -756,12 +935,7 @@ export function PlayerPanel() {
   const baseRect = useMemo(
     () =>
       transformVisualLayer?.mediaSize
-        ? getUniversalClipRect(
-            transformVisualLayer.mediaSize,
-            0,
-            0,
-            1,
-          )
+        ? getUniversalClipRect(transformVisualLayer.mediaSize, 0, 0, 1)
         : null,
     [transformVisualLayer?.mediaSize],
   );
@@ -791,24 +965,34 @@ export function PlayerPanel() {
     [displayedRect, screenCenter, viewScale],
   );
   const isTransformMode = Boolean(
-    transformVisualLayer &&
-    !previewAsset &&
-    !isPlaying &&
-    displayedRect,
+    transformVisualLayer && !previewAsset && !isPlaying && displayedRect,
   );
   const visualRotationStyle = transformVisualLayer
     ? {
-        transform: `rotate(${transformVisualLayer.clip.rotationZ}deg)`,
+        transform: `rotate(${transformVisualLayer.clip.rotationZ}deg) scaleX(${transformVisualLayer.clip.flipHorizontal ? -1 : 1}) scaleY(${transformVisualLayer.clip.flipVertical ? -1 : 1})`,
         transformOrigin: "center center",
       }
     : undefined;
   const selectedVisualClipForTransform = transformVisualLayer?.clip ?? null;
+  const syncVisualLayerVideoElement = useCallback(
+    (
+      element: HTMLVideoElement,
+      layer: (typeof activeVisualRenderLayers)[number],
+    ) => {
+      const syncThreshold = 0.5 / project.fps;
+      element.pause();
+      if (Math.abs(element.playbackRate - layer.clip.speed) > 0.001) {
+        element.playbackRate = layer.clip.speed;
+      }
+      syncMediaElementTime(element, layer.clipLocalTime, syncThreshold);
+    },
+    [project.fps],
+  );
   const renderVisualLayer = useCallback(
     (
       layer: (typeof activeVisualRenderLayers)[number],
       options?: {
         opacity?: number;
-        bindVideoRef?: boolean;
         offsetX?: number;
         offsetY?: number;
       },
@@ -840,18 +1024,18 @@ export function PlayerPanel() {
             />
           ) : (
             <video
-              ref={
-                options?.bindVideoRef === false
-                  ? undefined
-                  : (element) => {
-                      videoLayerRefs.current[layer.clip.id] = element;
-                    }
-              }
+              data-player-clip-id={layer.clip.id}
               src={layer.canonicalUrl}
               className="h-full w-full object-fill"
               playsInline
               muted
               preload="auto"
+              onLoadedMetadata={(event) =>
+                syncVisualLayerVideoElement(event.currentTarget, layer)
+              }
+              onCanPlay={(event) =>
+                syncVisualLayerVideoElement(event.currentTarget, layer)
+              }
             />
           )}
           {layer.temperatureOverlayStyle ? (
@@ -881,7 +1065,7 @@ export function PlayerPanel() {
         </div>
       </div>
     ),
-    [activeVisualRenderLayers],
+    [activeVisualRenderLayers, syncVisualLayerVideoElement],
   );
 
   useEffect(() => {
@@ -950,7 +1134,11 @@ export function PlayerPanel() {
 
     let cancelled = false;
     activeVisualLayers.forEach((layer) => {
-      if (!layer.canonicalUrl || !layer.clip.sourcePath || mediaSizes[layer.clip.id]) {
+      if (
+        !layer.canonicalUrl ||
+        !layer.clip.sourcePath ||
+        mediaSizes[layer.clip.id]
+      ) {
         return;
       }
 
@@ -1035,18 +1223,24 @@ export function PlayerPanel() {
         return;
       }
 
-      const video = videoLayerRefs.current[layer.clip.id];
-      if (!video) {
+      const videos = frameRef.current?.querySelectorAll<HTMLVideoElement>(
+        `video[data-player-clip-id="${layer.clip.id}"]`,
+      );
+      if (!videos?.length) {
         return;
       }
 
-      video.pause();
-      if (Math.abs(video.playbackRate - layer.clip.speed) > 0.001) {
-        video.playbackRate = layer.clip.speed;
-      }
-      syncMediaElementTime(video, layer.clipLocalTime, syncThreshold);
+      videos.forEach((video) => {
+        syncVisualLayerVideoElement(video, layer);
+      });
     });
-  }, [activeVisualLayers, isSequencePlaybackActive, previewAsset, project.fps]);
+  }, [
+    activeVisualLayers,
+    isSequencePlaybackActive,
+    previewAsset,
+    project.fps,
+    syncVisualLayerVideoElement,
+  ]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -1275,7 +1469,9 @@ export function PlayerPanel() {
               className={cn(
                 "absolute inset-0",
                 isTransformMode ? "overflow-visible" : "overflow-hidden",
-                previewAsset && isPreviewVisualAsset && "flex items-center justify-center",
+                previewAsset &&
+                  isPreviewVisualAsset &&
+                  "flex items-center justify-center",
               )}
             >
               {livePreviewAsset?.type === "image" && previewAssetUrl ? (
@@ -1330,8 +1526,8 @@ export function PlayerPanel() {
                         }}
                       >
                         {renderVisualLayer(selectedVisualRenderLayer, {
-                          opacity: selectedVisualRenderLayer.effectiveOpacity * 0.5,
-                          bindVideoRef: false,
+                          opacity:
+                            selectedVisualRenderLayer.effectiveOpacity * 0.5,
                           offsetX: selectedOverflowExtent.width,
                           offsetY: selectedOverflowExtent.height,
                         })}
@@ -1348,8 +1544,8 @@ export function PlayerPanel() {
                         }}
                       >
                         {renderVisualLayer(selectedVisualRenderLayer, {
-                          opacity: selectedVisualRenderLayer.effectiveOpacity * 0.5,
-                          bindVideoRef: false,
+                          opacity:
+                            selectedVisualRenderLayer.effectiveOpacity * 0.5,
                           offsetX: -(project.width * viewScale),
                           offsetY: selectedOverflowExtent.height,
                         })}
@@ -1364,8 +1560,8 @@ export function PlayerPanel() {
                         }}
                       >
                         {renderVisualLayer(selectedVisualRenderLayer, {
-                          opacity: selectedVisualRenderLayer.effectiveOpacity * 0.5,
-                          bindVideoRef: false,
+                          opacity:
+                            selectedVisualRenderLayer.effectiveOpacity * 0.5,
                           offsetY: selectedOverflowExtent.height,
                         })}
                       </div>
@@ -1379,14 +1575,20 @@ export function PlayerPanel() {
                         }}
                       >
                         {renderVisualLayer(selectedVisualRenderLayer, {
-                          opacity: selectedVisualRenderLayer.effectiveOpacity * 0.5,
-                          bindVideoRef: false,
+                          opacity:
+                            selectedVisualRenderLayer.effectiveOpacity * 0.5,
                           offsetY: -(project.height * viewScale),
                         })}
                       </div>
                     </>
                   ) : null}
                 </>
+              ) : null}
+
+              {unsupportedLiveVideoLutMessage ? (
+                <div className="pointer-events-none absolute bottom-2 left-2 z-10 rounded bg-black/70 px-2 py-1 text-[10px] text-white/80">
+                  {unsupportedLiveVideoLutMessage}
+                </div>
               ) : null}
 
               {isTransformMode && displayedScreenRect ? (
@@ -1418,57 +1620,58 @@ export function PlayerPanel() {
                       height: displayedScreenRect.height,
                       ...visualRotationStyle,
                     }}
-                      onMouseDown={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        if (!displayedRect) return;
-                        setInteraction({
-                          type: "move",
-                          originScreenX: event.clientX,
-                          originScreenY: event.clientY,
-                          startUniversalRect: displayedRect,
-                        });
-                        setDraftRect(displayedRect);
-                      }}
-                    >
-                      {(["nw", "ne", "se", "sw"] as const).map((handle) => (
-                        <button
-                          key={handle}
-                          type="button"
-                          className="absolute h-3 w-3 rounded-full border border-white bg-background"
-                          style={{
-                            left: handle.includes("e") ? "100%" : "0%",
-                            top: handle.includes("s") ? "100%" : "0%",
-                            cursor: getHandleResizeCursor(
-                              handle,
-                              selectedVisualClipForTransform?.rotationZ ?? 0,
-                            ),
-                            transform: "translate(-50%, -50%)",
-                            transformOrigin: "center center",
-                          }}
-                          onMouseDown={(event) => {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            if (!displayedRect) return;
-                            setInteraction({
-                              type: "resize",
-                              handle,
-                              originScreenX: event.clientX,
-                              originScreenY: event.clientY,
-                              startUniversalRect: displayedRect,
-                              anchorPoint: getRotatedOppositeCornerAnchorUniversal(
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      if (!displayedRect) return;
+                      setInteraction({
+                        type: "move",
+                        originScreenX: event.clientX,
+                        originScreenY: event.clientY,
+                        startUniversalRect: displayedRect,
+                      });
+                      setDraftRect(displayedRect);
+                    }}
+                  >
+                    {(["nw", "ne", "se", "sw"] as const).map((handle) => (
+                      <button
+                        key={handle}
+                        type="button"
+                        className="absolute h-3 w-3 rounded-full border border-white bg-background"
+                        style={{
+                          left: handle.includes("e") ? "100%" : "0%",
+                          top: handle.includes("s") ? "100%" : "0%",
+                          cursor: getHandleResizeCursor(
+                            handle,
+                            selectedVisualClipForTransform?.rotationZ ?? 0,
+                          ),
+                          transform: "translate(-50%, -50%)",
+                          transformOrigin: "center center",
+                        }}
+                        onMouseDown={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          if (!displayedRect) return;
+                          setInteraction({
+                            type: "resize",
+                            handle,
+                            originScreenX: event.clientX,
+                            originScreenY: event.clientY,
+                            startUniversalRect: displayedRect,
+                            anchorPoint:
+                              getRotatedOppositeCornerAnchorUniversal(
                                 displayedRect,
                                 handle,
                                 selectedVisualClipForTransform?.rotationZ ?? 0,
                               ),
-                            });
-                            setDraftRect(displayedRect);
-                          }}
-                        />
-                      ))}
-                    </div>
-                  </>
-                ) : null}
+                          });
+                          setDraftRect(displayedRect);
+                        }}
+                      />
+                    ))}
+                  </div>
+                </>
+              ) : null}
             </div>
           </div>
         </div>
@@ -1494,12 +1697,13 @@ export function PlayerPanel() {
                 </div>
               ) : null}
               {sequencePreviewHint ? (
-                <div className="text-xs text-white/70">{sequencePreviewHint}</div>
+                <div className="text-xs text-white/70">
+                  {sequencePreviewHint}
+                </div>
               ) : null}
             </div>
           </div>
         ) : null}
-
       </div>
 
       <div className="shrink-0 border-t border-border bg-background/95 px-3 py-2">
@@ -1615,7 +1819,9 @@ export function PlayerPanel() {
                           size="icon"
                           className="h-7 w-7"
                           onClick={() =>
-                            setPlayerZoom((value) => Math.max(0.25, value - 0.1))
+                            setPlayerZoom((value) =>
+                              Math.max(0.25, value - 0.1),
+                            )
                           }
                         >
                           <ZoomOut className="h-4 w-4" />

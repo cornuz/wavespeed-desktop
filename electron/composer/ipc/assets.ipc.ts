@@ -1,5 +1,5 @@
 import { BrowserWindow, dialog, ipcMain } from "electron";
-import { basename, dirname, extname, join } from "path";
+import { basename, dirname, extname, join, normalize } from "path";
 import {
   copyFileSync,
   existsSync,
@@ -36,6 +36,16 @@ import {
 } from "../video-processor";
 import { ensureComposerFfmpegToolsAvailable } from "../ffmpeg";
 import { getProjectDatabase } from "../db/connection";
+import { ensureProjectLutsDir } from "../lut-library";
+import {
+  deleteDerivedMediaByIds,
+  listDerivedMediaIdsByAssetDependency,
+} from "../db/derived-media.repo";
+import { deleteClip, listClips, updateClip } from "../db/clips.repo";
+import {
+  invalidateProjectSequencePreview,
+  scheduleProjectSequencePreviewRefresh,
+} from "../sequence-preview";
 
 const IMAGE_EXTS = new Set([
   ".jpg",
@@ -77,6 +87,7 @@ const MEDIA_FILTER_EXTENSIONS = [
   "aac",
   "m4a",
   "wma",
+  "cube",
 ];
 const activeCanonicalJobs = new Set<string>();
 
@@ -95,6 +106,7 @@ function detectAssetType(fileName: string): ComposerAssetType | null {
   if (IMAGE_EXTS.has(ext)) return "image";
   if (VIDEO_EXTS.has(ext)) return "video";
   if (AUDIO_EXTS.has(ext)) return "audio";
+  if (ext === ".cube") return "lut";
   return null;
 }
 
@@ -401,9 +413,9 @@ async function processImportedVideoAsset(
 
 function listProjectAssets(projectId: string): ComposerAsset[] {
   const assetsDir = getProjectAssetsDir(projectId);
+  const lutsDir = ensureProjectLutsDir(projectId);
   if (!existsSync(assetsDir)) {
     mkdirSync(assetsDir, { recursive: true });
-    return [];
   }
 
   cleanupAssetMetadata(assetsDir);
@@ -438,13 +450,21 @@ function listProjectAssets(projectId: string): ComposerAsset[] {
     saveAssetMetadata(assetsDir, metadata);
   }
 
-  const assets = readdirSync(assetsDir, { withFileTypes: true })
-    .filter((entry) => entry.isFile() && !isInternalAssetFile(entry.name))
-    .map((entry) => {
+  const assetFiles = [
+    ...readdirSync(assetsDir, { withFileTypes: true })
+      .filter((entry) => entry.isFile() && !isInternalAssetFile(entry.name))
+      .map((entry) => ({ entry, parentDir: assetsDir })),
+    ...readdirSync(lutsDir, { withFileTypes: true })
+      .filter((entry) => entry.isFile())
+      .map((entry) => ({ entry, parentDir: lutsDir })),
+  ];
+
+  const assets = assetFiles
+    .map(({ entry, parentDir }) => {
       const type = detectAssetType(entry.name);
       if (!type) return null;
 
-      const filePath = join(assetsDir, entry.name);
+      const filePath = join(parentDir, entry.name);
       const stats = statSync(filePath);
       const meta = metadata[filePath];
       return {
@@ -455,12 +475,12 @@ function listProjectAssets(projectId: string): ComposerAsset[] {
         fileSize: stats.size,
         createdAt: stats.birthtime.toISOString(),
         modifiedAt: stats.mtime.toISOString(),
-        status: meta?.status ?? "ready",
-        statusMessage: meta?.statusMessage,
-        hasUnsupportedAudio: meta?.hasUnsupportedAudio,
-        workingPath: meta?.workingPath,
-        importProgress: meta?.importProgress,
-        locked: (meta?.status ?? "ready") !== "ready",
+        status: type === "lut" ? "ready" : (meta?.status ?? "ready"),
+        statusMessage: type === "lut" ? undefined : meta?.statusMessage,
+        hasUnsupportedAudio: type === "lut" ? undefined : meta?.hasUnsupportedAudio,
+        workingPath: type === "lut" ? undefined : meta?.workingPath,
+        importProgress: type === "lut" ? undefined : meta?.importProgress,
+        locked: type === "lut" ? false : (meta?.status ?? "ready") !== "ready",
       } satisfies ComposerAsset;
     })
     .filter((asset): asset is ComposerAsset => asset !== null)
@@ -475,6 +495,51 @@ function ensureAssetsDir(projectId: string): string {
     mkdirSync(assetsDir, { recursive: true });
   }
   return assetsDir;
+}
+
+function cleanupAssetDerivedDependencies(projectId: string, assetPath: string): void {
+  const assetType = detectAssetType(basename(assetPath));
+  const dependentDerivedIds = listDerivedMediaIdsByAssetDependency(projectId, assetPath);
+  const clips = listClips(projectId);
+  let changed = false;
+
+  if (assetType === "lut") {
+    const lutAssetId = normalize(basename(assetPath));
+    for (const clip of clips) {
+      const dependsOnDeletedDerived =
+        clip.derivedMediaId != null && dependentDerivedIds.includes(clip.derivedMediaId);
+      if (clip.adjustments.lutAssetId !== lutAssetId && !dependsOnDeletedDerived) {
+        continue;
+      }
+
+      updateClip(projectId, clip.id, {
+        adjustments: { lutAssetId: null },
+        derivedMediaId: null,
+        lutProxyPath: null,
+      });
+      changed = true;
+    }
+  } else {
+    for (const clip of clips) {
+      if (clip.sourceAssetId !== assetPath) {
+        continue;
+      }
+      deleteClip(projectId, clip.id);
+      changed = true;
+    }
+  }
+
+  if (dependentDerivedIds.length > 0) {
+    deleteDerivedMediaByIds(projectId, dependentDerivedIds);
+    changed = true;
+  }
+
+  if (changed) {
+    invalidateProjectSequencePreview(projectId, ["timeline"], {
+      fullReset: true,
+    });
+    void scheduleProjectSequencePreviewRefresh(projectId);
+  }
 }
 
 async function deleteAssetFile(filePath: string): Promise<void> {
@@ -659,9 +724,15 @@ export function registerAssetsIpc(): void {
     "composer:asset-delete",
     async (_event, input: DeleteAssetInput): Promise<ComposerAsset[]> => {
       const assetsDir = ensureAssetsDir(input.projectId);
+      const lutsDir = ensureProjectLutsDir(input.projectId);
       const assetPath = input.assetId;
 
-      if (assetPath.startsWith(assetsDir) && existsSync(assetPath)) {
+      cleanupAssetDerivedDependencies(input.projectId, assetPath);
+
+      if (
+        (assetPath.startsWith(assetsDir) || assetPath.startsWith(lutsDir)) &&
+        existsSync(assetPath)
+      ) {
         const metadata = loadAssetMetadata(assetsDir);
         const sidecarPaths = collectAssetSidecarPaths(
           assetPath,
@@ -678,7 +749,9 @@ export function registerAssetsIpc(): void {
 
         activeCanonicalJobs.delete(assetPath);
 
-        deleteAssetMetadata(assetsDir, assetPath);
+        if (assetPath.startsWith(assetsDir)) {
+          deleteAssetMetadata(assetsDir, assetPath);
+        }
       }
 
       cleanupAssetMetadata(assetsDir);

@@ -62,6 +62,7 @@ export type ClipBlendMode =
 export type RegionStatus = "pending" | "success" | "error" | "stale";
 
 export type ComposerPlaybackQuality = "full" | "high" | "med" | "low";
+export type DerivedMediaStatus = "processing" | "ready" | "error";
 
 // ─── Registry entry (persisted in composer.json) ─────────────────────────────
 
@@ -118,6 +119,10 @@ export interface Clip {
   transformOffsetY: number;
   /** Scale multiplier over default contain-fit placement. */
   transformScale: number;
+  /** Mirrors the visual layer on the X axis around its center. */
+  flipHorizontal: boolean;
+  /** Mirrors the visual layer on the Y axis around its center. */
+  flipVertical: boolean;
   /** Z-axis rotation in degrees. */
   rotationZ: number;
   /** Visual opacity, where 1 is fully opaque. */
@@ -134,6 +139,10 @@ export interface Clip {
   fadeOutDuration: number;
   /** Persisted adjust-panel settings for sequence preview parity. */
   adjustments: ClipAdjustments;
+  /** Optional reference to a derived-media registry node used as the clip source. */
+  derivedMediaId?: string | null;
+  /** Optional persisted full-size LUT-applied proxy path for this clip instance. */
+  lutProxyPath?: string | null;
   createdAt: string; // ISO 8601
 }
 
@@ -152,6 +161,7 @@ export interface ClipLightnessCorrection {
 }
 
 export interface ClipEffects {
+  blur: number;
   sharpen: number;
   noise: number;
   vignette: number;

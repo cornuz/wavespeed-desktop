@@ -19,6 +19,7 @@ export function buildCssFilter(
     0,
     1 + normalized.colorCorrection.saturation / 100,
   );
+  const blur = Math.min(Math.max(normalized.effects.blur, 0), 50);
   const filters = [
     Math.abs(brightness - 1) > FILTER_EPSILON
       ? `brightness(${brightness})`
@@ -30,6 +31,7 @@ export function buildCssFilter(
     Math.abs(normalized.colorCorrection.hue) > 0.1
       ? `hue-rotate(${normalized.colorCorrection.hue * 1.8}deg)`
       : null,
+    blur > FILTER_EPSILON ? `blur(${blur}px)` : null,
   ].filter((value): value is string => value != null);
 
   return filters.length > 0 ? filters.join(" ") : "none";

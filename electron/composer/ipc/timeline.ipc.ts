@@ -19,6 +19,10 @@ import {
   invalidateProjectSequencePreview,
   scheduleProjectSequencePreviewRefresh,
 } from "../sequence-preview";
+import {
+  clearTimelineLutProxy,
+  ensureTimelineLutProxy,
+} from "../timeline-lut-proxy";
 import type { Track, Clip } from "../../../src/composer/types/project";
 import type {
   AddTrackInput,
@@ -27,6 +31,7 @@ import type {
   AddClipInput,
   UpdateClipInput,
   DeleteClipInput,
+  ResolveTimelineLutProxyResult,
 } from "../../../src/composer/types/ipc";
 
 export function registerTimelineIpc(): void {
@@ -98,6 +103,8 @@ export function registerTimelineIpc(): void {
         transformOffsetX: input.transformOffsetX,
         transformOffsetY: input.transformOffsetY,
         transformScale: input.transformScale,
+        flipHorizontal: input.flipHorizontal,
+        flipVertical: input.flipVertical,
         rotationZ: input.rotationZ,
         opacity: input.opacity,
         brightness: input.brightness,
@@ -108,6 +115,17 @@ export function registerTimelineIpc(): void {
         fadeOutDuration: input.fadeOutDuration,
         createdAt: input.createdAt,
       });
+      try {
+        const derived = await ensureTimelineLutProxy(input.projectId, clip);
+        clip.derivedMediaId = derived.derivedMediaId;
+        clip.lutProxyPath = derived.path;
+        updateClip(input.projectId, clip.id, {
+          derivedMediaId: derived.derivedMediaId,
+          lutProxyPath: derived.path,
+        });
+      } catch (error) {
+        console.warn("[Composer] Failed to generate timeline LUT proxy on clip add:", error);
+      }
       invalidateProjectSequencePreview(input.projectId, ["timeline"], {
         dirtyRange: buildDirtyRangeForClip(clip),
       });
@@ -130,6 +148,8 @@ export function registerTimelineIpc(): void {
         transformOffsetX: input.transformOffsetX,
         transformOffsetY: input.transformOffsetY,
         transformScale: input.transformScale,
+        flipHorizontal: input.flipHorizontal,
+        flipVertical: input.flipVertical,
         rotationZ: input.rotationZ,
         opacity: input.opacity,
         brightness: input.brightness,
@@ -139,6 +159,20 @@ export function registerTimelineIpc(): void {
         fadeInDuration: input.fadeInDuration,
         fadeOutDuration: input.fadeOutDuration,
       });
+      try {
+        const derived = await ensureTimelineLutProxy(input.projectId, clip);
+        clip.derivedMediaId = derived.derivedMediaId;
+        clip.lutProxyPath = derived.path;
+        updateClip(input.projectId, clip.id, {
+          derivedMediaId: derived.derivedMediaId,
+          lutProxyPath: derived.path,
+        });
+      } catch (error) {
+        console.warn(
+          "[Composer] Failed to generate timeline LUT proxy on clip update:",
+          error,
+        );
+      }
       invalidateProjectSequencePreview(input.projectId, ["timeline"], {
         dirtyRange: {
           startTime: Math.min(
@@ -157,9 +191,28 @@ export function registerTimelineIpc(): void {
   );
 
   ipcMain.handle(
+    "composer:clip-resolve-timeline-lut-proxy",
+    async (_event, input: { projectId: string; clipId: string }): Promise<ResolveTimelineLutProxyResult> => {
+      const clip = getClipById(input.projectId, input.clipId);
+      const resolution = await ensureTimelineLutProxy(input.projectId, clip);
+      if (
+        clip.lutProxyPath !== resolution.path ||
+        clip.derivedMediaId !== resolution.derivedMediaId
+      ) {
+        updateClip(input.projectId, clip.id, {
+          derivedMediaId: resolution.derivedMediaId,
+          lutProxyPath: resolution.path,
+        });
+      }
+      return resolution;
+    },
+  );
+
+  ipcMain.handle(
     "composer:clip-delete",
     async (_event, input: DeleteClipInput): Promise<void> => {
       const clip = getClipById(input.projectId, input.clipId);
+      clearTimelineLutProxy(input.projectId, clip.id);
       deleteClip(input.projectId, input.clipId);
       invalidateProjectSequencePreview(input.projectId, ["timeline"], {
         dirtyRange: buildDirtyRangeForClip(clip),

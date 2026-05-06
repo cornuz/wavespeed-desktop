@@ -5,7 +5,7 @@
  */
 import type { Database as SqlJsDatabase } from "sql.js";
 
-export const CURRENT_SCHEMA_VERSION = 8;
+export const CURRENT_SCHEMA_VERSION = 12;
 
 // ─── Migration definition ─────────────────────────────────────────────────────
 
@@ -246,6 +246,71 @@ const MIGRATIONS: NamedMigration[] = [
         db.run(
           `ALTER TABLE clips ADD COLUMN adjustments_json TEXT NOT NULL DEFAULT '{}'`,
         );
+      }
+    },
+  },
+  {
+    id: "009_clip_flip",
+    apply: (db) => {
+      const info = db.exec(`PRAGMA table_info(clips)`);
+      const columns = (info[0]?.values ?? []).map((row) => row[1] as string);
+      if (!columns.includes("flip_horizontal")) {
+        db.run(`ALTER TABLE clips ADD COLUMN flip_horizontal INTEGER NOT NULL DEFAULT 0`);
+      }
+      if (!columns.includes("flip_vertical")) {
+        db.run(`ALTER TABLE clips ADD COLUMN flip_vertical INTEGER NOT NULL DEFAULT 0`);
+      }
+    },
+  },
+  {
+    id: "010_clip_lut_proxy",
+    apply: (db) => {
+      const info = db.exec(`PRAGMA table_info(clips)`);
+      const columns = (info[0]?.values ?? []).map((row) => row[1] as string);
+      if (!columns.includes("lut_proxy_path")) {
+        db.run(`ALTER TABLE clips ADD COLUMN lut_proxy_path TEXT`);
+      }
+    },
+  },
+  {
+    id: "011_derived_media",
+    apply: (db) => {
+      db.run(`
+        CREATE TABLE IF NOT EXISTS derived_media (
+          id                      TEXT PRIMARY KEY,
+          upstream_asset_id       TEXT,
+          parent_derived_media_id TEXT REFERENCES derived_media(id) ON DELETE CASCADE,
+          dependency_asset_id     TEXT,
+          operation_type          TEXT NOT NULL,
+          operation_label         TEXT NOT NULL,
+          spec_json               TEXT NOT NULL DEFAULT '{}',
+          cache_key               TEXT NOT NULL UNIQUE,
+          output_path             TEXT,
+          status                  TEXT NOT NULL DEFAULT 'processing'
+                                         CHECK (status IN ('processing', 'ready', 'error')),
+          error_message           TEXT,
+          created_at              TEXT NOT NULL,
+          updated_at              TEXT NOT NULL
+        )
+      `);
+      db.run(
+        `CREATE INDEX IF NOT EXISTS idx_derived_media_upstream_asset ON derived_media(upstream_asset_id)`,
+      );
+      db.run(
+        `CREATE INDEX IF NOT EXISTS idx_derived_media_dependency_asset ON derived_media(dependency_asset_id)`,
+      );
+      db.run(
+        `CREATE INDEX IF NOT EXISTS idx_derived_media_parent ON derived_media(parent_derived_media_id)`,
+      );
+    },
+  },
+  {
+    id: "012_clip_derived_media",
+    apply: (db) => {
+      const info = db.exec(`PRAGMA table_info(clips)`);
+      const columns = (info[0]?.values ?? []).map((row) => row[1] as string);
+      if (!columns.includes("derived_media_id")) {
+        db.run(`ALTER TABLE clips ADD COLUMN derived_media_id TEXT REFERENCES derived_media(id)`);
       }
     },
   },

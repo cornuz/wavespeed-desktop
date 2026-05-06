@@ -108,6 +108,8 @@ export function buildCompositorLayers(
         blendMode: getCanvasBlendMode(clip.adjustments.blendMode),
         opacity: clampOpacity(clip.opacity),
         filter: buildCssFilter(clip.adjustments),
+        flipHorizontal: clip.flipHorizontal,
+        flipVertical: clip.flipVertical,
         rotation: clip.rotationZ,
         sourceTime: getClipLocalTime(
           time,

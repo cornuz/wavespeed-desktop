@@ -6,6 +6,7 @@ import { extname, join, normalize, resolve } from "path";
 import stringify from "json-stable-stringify";
 import { getCanvasBlendMode } from "../../src/composer/shared/blend-modes";
 import { normalizeClipAdjustments } from "../../src/composer/shared/clipAdjustments";
+import { buildCssFilter as buildSharedCssFilter } from "../../src/composer/shared/filter-builder";
 import { getUniversalClipRect, universalRectToScreen } from "../../src/composer/shared/compositionGeometry";
 import type {
   Clip,
@@ -30,6 +31,7 @@ import {
   renderSegmentInHeadlessRenderer,
   setHeadlessRendererProgressListener,
 } from "./headless-renderer";
+import { listProjectLuts, resolveProjectLut } from "./lut-library";
 import {
   buildConcatList,
   computeOverallProgress,
@@ -53,7 +55,7 @@ import type {
   SequencePreviewProgressEvent,
 } from "./sequence-preview-contract";
 
-export const SEQUENCE_PREVIEW_REQUEST_VERSION = 6;
+export const SEQUENCE_PREVIEW_REQUEST_VERSION = 8;
 const SEQUENCE_PREVIEW_EDIT_DEBOUNCE_MS = 600;
 const SEQUENCE_PREVIEW_RECONCILE_INTERVAL_MS = 15_000;
 
@@ -85,6 +87,7 @@ interface ResolvedPreviewMediaSource {
   path: string;
   probe: MediaProbeResult | null;
   inputKind: "image" | "media";
+  sourceIsLutProxy: boolean;
 }
 
 interface SequencePreviewRenderPlan {
@@ -109,11 +112,54 @@ interface PendingInvalidationState {
   fullReset: boolean;
 }
 
+interface ClipLutSignature {
+  assetId: string;
+  modifiedAt: string | null;
+  cacheKey: string | null;
+  status: "resolved" | "error";
+  errorMessage?: string;
+}
+
 const activeSequencePreviewJobs = new Map<string, ProjectSequencePreviewJobState>();
 const trackedSequencePreviewProjects = new Set<string>();
 const pendingSequencePreviewInvalidations = new Map<string, PendingInvalidationState>();
 const sequencePreviewProgressLogBuckets = new Map<string, number>();
 let sequencePreviewReconcileTimer: ReturnType<typeof setInterval> | null = null;
+
+function buildClipLutSignature(
+  projectId: string,
+  lutAssetId: string | null,
+  lutAssetsById: Map<string, { modifiedAt: string }>,
+): ClipLutSignature | null {
+  if (!lutAssetId) {
+    return null;
+  }
+
+  const assetId = normalize(lutAssetId);
+  const asset = lutAssetsById.get(assetId) ?? null;
+
+  try {
+    const resolved = resolveProjectLut(projectId, lutAssetId);
+    if (!resolved) {
+      return null;
+    }
+
+    return {
+      assetId: resolved.assetId,
+      modifiedAt: resolved.modifiedAt,
+      cacheKey: resolved.cacheKey,
+      status: "resolved",
+    };
+  } catch (error) {
+    return {
+      assetId,
+      modifiedAt: asset?.modifiedAt ?? null,
+      cacheKey: null,
+      status: "error",
+      errorMessage: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
 
 function logSequencePreviewDebug(
   message: string,
@@ -159,35 +205,8 @@ function clampFadeDuration(value: number, clipDuration: number): number {
   return Math.min(value, clipDuration);
 }
 
-function clampSignedPercent(value: number): number {
-  if (!Number.isFinite(value)) {
-    return 0;
-  }
-  return Math.min(Math.max(value, -100), 100);
-}
-
 function buildCssFilter(clip: Clip): string {
-  const adjustments = normalizeClipAdjustments(clip.adjustments);
-  const filters: string[] = [];
-  const exposure = clampSignedPercent(adjustments.lightnessCorrection.exposure);
-  const contrast = clampSignedPercent(adjustments.lightnessCorrection.contrast);
-  const saturation = clampSignedPercent(adjustments.colorCorrection.saturation);
-  const hue = clampSignedPercent(adjustments.colorCorrection.hue);
-
-  if (exposure !== 0) {
-    filters.push(`brightness(${(1 + exposure / 200).toFixed(4)})`);
-  }
-  if (contrast !== 0) {
-    filters.push(`contrast(${(1 + contrast / 100).toFixed(4)})`);
-  }
-  if (saturation !== 0) {
-    filters.push(`saturate(${(1 + saturation / 100).toFixed(4)})`);
-  }
-  if (hue !== 0) {
-    filters.push(`hue-rotate(${(hue * 1.8).toFixed(4)}deg)`);
-  }
-
-  return filters.length > 0 ? filters.join(" ") : "none";
+  return buildSharedCssFilter(clip.adjustments);
 }
 
 function mergeDirtyRanges(
@@ -321,6 +340,12 @@ function pruneProjectSequencePreviewCacheForCurrent(
 }
 
 export function computeProjectTimelineSignature(projectId: string): string {
+  const lutAssetsById = new Map(
+    listProjectLuts(projectId).map((asset) => [
+      normalize(asset.id),
+      { modifiedAt: asset.modifiedAt },
+    ]),
+  );
   const tracks = listTracks(projectId).map((track) => ({
     id: track.id,
     type: track.type,
@@ -329,29 +354,41 @@ export function computeProjectTimelineSignature(projectId: string): string {
     visible: track.visible,
     isComposite: track.isComposite,
   }));
-  const clips = listClips(projectId).map((clip) => ({
-    id: clip.id,
-    trackId: clip.trackId,
-    sourceType: clip.sourceType,
-    sourcePath: clip.sourcePath,
-    sourceAssetId: clip.sourceAssetId,
-    startTime: clip.startTime,
-    duration: clip.duration,
-    trimStart: clip.trimStart,
-    trimEnd: clip.trimEnd,
-    speed: clip.speed,
-    transformOffsetX: clip.transformOffsetX,
-    transformOffsetY: clip.transformOffsetY,
-    transformScale: clip.transformScale,
-    rotationZ: clip.rotationZ,
-    opacity: clip.opacity,
-    brightness: clip.brightness,
-    contrast: clip.contrast,
-    saturation: clip.saturation,
-    adjustments: normalizeClipAdjustments(clip.adjustments),
-    fadeInDuration: clip.fadeInDuration,
-    fadeOutDuration: clip.fadeOutDuration,
-  }));
+  const clips = listClips(projectId).map((clip) => {
+    const adjustments = normalizeClipAdjustments(clip.adjustments);
+    return {
+      id: clip.id,
+      trackId: clip.trackId,
+      sourceType: clip.sourceType,
+      sourcePath: clip.sourcePath,
+      sourceAssetId: clip.sourceAssetId,
+      derivedMediaId: clip.derivedMediaId,
+      lutProxyPath: clip.lutProxyPath,
+      startTime: clip.startTime,
+      duration: clip.duration,
+      trimStart: clip.trimStart,
+      trimEnd: clip.trimEnd,
+      speed: clip.speed,
+      transformOffsetX: clip.transformOffsetX,
+      transformOffsetY: clip.transformOffsetY,
+      transformScale: clip.transformScale,
+      flipHorizontal: clip.flipHorizontal,
+      flipVertical: clip.flipVertical,
+      rotationZ: clip.rotationZ,
+      opacity: clip.opacity,
+      brightness: clip.brightness,
+      contrast: clip.contrast,
+      saturation: clip.saturation,
+      adjustments,
+      lutSignature: buildClipLutSignature(
+        projectId,
+        adjustments.lutAssetId,
+        lutAssetsById,
+      ),
+      fadeInDuration: clip.fadeInDuration,
+      fadeOutDuration: clip.fadeOutDuration,
+    };
+  });
 
   return computeHash({ tracks, clips });
 }
@@ -983,6 +1020,7 @@ async function resolveClipMediaSource(
 
   const assetMetadata = assetsMetadata[sourcePath];
   const candidatePaths = [
+    clip.lutProxyPath,
     assetMetadata?.workingPath,
     sourcePath,
   ].filter((value): value is string => typeof value === "string" && value.length > 0);
@@ -1014,6 +1052,7 @@ async function resolveClipMediaSource(
     path: selectedPath,
     probe,
     inputKind,
+    sourceIsLutProxy: selectedPath === clip.lutProxyPath,
   };
 }
 
@@ -1042,6 +1081,7 @@ async function buildHeadlessRenderClips(
 ): Promise<HeadlessRenderClip[]> {
   const assetsMetadata = loadAssetMetadata(getProjectAssetsDir(projectId));
   const probeCache = new Map<string, Promise<MediaProbeResult | null>>();
+  const lutCache = new Map<string, HeadlessRenderClip["lut"]>();
   const outputDimensions = getSequencePreviewOutputDimensions(plan.request);
   const clips: HeadlessRenderClip[] = [];
 
@@ -1074,6 +1114,41 @@ async function buildHeadlessRenderClips(
     );
 
     const adjustments = normalizeClipAdjustments(clip.adjustments);
+    const requestedLutAssetId = adjustments.lutAssetId;
+    const resolvedLut =
+      requestedLutAssetId &&
+      resolvedSource.inputKind === "image" &&
+      !resolvedSource.sourceIsLutProxy
+        ? (() => {
+            const lutCacheKey = normalize(requestedLutAssetId);
+            if (lutCache.has(lutCacheKey)) {
+              return lutCache.get(lutCacheKey) ?? null;
+            }
+
+            try {
+              const resolved = resolveProjectLut(projectId, requestedLutAssetId);
+              const value = resolved
+                ? {
+                    assetId: resolved.assetId,
+                    cacheKey: resolved.cacheKey,
+                    lut: resolved.lut,
+                  }
+                : null;
+              lutCache.set(lutCacheKey, value);
+              return value;
+            } catch (error) {
+              console.warn("[Composer Preview] clip LUT skipped", {
+                projectId,
+                clipId: clip.id,
+                lutAssetId: requestedLutAssetId,
+                errorMessage:
+                  error instanceof Error ? error.message : String(error),
+              });
+              lutCache.set(lutCacheKey, null);
+              return null;
+            }
+          })()
+        : null;
     const hasVisual =
       track.type === "video" &&
       track.visible &&
@@ -1106,6 +1181,11 @@ async function buildHeadlessRenderClips(
       opacity: clampOpacity(clip.opacity),
       blendMode: getCanvasBlendMode(adjustments.blendMode),
       filter: buildCssFilter(clip),
+      requestedLutAssetId,
+      lutApplication: resolvedLut ? "cube-image" : "none",
+      lut: resolvedLut,
+      flipHorizontal: clip.flipHorizontal,
+      flipVertical: clip.flipVertical,
       rotation: clip.rotationZ,
       fadeInDuration: clampFadeDuration(clip.fadeInDuration, clipRenderedDuration),
       fadeOutDuration: clampFadeDuration(

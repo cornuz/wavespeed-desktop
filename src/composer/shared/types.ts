@@ -22,6 +22,8 @@ export interface CompositorLayer {
   blendMode: GlobalCompositeOperation;
   opacity: number;
   filter: string;
+  flipHorizontal: boolean;
+  flipVertical: boolean;
   rotation: number;
   sourceTime: number;
   fadeIn: CompositorLayerFade | null;

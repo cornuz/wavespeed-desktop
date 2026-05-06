@@ -125,6 +125,16 @@ function getPreviewProxyGopSize(frameRate?: string): { gop: number; minKeyint: n
   return { gop, minKeyint };
 }
 
+function escapeFfmpegFilterPath(filePath: string): string {
+  return filePath
+    .replace(/\\/g, "/")
+    .replace(/:/g, "\\:")
+    .replace(/'/g, "\\'")
+    .replace(/\[/g, "\\[")
+    .replace(/\]/g, "\\]")
+    .replace(/,/g, "\\,");
+}
+
 /**
  * Probe video file using FFmpeg to extract stream info.
  * Returns null if probe fails (file may not be video or ffprobe missing).
@@ -489,6 +499,99 @@ export async function transcodeVideoToPreviewProxy(
               const progress = Math.min(100, (currentSeconds / probedDuration) * 100);
               onProgress({
                 phase: "proxy",
+                progress: Math.round(progress),
+              });
+            }
+          }
+        });
+
+        proc.once("error", () => {
+          finish(false);
+        });
+
+        proc.once("exit", (code) => {
+          finish(code === 0);
+        });
+      })
+      .catch(() => {
+        finish(false);
+      });
+  });
+}
+
+export async function transcodeVideoToLutProxy(
+  sourcePath: string,
+  lutFilePath: string,
+  outputPath: string,
+  options?: {
+    includeAudio?: boolean;
+  },
+  onProgress?: (progress: { phase: string; progress: number }) => void,
+): Promise<string | null> {
+  return new Promise<string | null>((resolve) => {
+    let settled = false;
+
+    const finish = (success: boolean) => {
+      if (settled) return;
+      settled = true;
+      if (success && existsSync(outputPath)) {
+        resolve(outputPath);
+      } else {
+        resolve(null);
+      }
+    };
+
+    void probeVideoFile(sourcePath)
+      .then((probe) => {
+        const probedDuration = probe?.video?.duration ?? 0;
+        const lutFilterPath = escapeFfmpegFilterPath(lutFilePath);
+        const ffmpegArgs = [
+          "-i",
+          sourcePath,
+          "-vf",
+          `lut3d=file='${lutFilterPath}',scale=trunc(iw/2)*2:trunc(ih/2)*2,setsar=1`,
+          "-c:v",
+          "libx264",
+          "-preset",
+          "fast",
+          "-crf",
+          "18",
+          "-pix_fmt",
+          "yuv420p",
+          "-movflags",
+          "+faststart",
+        ];
+
+        if (options?.includeAudio === false) {
+          ffmpegArgs.push("-an");
+        } else if (probe?.audio && probe.audio.length > 0) {
+          ffmpegArgs.push("-c:a", "aac", "-b:a", "192k");
+        } else {
+          ffmpegArgs.push("-an");
+        }
+
+        ffmpegArgs.push("-y", outputPath);
+
+        const proc = spawn("ffmpeg", ffmpegArgs, {
+          windowsHide: true,
+        });
+
+        proc.stderr.on("data", (data) => {
+          const chunk = data.toString();
+          const allMatches = chunk.match(/time=(\d+):(\d+):(\d+\.\d+)/g);
+          if (allMatches && allMatches.length > 0 && onProgress && probedDuration > 0) {
+            const lastMatch = allMatches[allMatches.length - 1];
+            const timeRegex = /time=(\d+):(\d+):(\d+\.\d+)/.exec(lastMatch);
+            if (timeRegex) {
+              const [, hours, minutes, seconds] = timeRegex;
+              const currentSeconds =
+                parseInt(hours, 10) * 3600 +
+                parseInt(minutes, 10) * 60 +
+                parseFloat(seconds);
+
+              const progress = Math.min(100, (currentSeconds / probedDuration) * 100);
+              onProgress({
+                phase: "transcoding",
                 progress: Math.round(progress),
               });
             }

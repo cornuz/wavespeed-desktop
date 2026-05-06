@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Loader2, RefreshCw, SlidersHorizontal, Upload } from "lucide-react";
+import { ArrowLeftRight, ArrowUpDown, Loader2, RefreshCw, SlidersHorizontal, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { composerLutIpc, composerProjectIpc } from "@/composer/ipc/ipc-client";
 import { normalizeClipAdjustments } from "@/composer/shared/clipAdjustments";
@@ -38,11 +39,11 @@ const BLEND_MODE_OPTIONS: Array<{ value: ClipBlendMode; label: string }> = [
   { value: "multiply", label: "Multiply" },
   { value: "screen", label: "Screen" },
   { value: "overlay", label: "Overlay" },
-  { value: "soft-light", label: "Soft light" },
   { value: "darken", label: "Darken" },
   { value: "lighten", label: "Lighten" },
   { value: "color-dodge", label: "Color dodge" },
   { value: "color-burn", label: "Color burn" },
+  { value: "soft-light", label: "Soft light" },
   { value: "hard-light", label: "Hard light" },
   { value: "difference", label: "Difference" },
   { value: "exclusion", label: "Exclusion" },
@@ -160,6 +161,116 @@ function PropertySection({
   );
 }
 
+function PropertySliderControl({
+  title,
+  subtitle,
+  value,
+  onCommit,
+  min,
+  max,
+  inputStep = 1,
+  sliderStep = 1,
+  liveCommitOnSlide = false,
+  decimals = 2,
+  suffix,
+}: {
+  title: string;
+  subtitle?: string;
+  value: number;
+  onCommit: (value: number) => void;
+  min: number;
+  max: number;
+  inputStep?: number;
+  sliderStep?: number;
+  liveCommitOnSlide?: boolean;
+  decimals?: number;
+  suffix?: string;
+}) {
+  const [draft, setDraft] = useState(() => formatInputNumber(value, decimals));
+
+  useEffect(() => {
+    setDraft(formatInputNumber(value, decimals));
+  }, [decimals, value]);
+
+  const clampValue = useCallback(
+    (candidate: number) => Math.min(max, Math.max(min, candidate)),
+    [max, min],
+  );
+
+  const commitDraft = useCallback(() => {
+    const parsed = Number(draft);
+    if (!Number.isFinite(parsed)) {
+      setDraft(formatInputNumber(value, decimals));
+      return;
+    }
+
+    const nextValue = clampValue(parsed);
+    setDraft(formatInputNumber(nextValue, decimals));
+    onCommit(nextValue);
+  }, [clampValue, decimals, draft, onCommit, value]);
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-start justify-between gap-3">
+        <div className="space-y-0.5">
+          <div className="text-foreground">{title}</div>
+          {subtitle ? <div className="text-[11px] text-muted-foreground">{subtitle}</div> : null}
+        </div>
+        <div className="relative w-24 shrink-0">
+          <Input
+            type="number"
+            value={draft}
+            min={min}
+            max={max}
+            step={inputStep}
+            onChange={(event) => setDraft(event.target.value)}
+            onBlur={commitDraft}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.currentTarget.blur();
+              }
+              if (event.key === "Escape") {
+                setDraft(formatInputNumber(value, decimals));
+                event.currentTarget.blur();
+              }
+            }}
+            className="h-8 rounded border border-border bg-background px-2 py-1 pr-7 text-right text-xs text-foreground"
+          />
+          {suffix ? (
+            <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-muted-foreground">
+              {suffix}
+            </span>
+          ) : null}
+        </div>
+      </div>
+      <Slider
+        value={[clampValue(Number.isFinite(Number(draft)) ? Number(draft) : value)]}
+        min={min}
+        max={max}
+        step={sliderStep}
+        onValueChange={(values) => {
+          const nextValue = values[0];
+          if (typeof nextValue === "number") {
+            const clampedValue = clampValue(nextValue);
+            setDraft(formatInputNumber(clampedValue, decimals));
+            if (liveCommitOnSlide) {
+              onCommit(clampedValue);
+            }
+          }
+        }}
+        onValueCommit={(values) => {
+          const nextValue = values[0];
+          if (typeof nextValue === "number") {
+            const clampedValue = clampValue(nextValue);
+            setDraft(formatInputNumber(clampedValue, decimals));
+            onCommit(clampedValue);
+          }
+        }}
+      />
+    </div>
+  );
+}
+
 export function PropertiesPanel() {
   const patchCurrentProject = useComposerProjectStore((state) => state.patchCurrentProject);
   const {
@@ -178,7 +289,7 @@ export function PropertiesPanel() {
       (preset) => preset.width === project.width && preset.height === project.height,
     )?.id ?? "custom";
   const [selectedDimensionMode, setSelectedDimensionMode] = useState(dimensionPreset);
-  const [activeClipTab, setActiveClipTab] = useState<"timeline" | "position" | "adjust">("timeline");
+  const [activeClipTab, setActiveClipTab] = useState<"timeline" | "transform" | "adjust">("timeline");
   const [lutAssets, setLutAssets] = useState<ComposerLutAsset[]>([]);
   const [lutLoading, setLutLoading] = useState(false);
   const trackName = selectedClip
@@ -452,7 +563,7 @@ export function PropertiesPanel() {
             <Tabs
               value={activeClipTab}
               onValueChange={(value) =>
-                setActiveClipTab(value as "timeline" | "position" | "adjust")
+                setActiveClipTab(value as "timeline" | "transform" | "adjust")
               }
               className="flex flex-col gap-3"
             >
@@ -460,8 +571,8 @@ export function PropertiesPanel() {
                 <TabsTrigger value="timeline" className="px-2 py-1.5 text-xs">
                   Timeline
                 </TabsTrigger>
-                <TabsTrigger value="position" className="px-2 py-1.5 text-xs">
-                  Position
+                <TabsTrigger value="transform" className="px-2 py-1.5 text-xs">
+                  Transform
                 </TabsTrigger>
                 <TabsTrigger value="adjust" className="px-2 py-1.5 text-xs">
                   Adjust
@@ -539,47 +650,47 @@ export function PropertiesPanel() {
                 </PropertySection>
               </TabsContent>
 
-              <TabsContent value="position" className="mt-0">
+              <TabsContent value="transform" className="mt-0">
                 {isVisualClip ? (
-                  <PropertySection title="Position">
-                    <div className="grid grid-cols-2 gap-2">
-                      <PropertyNumberField
-                        label="Position X"
-                        value={selectedClip.transformOffsetX}
-                        step={1}
-                        decimals={2}
-                        onCommit={(value) =>
-                          void updateClip(selectedClip.id, {
-                            transformOffsetX: value,
-                          })
-                        }
-                      />
-                      <PropertyNumberField
-                        label="Position Y"
-                        value={selectedClip.transformOffsetY}
-                        step={1}
-                        decimals={2}
-                        onCommit={(value) =>
-                          void updateClip(selectedClip.id, {
-                            transformOffsetY: value,
-                          })
-                        }
-                      />
-                      <PropertyNumberField
-                        label="Rotation Z"
-                        value={selectedClip.rotationZ}
-                        min={-359}
-                        max={359}
-                        step={0.1}
-                        decimals={2}
-                        onCommit={(value) => void updateClip(selectedClip.id, { rotationZ: value })}
-                      />
-                      <PropertyNumberField
-                        label="Scale"
+                  <PropertySection title="Transform">
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <div className="text-[11px] font-medium text-muted-foreground">Position</div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <PropertyNumberField
+                            label="X"
+                            value={selectedClip.transformOffsetX}
+                            step={1}
+                            decimals={2}
+                            onCommit={(value) =>
+                              void updateClip(selectedClip.id, {
+                                transformOffsetX: value,
+                              })
+                            }
+                          />
+                          <PropertyNumberField
+                            label="Y"
+                            value={selectedClip.transformOffsetY}
+                            step={1}
+                            decimals={2}
+                            onCommit={(value) =>
+                              void updateClip(selectedClip.id, {
+                                transformOffsetY: value,
+                              })
+                            }
+                          />
+                        </div>
+                      </div>
+
+                      <PropertySliderControl
+                        title="Scale"
+                        subtitle="Uniform"
                         value={selectedClip.transformScale * 100}
                         min={10}
-                        max={1000}
-                        step={1}
+                        max={400}
+                        inputStep={1}
+                        sliderStep={5}
+                        liveCommitOnSlide
                         decimals={2}
                         suffix="%"
                         onCommit={(value) =>
@@ -588,12 +699,61 @@ export function PropertiesPanel() {
                           })
                         }
                       />
+
+                      <PropertySliderControl
+                        title="Rotation"
+                        value={selectedClip.rotationZ}
+                        min={-360}
+                        max={360}
+                        inputStep={0.1}
+                        sliderStep={15}
+                        liveCommitOnSlide
+                        decimals={2}
+                        suffix="°"
+                        onCommit={(value) =>
+                          void updateClip(selectedClip.id, { rotationZ: value })
+                        }
+                      />
+
+                      <div className="space-y-2">
+                        <div className="text-foreground">Flip</div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <Button
+                            type="button"
+                            variant={selectedClip.flipHorizontal ? "secondary" : "outline"}
+                            size="sm"
+                            className="h-8 gap-1 px-2"
+                            onClick={() =>
+                              void updateClip(selectedClip.id, {
+                                flipHorizontal: !selectedClip.flipHorizontal,
+                              })
+                            }
+                          >
+                            <ArrowLeftRight className="h-3.5 w-3.5 shrink-0" />
+                            Horizontal
+                          </Button>
+                          <Button
+                            type="button"
+                            variant={selectedClip.flipVertical ? "secondary" : "outline"}
+                            size="sm"
+                            className="h-8 gap-1 px-2"
+                            onClick={() =>
+                              void updateClip(selectedClip.id, {
+                                flipVertical: !selectedClip.flipVertical,
+                              })
+                            }
+                          >
+                            <ArrowUpDown className="h-3.5 w-3.5 shrink-0" />
+                            Vertical
+                          </Button>
+                        </div>
+                      </div>
                     </div>
                   </PropertySection>
                 ) : (
-                  <PropertySection title="Position">
+                  <PropertySection title="Transform">
                     <div className="text-muted-foreground">
-                      Position properties are only available for visual clips.
+                      Transform properties are only available for visual clips.
                     </div>
                   </PropertySection>
                 )}
@@ -603,40 +763,58 @@ export function PropertiesPanel() {
                 {isVisualClip ? (
                   <PropertySection title="Adjust">
                     <div className="space-y-3">
-                      <div className="grid grid-cols-2 gap-2">
-                        <PropertyNumberField
-                          label="Opacity"
-                          value={selectedClip.opacity * 100}
-                          min={0}
-                          max={100}
-                          step={1}
-                          decimals={2}
-                          suffix="%"
-                          onCommit={(value) =>
-                            void updateClip(selectedClip.id, {
-                              opacity: Math.min(1, Math.max(0, value / 100)),
+                      <PropertySliderControl
+                        title="Opacity"
+                        value={selectedClip.opacity * 100}
+                        min={0}
+                        max={100}
+                        inputStep={1}
+                        sliderStep={10}
+                        liveCommitOnSlide
+                        decimals={0}
+                        suffix="%"
+                        onCommit={(value) =>
+                          void updateClip(selectedClip.id, {
+                            opacity: Math.min(1, Math.max(0, value / 100)),
+                          })
+                        }
+                      />
+
+                      <PropertySliderControl
+                        title="Blur"
+                        value={selectedAdjustments?.effects.blur ?? 0}
+                        min={0}
+                        max={50}
+                        inputStep={0.1}
+                        sliderStep={10}
+                        liveCommitOnSlide
+                        decimals={1}
+                        suffix="px"
+                        onCommit={(value) =>
+                          updateAdjustments({
+                            effects: { blur: Math.min(50, Math.max(0, value)) },
+                          })
+                        }
+                      />
+
+                      <label className="flex w-full flex-col gap-1">
+                        <span className="text-foreground">Blend mode</span>
+                        <select
+                          className="h-8 w-full rounded border border-border bg-background px-2 py-1 text-xs text-foreground"
+                          value={selectedAdjustments?.blendMode ?? "normal"}
+                          onChange={(event) =>
+                            updateAdjustments({
+                              blendMode: event.target.value as ClipBlendMode,
                             })
                           }
-                        />
-                        <label className="flex flex-col gap-1">
-                          <span className="text-foreground">Blend mode</span>
-                          <select
-                            className="h-8 rounded border border-border bg-background px-2 py-1 text-xs text-foreground"
-                            value={selectedAdjustments?.blendMode ?? "normal"}
-                            onChange={(event) =>
-                              updateAdjustments({
-                                blendMode: event.target.value as ClipBlendMode,
-                              })
-                            }
-                          >
-                            {BLEND_MODE_OPTIONS.map((option) => (
-                              <option key={option.value} value={option.value}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                      </div>
+                        >
+                          {BLEND_MODE_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
 
                       <div className="space-y-2">
                         <div className="text-[11px] font-medium text-muted-foreground">LUT</div>

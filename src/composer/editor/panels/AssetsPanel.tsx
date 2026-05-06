@@ -25,7 +25,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { composerAssetIpc, composerClipIpc } from "@/composer/ipc/ipc-client";
+import { composerAssetIpc } from "@/composer/ipc/ipc-client";
 import { useComposerProjectStore } from "@/composer/stores/project.store";
 import type {
   ComposerAsset,
@@ -641,13 +641,21 @@ export function AssetsPanel() {
                         className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
                         onClick={(event) => {
                           event.stopPropagation();
-                          const linkedClips = projectClips.filter(
-                            (clip) => clip.sourceAssetId === asset.id,
-                          );
+                          const linkedClips =
+                            asset.type === "lut"
+                              ? projectClips.filter(
+                                  (clip) =>
+                                    clip.adjustments.lutAssetId === asset.fileName,
+                                )
+                              : projectClips.filter(
+                                  (clip) => clip.sourceAssetId === asset.id,
+                                );
                           if (
                             linkedClips.length > 0 &&
                             !window.confirm(
-                              "This action cannot be undone. All instances of this asset will be removed. Proceed?",
+                              asset.type === "lut"
+                                ? "This action cannot be undone. All instances using this LUT will revert to their source media. Proceed?"
+                                : "This action cannot be undone. All instances of this asset will be removed. Proceed?",
                             )
                           ) {
                             return;
@@ -656,26 +664,29 @@ export function AssetsPanel() {
                           void (async () => {
                             try {
                               previewLibraryAsset(null);
-                              if (linkedClips.length > 0) {
-                                await Promise.all(
-                                  linkedClips.map((clip) =>
-                                    composerClipIpc.delete({
-                                      projectId: projectId!,
-                                      clipId: clip.id,
-                                    }),
-                                  ),
-                                );
-                                setClips(
-                                  projectClips.filter(
-                                    (clip) => clip.sourceAssetId !== asset.id,
-                                  ),
-                                );
-                              }
-
                               const nextAssets = await composerAssetIpc.delete({
                                 projectId: projectId!,
                                 assetId: asset.id,
                               });
+                              setClips(
+                                asset.type === "lut"
+                                  ? projectClips.map((clip) =>
+                                      clip.adjustments.lutAssetId === asset.fileName
+                                        ? {
+                                            ...clip,
+                                            adjustments: {
+                                              ...clip.adjustments,
+                                              lutAssetId: null,
+                                            },
+                                            derivedMediaId: null,
+                                            lutProxyPath: null,
+                                          }
+                                        : clip,
+                                    )
+                                  : projectClips.filter(
+                                      (clip) => clip.sourceAssetId !== asset.id,
+                                    ),
+                              );
                               setAssets(nextAssets);
                               setAssetDetails((previous) => {
                                 const next = { ...previous };
