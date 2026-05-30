@@ -28,6 +28,7 @@ import {
 // Import tool demo images
 import videoEnhancerImg from "../../build/images/VideoEnhancer.jpeg";
 import imageEnhancerImg from "../../build/images/ImageEnhancer.jpeg";
+import imageColorizerImg from "../../build/images/ImageColorizer.png";
 import faceEnhancerImg from "../../build/images/FaceEnhancer.jpeg";
 import faceSwapperImg from "../../build/images/FaceSwapper.jpeg";
 import backgroundRemoverImg from "../../build/images/BackgroundRemover.jpeg";
@@ -69,7 +70,7 @@ export function FreeToolsPage() {
       descriptionKey: "freeTools.imageColorizer.description",
       route: "/free-tools/image-colorizer",
       gradient: "from-sky-500/20 via-amber-500/10 to-transparent",
-      image: imageEnhancerImg,
+      image: imageColorizerImg,
       fallbackTitle: "Image Colorizer",
       fallbackDescription:
         "Add color to black-and-white photos locally for free",
