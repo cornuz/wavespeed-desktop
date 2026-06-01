@@ -663,6 +663,7 @@
       "downloadCompleteDesc": "Todos os modelos transferidos com sucesso",
       "downloadCancelled": "Transferência cancelada",
       "downloadCancelledDesc": "A transferência do modelo foi cancelada",
+      "downloadTimedOut": "Model download timed out",
       "alreadyCached": "Já em cache",
       "downloaded": "Transferido",
       "overallProgress": "Progresso geral",
@@ -670,6 +671,7 @@
         "ffmpegJs": "Núcleo FFmpeg (JS)",
         "ffmpegWasm": "Núcleo FFmpeg (WASM)",
         "backgroundRemover": "Removedor de fundo",
+        "imageColorizer": "Image Colorizer (DDColor)",
         "imageEraser": "Borracha de imagem (LaMa)",
         "samEncoder": "Codificador de visão SAM",
         "samDecoder": "Descodificador de prompt SAM"

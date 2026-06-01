@@ -665,6 +665,7 @@
       "downloadCompleteDesc": "所有模型下載成功",
       "downloadCancelled": "下載已取消",
       "downloadCancelledDesc": "模型下載已取消",
+      "downloadTimedOut": "模型下載逾時",
       "alreadyCached": "已快取",
       "downloaded": "已下載",
       "overallProgress": "總進度",
@@ -672,6 +673,7 @@
         "ffmpegJs": "FFmpeg 核心 (JS)",
         "ffmpegWasm": "FFmpeg 核心 (WASM)",
         "backgroundRemover": "背景移除",
+        "imageColorizer": "Image Colorizer (DDColor)",
         "imageEraser": "圖片擦除 (LaMa)",
         "samEncoder": "SAM 視覺編碼器",
         "samDecoder": "SAM 提示解碼器"

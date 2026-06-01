@@ -663,6 +663,7 @@
       "downloadCompleteDesc": "모든 모델이 성공적으로 다운로드됨",
       "downloadCancelled": "다운로드 취소됨",
       "downloadCancelledDesc": "모델 다운로드가 취소되었습니다",
+      "downloadTimedOut": "Model download timed out",
       "alreadyCached": "이미 캐시됨",
       "downloaded": "다운로드됨",
       "overallProgress": "전체 진행률",
@@ -670,6 +671,7 @@
         "ffmpegJs": "FFmpeg 코어 (JS)",
         "ffmpegWasm": "FFmpeg 코어 (WASM)",
         "backgroundRemover": "배경 제거",
+        "imageColorizer": "Image Colorizer (DDColor)",
         "imageEraser": "이미지 지우개 (LaMa)",
         "samEncoder": "SAM 비전 인코더",
         "samDecoder": "SAM 프롬프트 디코더"

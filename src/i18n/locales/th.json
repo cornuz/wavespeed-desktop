@@ -662,6 +662,7 @@
       "downloadCompleteDesc": "ดาวน์โหลดโมเดลทั้งหมดสำเร็จ",
       "downloadCancelled": "ยกเลิกการดาวน์โหลด",
       "downloadCancelledDesc": "ยกเลิกการดาวน์โหลดโมเดล",
+      "downloadTimedOut": "Model download timed out",
       "alreadyCached": "แคชไว้แล้ว",
       "downloaded": "ดาวน์โหลดแล้ว",
       "overallProgress": "ความคืบหน้าทั้งหมด",
@@ -669,6 +670,7 @@
         "ffmpegJs": "FFmpeg Core (JS)",
         "ffmpegWasm": "FFmpeg Core (WASM)",
         "backgroundRemover": "ลบพื้นหลัง",
+        "imageColorizer": "Image Colorizer (DDColor)",
         "imageEraser": "ยางลบรูปภาพ (LaMa)",
         "samEncoder": "SAM Vision Encoder",
         "samDecoder": "SAM Prompt Decoder"

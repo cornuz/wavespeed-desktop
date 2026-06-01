@@ -1,5 +1,5 @@
 export const IMAGE_COLORIZER_MODEL_URL =
-  "https://huggingface.co/Faridzar/ddcolor-mirror/resolve/main/ddcolor-fp16.onnx";
+  "https://huggingface.co/wavespeed/image-colorizer/resolve/main/ddcolor-fp16.onnx";
 export const IMAGE_COLORIZER_MODEL_SIZE = 113225654;
 export const IMAGE_COLORIZER_CACHE_NAME = "ddcolor-fp16-colorizer-cache";
 

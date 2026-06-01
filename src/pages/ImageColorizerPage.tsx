@@ -1,4 +1,4 @@
-import { useCallback, useContext, useRef, useState } from "react";
+import { useCallback, useContext, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { PageResetContext } from "@/components/layout/PageResetContext";
@@ -43,9 +43,13 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const PHASES = [
+const AI_PHASES = [
   { id: "download", labelKey: "freeTools.progress.downloading", weight: 0.35 },
   { id: "process", labelKey: "freeTools.progress.processing", weight: 0.65 },
+];
+
+const LOCAL_PHASES = [
+  { id: "process", labelKey: "freeTools.progress.processing", weight: 1 },
 ];
 
 const MODE_OPTIONS: ColorizeMode[] = [
@@ -85,6 +89,10 @@ export function ImageColorizerPage() {
   const [error, setError] = useState<string | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [showBackWarning, setShowBackWarning] = useState(false);
+  const progressPhases = useMemo(
+    () => (mode === "ai" ? AI_PHASES : LOCAL_PHASES),
+    [mode],
+  );
 
   const {
     progress,
@@ -93,7 +101,7 @@ export function ImageColorizerPage() {
     reset: resetProgress,
     resetAndStart,
     complete: completeAllPhases,
-  } = useMultiPhaseProgress({ phases: PHASES });
+  } = useMultiPhaseProgress({ phases: progressPhases });
 
   const { colorize, dispose, retryWorker, hasFailed } = useImageColorizerWorker(
     {

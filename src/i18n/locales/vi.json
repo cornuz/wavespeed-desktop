@@ -662,6 +662,7 @@
       "downloadCompleteDesc": "Tất cả mô hình đã tải xuống thành công",
       "downloadCancelled": "Đã hủy tải xuống",
       "downloadCancelledDesc": "Đã hủy tải xuống mô hình",
+      "downloadTimedOut": "Model download timed out",
       "alreadyCached": "Đã có trong bộ nhớ cache",
       "downloaded": "Đã tải xuống",
       "overallProgress": "Tiến độ tổng thể",
@@ -669,6 +670,7 @@
         "ffmpegJs": "Lõi FFmpeg (JS)",
         "ffmpegWasm": "Lõi FFmpeg (WASM)",
         "backgroundRemover": "Xóa nền",
+        "imageColorizer": "Image Colorizer (DDColor)",
         "imageEraser": "Tẩy ảnh (LaMa)",
         "samEncoder": "Bộ mã hóa thị giác SAM",
         "samDecoder": "Bộ giải mã nhắc SAM"

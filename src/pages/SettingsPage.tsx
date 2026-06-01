@@ -385,6 +385,7 @@ export function SettingsPage() {
       const controller = new AbortController();
       const timeoutMs = generalSettings.downloadTimeout * 1000;
       const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      const downloadTimedOutMessage = t("settings.cache.downloadTimedOut");
 
       updatePredownloadState(model.id, {
         downloaded: false,
@@ -412,7 +413,7 @@ export function SettingsPage() {
         while (true) {
           if (controller.signal.aborted) {
             await reader.cancel();
-            throw new Error("Model download timed out");
+            throw new Error(downloadTimedOutMessage);
           }
 
           const { done, value } = await reader.read();
@@ -453,16 +454,21 @@ export function SettingsPage() {
         });
         return "downloaded";
       } catch (error) {
+        const isAbortError =
+          controller.signal.aborted || (error as Error).name === "AbortError";
+        const message = isAbortError
+          ? downloadTimedOutMessage
+          : (error as Error).message || t("settings.cache.clearFailed");
         updatePredownloadState(model.id, {
           downloading: false,
-          error: (error as Error).message,
+          error: message,
         });
-        throw error;
+        throw new Error(message);
       } finally {
         clearTimeout(timeoutId);
       }
     },
-    [generalSettings.downloadTimeout, updatePredownloadState],
+    [generalSettings.downloadTimeout, t, updatePredownloadState],
   );
 
   const handlePredownloadModels = useCallback(async () => {

@@ -32,6 +32,11 @@ interface ResultPayload {
   id: number;
 }
 
+interface ErrorPayload {
+  message: string;
+  id?: number;
+}
+
 interface UseImageColorizerWorkerOptions {
   onPhase?: (phase: string) => void;
   onProgress?: (
@@ -46,7 +51,15 @@ export function useImageColorizerWorker(
   options: UseImageColorizerWorkerOptions = {},
 ) {
   const workerRef = useRef<Worker | null>(null);
-  const callbacksRef = useRef<Map<number, (result: Blob) => void>>(new Map());
+  const requestsRef = useRef<
+    Map<
+      number,
+      {
+        resolve: (result: Blob) => void;
+        reject: (error: Error) => void;
+      }
+    >
+  >(new Map());
   const idCounterRef = useRef(0);
   const optionsRef = useRef(options);
   const hasFailedRef = useRef(false);
@@ -80,17 +93,33 @@ export function useImageColorizerWorker(
         }
         case "result": {
           const { arrayBuffer, id } = payload as ResultPayload;
-          const callback = callbacksRef.current.get(id);
-          if (callback) {
-            callback(new Blob([arrayBuffer], { type: "image/png" }));
-            callbacksRef.current.delete(id);
+          const request = requestsRef.current.get(id);
+          if (request) {
+            request.resolve(new Blob([arrayBuffer], { type: "image/png" }));
+            requestsRef.current.delete(id);
           }
           break;
         }
-        case "error":
+        case "error": {
+          const errorPayload =
+            typeof payload === "string"
+              ? { message: payload }
+              : (payload as ErrorPayload);
+          const error = new Error(errorPayload.message);
           hasFailedRef.current = true;
-          optionsRef.current.onError?.(payload as string);
+          optionsRef.current.onError?.(errorPayload.message);
+          if (errorPayload.id !== undefined) {
+            const request = requestsRef.current.get(errorPayload.id);
+            if (request) {
+              request.reject(error);
+              requestsRef.current.delete(errorPayload.id);
+            }
+          } else {
+            requestsRef.current.forEach((request) => request.reject(error));
+            requestsRef.current.clear();
+          }
           break;
+        }
       }
     };
   }, []);
@@ -108,6 +137,10 @@ export function useImageColorizerWorker(
       workerRef.current?.postMessage({ type: "dispose" });
       workerRef.current?.terminate();
       workerRef.current = null;
+      requestsRef.current.forEach((request) =>
+        request.reject(new Error("Worker disposed")),
+      );
+      requestsRef.current.clear();
     };
   }, [createWorker]);
 
@@ -122,16 +155,7 @@ export function useImageColorizerWorker(
         }
 
         const id = idCounterRef.current++;
-        callbacksRef.current.set(id, resolve);
-
-        const handleError = (e: MessageEvent<WorkerMessage>) => {
-          if (e.data.type === "error") {
-            callbacksRef.current.delete(id);
-            workerRef.current?.removeEventListener("message", handleError);
-            reject(new Error(e.data.payload as string));
-          }
-        };
-        workerRef.current.addEventListener("message", handleError);
+        requestsRef.current.set(id, { resolve, reject });
 
         workerRef.current.postMessage({
           type: "process",
@@ -145,6 +169,10 @@ export function useImageColorizerWorker(
     workerRef.current?.postMessage({ type: "dispose" });
     workerRef.current?.terminate();
     workerRef.current = null;
+    requestsRef.current.forEach((request) =>
+      request.reject(new Error("Worker disposed")),
+    );
+    requestsRef.current.clear();
   }, []);
 
   const retryWorker = useCallback(() => {

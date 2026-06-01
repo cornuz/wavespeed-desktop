@@ -663,6 +663,7 @@
       "downloadCompleteDesc": "すべてのモデルのダウンロードに成功しました",
       "downloadCancelled": "ダウンロードがキャンセルされました",
       "downloadCancelledDesc": "モデルのダウンロードがキャンセルされました",
+      "downloadTimedOut": "Model download timed out",
       "alreadyCached": "すでにキャッシュ済み",
       "downloaded": "ダウンロード済み",
       "overallProgress": "全体の進行状況",
@@ -670,6 +671,7 @@
         "ffmpegJs": "FFmpegコア (JS)",
         "ffmpegWasm": "FFmpegコア (WASM)",
         "backgroundRemover": "背景除去",
+        "imageColorizer": "Image Colorizer (DDColor)",
         "imageEraser": "画像消し (LaMa)",
         "samEncoder": "SAMビジョンエンコーダー",
         "samDecoder": "SAMプロンプトデコーダー"

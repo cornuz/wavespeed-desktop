@@ -5,6 +5,13 @@ import {
 } from "@/lib/freeToolModels";
 
 type ColorizeMode = "ai" | "natural" | "vintage" | "vivid" | "portrait";
+type TensorData =
+  | Float32Array
+  | Float64Array
+  | Uint16Array
+  | Int32Array
+  | BigInt64Array
+  | BigUint64Array;
 
 interface ColorizeOptions {
   mode: ColorizeMode;
@@ -26,6 +33,18 @@ const MODEL_URL = IMAGE_COLORIZER_MODEL_URL;
 const MODEL_SIZE = 256;
 const CACHE_NAME = IMAGE_COLORIZER_CACHE_NAME;
 let session: ort.InferenceSession | null = null;
+
+function disposeTensor(tensor: ort.Tensor): void {
+  (tensor as unknown as { dispose?: () => void }).dispose?.();
+}
+
+async function releaseSession(): Promise<void> {
+  const currentSession = session;
+  session = null;
+  await (
+    currentSession as unknown as { release?: () => Promise<void> | void }
+  )?.release?.();
+}
 
 const clamp = (value: number, min = 0, max = 1) =>
   Math.min(max, Math.max(min, value));
@@ -72,27 +91,6 @@ function hslToRgb(h: number, s: number, l: number): [number, number, number] {
     Math.round((g + m) * 255),
     Math.round((b + m) * 255),
   ];
-}
-
-function rgbToHsl(r: number, g: number, b: number): [number, number, number] {
-  const rn = r / 255;
-  const gn = g / 255;
-  const bn = b / 255;
-  const max = Math.max(rn, gn, bn);
-  const min = Math.min(rn, gn, bn);
-  const l = (max + min) / 2;
-
-  if (max === min) return [0, 0, l];
-
-  const d = max - min;
-  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-  let h = 0;
-
-  if (max === rn) h = (gn - bn) / d + (gn < bn ? 6 : 0);
-  else if (max === gn) h = (bn - rn) / d + 2;
-  else h = (rn - gn) / d + 4;
-
-  return [h * 60, s, l];
 }
 
 function srgbToLinear(value: number) {
@@ -169,16 +167,7 @@ function float16ToFloat32(value: number) {
   return sign * Math.pow(2, exponent - 15) * (1 + fraction / 1024);
 }
 
-function readTensorValue(
-  data:
-    | Float32Array
-    | Float64Array
-    | Uint16Array
-    | Int32Array
-    | BigInt64Array
-    | BigUint64Array,
-  index: number,
-) {
+function readTensorValue(data: TensorData, index: number) {
   if (data instanceof Uint16Array) {
     return float16ToFloat32(data[index]);
   }
@@ -382,6 +371,7 @@ async function initSession(id: number) {
     executionProviders: ["wasm"],
     graphOptimizationLevel: "all",
     enableCpuMemArena: true,
+    executionMode: "parallel",
   });
 }
 
@@ -406,13 +396,7 @@ function preprocessForDDColor(imageData: ImageData) {
 }
 
 function sampleChannelBilinear(
-  data:
-    | Float32Array
-    | Float64Array
-    | Uint16Array
-    | Int32Array
-    | BigInt64Array
-    | BigUint64Array,
+  data: TensorData,
   channel: number,
   x: number,
   y: number,
@@ -432,6 +416,18 @@ function sampleChannelBilinear(
   const top = lerp(v00, v10, tx);
   const bottom = lerp(v01, v11, tx);
   return lerp(top, bottom, ty);
+}
+
+async function runColorizerSession(input: ort.Tensor): Promise<ort.Tensor> {
+  if (!session) throw new Error("Colorization model is not initialized");
+
+  const inputName = session.inputNames[0] || "input";
+  const outputName = session.outputNames[0];
+  const result = await session.run({ [inputName]: input });
+  const output = result[outputName] || Object.values(result)[0];
+  if (!output) throw new Error("Colorization model returned no output");
+
+  return output;
 }
 
 async function colorizeWithDDColor(
@@ -461,11 +457,7 @@ async function colorizeWithDDColor(
     MODEL_SIZE,
   ]);
 
-  const inputName = session.inputNames[0] || "input";
-  const outputName = session.outputNames[0];
-  const result = await session.run({ [inputName]: input });
-  const output = result[outputName] || Object.values(result)[0];
-  if (!output) throw new Error("Colorization model returned no output");
+  const output = await runColorizerSession(input);
 
   self.postMessage({
     type: "progress",
@@ -487,13 +479,7 @@ async function colorizeWithDDColor(
     bitmap.height,
   );
   const colorData = resultCtx.createImageData(bitmap.width, bitmap.height);
-  const tensorData = output.data as
-    | Float32Array
-    | Float64Array
-    | Uint16Array
-    | Int32Array
-    | BigInt64Array
-    | BigUint64Array;
+  const tensorData = output.data as TensorData;
   const strength = clamp(options.strength / 100);
   const saturationScale = clamp(options.saturation / 100, 0, 2);
 
@@ -525,8 +511,8 @@ async function colorizeWithDDColor(
   resultCtx.putImageData(colorData, 0, 0);
 
   bitmap.close();
-  input.dispose();
-  (output as unknown as { dispose?: () => void }).dispose?.();
+  disposeTensor(input);
+  disposeTensor(output);
 
   self.postMessage({
     type: "progress",
@@ -538,10 +524,12 @@ async function colorizeWithDDColor(
 
 self.onmessage = async (e: MessageEvent) => {
   const { type, payload } = e.data;
+  let requestId: number | undefined;
 
   try {
     if (type === "process") {
       const { imageBlob, options, id } = payload as ProcessPayload;
+      requestId = id;
       self.postMessage({ type: "phase", payload: { phase: "process", id } });
       self.postMessage({
         type: "progress",
@@ -565,12 +553,16 @@ self.onmessage = async (e: MessageEvent) => {
     }
 
     if (type === "dispose") {
+      await releaseSession();
       self.postMessage({ type: "disposed" });
     }
   } catch (error) {
     self.postMessage({
       type: "error",
-      payload: (error as Error).message || "Image colorization failed",
+      payload: {
+        message: (error as Error).message || "Image colorization failed",
+        id: requestId,
+      },
     });
   }
 };

@@ -680,6 +680,7 @@
       "downloadCompleteDesc": "All models downloaded successfully",
       "downloadCancelled": "Download Cancelled",
       "downloadCancelledDesc": "Model download was cancelled",
+      "downloadTimedOut": "Model download timed out",
       "alreadyCached": "Already cached",
       "notDownloaded": "Not downloaded",
       "downloaded": "Downloaded",

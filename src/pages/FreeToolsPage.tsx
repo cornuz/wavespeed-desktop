@@ -207,7 +207,7 @@ export function FreeToolsPage() {
                   {tool.image ? (
                     <img
                       src={tool.image}
-                      alt={t(tool.titleKey, tool.fallbackTitle)}
+                      alt={t(tool.titleKey, tool.fallbackTitle ?? tool.titleKey)}
                       className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                     />
                   ) : (
@@ -222,12 +222,15 @@ export function FreeToolsPage() {
                     <tool.icon className="h-4 w-4 text-primary" />
                   </div>
                   <CardTitle className="text-base">
-                    {t(tool.titleKey, tool.fallbackTitle)}
+                    {t(tool.titleKey, tool.fallbackTitle ?? tool.titleKey)}
                   </CardTitle>
                 </div>
                 <CardDescription className="mt-2 text-sm">
                   <span className="line-clamp-2 leading-relaxed">
-                    {t(tool.descriptionKey, tool.fallbackDescription)}
+                    {t(
+                      tool.descriptionKey,
+                      tool.fallbackDescription ?? tool.descriptionKey,
+                    )}
                   </span>
                 </CardDescription>
               </CardHeader>

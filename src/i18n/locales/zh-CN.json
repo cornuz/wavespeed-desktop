@@ -680,6 +680,7 @@
       "downloadCompleteDesc": "所有模型下载成功",
       "downloadCancelled": "下载已取消",
       "downloadCancelledDesc": "模型下载已取消",
+      "downloadTimedOut": "模型下载超时",
       "alreadyCached": "已缓存",
       "notDownloaded": "未下载",
       "downloaded": "已下载",
