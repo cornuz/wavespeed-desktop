@@ -663,6 +663,7 @@
       "downloadCompleteDesc": "Tüm modeller başarıyla indirildi",
       "downloadCancelled": "İndirme iptal edildi",
       "downloadCancelledDesc": "Model indirmesi iptal edildi",
+      "downloadTimedOut": "Model download timed out",
       "alreadyCached": "Zaten önbellekte",
       "downloaded": "İndirildi",
       "overallProgress": "Genel ilerleme",
@@ -670,6 +671,7 @@
         "ffmpegJs": "FFmpeg Çekirdeği (JS)",
         "ffmpegWasm": "FFmpeg Çekirdeği (WASM)",
         "backgroundRemover": "Arka plan kaldırıcı",
+        "imageColorizer": "Image Colorizer (DDColor)",
         "imageEraser": "Görsel silgisi (LaMa)",
         "samEncoder": "SAM Görüntü Kodlayıcı",
         "samDecoder": "SAM İstem Dekodlayıcı"

@@ -663,6 +663,7 @@
       "downloadCompleteDesc": "सभी मॉडल सफलतापूर्वक डाउनलोड हुए",
       "downloadCancelled": "डाउनलोड रद्द किया गया",
       "downloadCancelledDesc": "मॉडल डाउनलोड रद्द किया गया",
+      "downloadTimedOut": "Model download timed out",
       "alreadyCached": "पहले से कैश में",
       "downloaded": "डाउनलोड किया गया",
       "overallProgress": "कुल प्रगति",
@@ -670,6 +671,7 @@
         "ffmpegJs": "FFmpeg कोर (JS)",
         "ffmpegWasm": "FFmpeg कोर (WASM)",
         "backgroundRemover": "पृष्ठभूमि हटाने वाला",
+        "imageColorizer": "Image Colorizer (DDColor)",
         "imageEraser": "छवि इरेज़र (LaMa)",
         "samEncoder": "SAM विज़न एनकोडर",
         "samDecoder": "SAM प्रॉम्प्ट डिकोडर"

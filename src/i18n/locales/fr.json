@@ -663,6 +663,7 @@
       "downloadCompleteDesc": "Tous les modèles ont été téléchargés avec succès",
       "downloadCancelled": "Téléchargement annulé",
       "downloadCancelledDesc": "Le téléchargement du modèle a été annulé",
+      "downloadTimedOut": "Model download timed out",
       "alreadyCached": "Déjà en cache",
       "downloaded": "Téléchargé",
       "overallProgress": "Progrès global",
@@ -670,6 +671,7 @@
         "ffmpegJs": "Noyau FFmpeg (JS)",
         "ffmpegWasm": "Noyau FFmpeg (WASM)",
         "backgroundRemover": "Suppresseur d'arrière-plan",
+        "imageColorizer": "Image Colorizer (DDColor)",
         "imageEraser": "Gomme d'image (LaMa)",
         "samEncoder": "Encodeur de vision SAM",
         "samDecoder": "Décodeur de invites SAM"

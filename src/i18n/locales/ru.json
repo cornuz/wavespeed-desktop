@@ -663,6 +663,7 @@
       "downloadCompleteDesc": "Все модели успешно загружены",
       "downloadCancelled": "Загрузка отменена",
       "downloadCancelledDesc": "Загрузка модели отменена",
+      "downloadTimedOut": "Model download timed out",
       "alreadyCached": "Уже в кэше",
       "downloaded": "Загружено",
       "overallProgress": "Общий прогресс",
@@ -670,6 +671,7 @@
         "ffmpegJs": "Ядро FFmpeg (JS)",
         "ffmpegWasm": "Ядро FFmpeg (WASM)",
         "backgroundRemover": "Удаление фона",
+        "imageColorizer": "Image Colorizer (DDColor)",
         "imageEraser": "Ластик изображений (LaMa)",
         "samEncoder": "Визуальный кодировщик SAM",
         "samDecoder": "Декодер подсказок SAM"

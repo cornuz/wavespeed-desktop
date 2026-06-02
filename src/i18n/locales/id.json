@@ -663,6 +663,7 @@
       "downloadCompleteDesc": "Semua model berhasil diunduh",
       "downloadCancelled": "Unduhan dibatalkan",
       "downloadCancelledDesc": "Unduhan model dibatalkan",
+      "downloadTimedOut": "Model download timed out",
       "alreadyCached": "Sudah di-cache",
       "downloaded": "Diunduh",
       "overallProgress": "Kemajuan keseluruhan",
@@ -670,6 +671,7 @@
         "ffmpegJs": "Inti FFmpeg (JS)",
         "ffmpegWasm": "Inti FFmpeg (WASM)",
         "backgroundRemover": "Penghapus latar belakang",
+        "imageColorizer": "Image Colorizer (DDColor)",
         "imageEraser": "Penghapus gambar (LaMa)",
         "samEncoder": "Pengode visi SAM",
         "samDecoder": "Dekoder prompt SAM"

@@ -662,6 +662,7 @@
       "downloadCompleteDesc": "تم تنزيل جميع النماذج بنجاح",
       "downloadCancelled": "تم إلغاء التنزيل",
       "downloadCancelledDesc": "تم إلغاء تنزيل النماذج",
+      "downloadTimedOut": "Model download timed out",
       "alreadyCached": "مخزن مؤقت بالفعل",
       "downloaded": "تم التنزيل",
       "overallProgress": "التقدم الإجمالي",
@@ -669,6 +670,7 @@
         "ffmpegJs": "نواة FFmpeg (JS)",
         "ffmpegWasm": "نواة FFmpeg (WASM)",
         "backgroundRemover": "إزالة الخلفية",
+        "imageColorizer": "Image Colorizer (DDColor)",
         "imageEraser": "ممحاة الصور (LaMa)",
         "samEncoder": "مُرمّز رؤية SAM",
         "samDecoder": "مُفكّك رموز SAM"
