@@ -477,51 +477,6 @@ function getLocalAssetContentType(filePath: string): string {
   }
 }
 
-function parseRangeHeader(rangeHeader: string, totalSize: number): {
-  start: number;
-  end: number;
-} | null {
-  const match = /^bytes=(\d*)-(\d*)$/i.exec(rangeHeader.trim());
-  if (!match) {
-    return null;
-  }
-
-  const [, rawStart, rawEnd] = match;
-  let start: number;
-  let end: number;
-
-  if (rawStart === "" && rawEnd === "") {
-    return null;
-  }
-
-  if (rawStart === "") {
-    const suffixLength = Number.parseInt(rawEnd, 10);
-    if (!Number.isFinite(suffixLength) || suffixLength <= 0) {
-      return null;
-    }
-    start = Math.max(0, totalSize - suffixLength);
-    end = totalSize - 1;
-  } else {
-    start = Number.parseInt(rawStart, 10);
-    end = rawEnd === "" ? totalSize - 1 : Number.parseInt(rawEnd, 10);
-  }
-
-  if (
-    !Number.isFinite(start) ||
-    !Number.isFinite(end) ||
-    start < 0 ||
-    end < start ||
-    start >= totalSize
-  ) {
-    return null;
-  }
-
-  return {
-    start,
-    end: Math.min(end, totalSize - 1),
-  };
-}
-
 function createLocalAssetResponse(request: Request): Response {
   const filePath = decodeURIComponent(request.url.replace("local-asset://", ""));
 
