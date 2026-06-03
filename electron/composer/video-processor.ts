@@ -4,6 +4,7 @@
  */
 import { spawn } from "child_process";
 import type { ChildProcess } from "child_process";
+import { spawnSync } from "child_process";
 import { existsSync, statSync } from "fs";
 import type { ComposerPreviewProxyTier } from "../../src/composer/types/project";
 
@@ -238,6 +239,78 @@ export async function probeVideoFile(filePath: string): Promise<ProbeResult | nu
   });
 }
 
+export function probeVideoFileSync(filePath: string): ProbeResult | null {
+  try {
+    const result = spawnSync(
+      "ffprobe",
+      ["-v", "quiet", "-of", "json", "-show_format", "-show_streams", filePath],
+      { encoding: "utf-8", windowsHide: true },
+    );
+
+    if (result.error) {
+      console.warn(
+        "[Video Processor] ffprobe not found or failed to execute. Video analysis is unavailable. " +
+          "Make sure FFmpeg (which includes ffprobe) is installed and in your PATH.",
+      );
+      return null;
+    }
+
+    if (result.status !== 0) {
+      console.warn(
+        `[Video Processor] ffprobe failed with exit code ${result.status}:`,
+        result.stderr || "(no stderr output)",
+      );
+      return null;
+    }
+
+    const probe = JSON.parse(result.stdout) as {
+      streams?: Array<{ codec_type: string; codec_name: string }>;
+      format?: { duration?: string };
+    };
+
+    const parsed: ProbeResult = {};
+    const streams = probe.streams ?? [];
+    for (const stream of streams) {
+      if (stream.codec_type === "video") {
+        const videoStream = stream as {
+          codec_name: string;
+          width?: number;
+          height?: number;
+          r_frame_rate?: string;
+          pix_fmt?: string;
+          sample_aspect_ratio?: string;
+        };
+        parsed.video = {
+          codec: videoStream.codec_name,
+          width: videoStream.width ?? 0,
+          height: videoStream.height ?? 0,
+          duration: probe.format?.duration ? parseFloat(probe.format.duration) : 0,
+          frameRate: videoStream.r_frame_rate,
+          pixelFormat: videoStream.pix_fmt,
+          sampleAspectRatio: videoStream.sample_aspect_ratio,
+        };
+      } else if (stream.codec_type === "audio") {
+        const audioStream = stream as {
+          codec_name: string;
+          sample_rate?: string;
+          channels?: number;
+        };
+        if (!parsed.audio) parsed.audio = [];
+        parsed.audio.push({
+          codec: audioStream.codec_name,
+          sampleRate: audioStream.sample_rate ? parseInt(audioStream.sample_rate, 10) : undefined,
+          channels: audioStream.channels,
+        });
+      }
+    }
+
+    return parsed;
+  } catch (err) {
+    console.warn(`[Video Processor] Failed to parse ffprobe output:`, err);
+    return null;
+  }
+}
+
 /**
  * Determine if video is safe for editing without transcoding.
  * Returns:
@@ -249,6 +322,7 @@ export async function checkVideoSafety(filePath: string): Promise<
   | {
       status: "ready" | "needs-transcode";
       hasUnsupportedAudio: boolean;
+      hasAudio: boolean;
     }
   | {
       status: "error";
@@ -285,6 +359,7 @@ export async function checkVideoSafety(filePath: string): Promise<
 
   // Check audio: mark unsupported but don't fail
   let hasUnsupportedAudio = false;
+  const hasAudio = Boolean(probe.audio && probe.audio.length > 0);
   if (probe.audio && probe.audio.length > 0) {
     hasUnsupportedAudio = !probe.audio.every(
       (a) => SAFE_AUDIO_CODECS.has(a.codec.toLowerCase()),
@@ -296,6 +371,7 @@ export async function checkVideoSafety(filePath: string): Promise<
     return {
       status: "ready",
       hasUnsupportedAudio,
+      hasAudio,
     };
   }
 
@@ -303,6 +379,7 @@ export async function checkVideoSafety(filePath: string): Promise<
   return {
     status: "needs-transcode",
     hasUnsupportedAudio,
+    hasAudio,
   };
 }
 

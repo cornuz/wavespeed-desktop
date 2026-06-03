@@ -5,7 +5,7 @@
  */
 import type { Database as SqlJsDatabase } from "sql.js";
 
-export const CURRENT_SCHEMA_VERSION = 12;
+export const CURRENT_SCHEMA_VERSION = 14;
 
 // ─── Migration definition ─────────────────────────────────────────────────────
 
@@ -314,6 +314,28 @@ const MIGRATIONS: NamedMigration[] = [
       }
     },
   },
+  {
+    id: "013_clip_volume",
+    apply: (db) => {
+      const info = db.exec(`PRAGMA table_info(clips)`);
+      const columns = (info[0]?.values ?? []).map((row) => row[1] as string);
+      if (!columns.includes("volume")) {
+        db.run(`ALTER TABLE clips ADD COLUMN volume REAL NOT NULL DEFAULT 1`);
+      }
+    },
+  },
+  {
+    id: "014_project_background_color",
+    apply: (db) => {
+      const info = db.exec(`PRAGMA table_info(meta)`);
+      const columns = (info[0]?.values ?? []).map((row) => row[1] as string);
+      if (!columns.includes("background_color")) {
+        db.run(
+          `ALTER TABLE meta ADD COLUMN background_color TEXT NOT NULL DEFAULT '#000000'`,
+        );
+      }
+    },
+  },
 ];
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -336,13 +358,13 @@ export function initializeSchema(
   // Insert meta singleton
   db.run(
      `INSERT INTO meta (
-        schema_version, app_version, project_name, duration, fps, width, height,
-        playback_quality, safe_zone_enabled, safe_zone_margin, layout_preset,
-        layout_sizes, created_at, updated_at
-      )
-      VALUES (?, ?, ?, 60, 30, 1920, 1080, 'med', 1, 0.1, 'timeline', '{}', ?, ?)`,
-     [CURRENT_SCHEMA_VERSION, appVersion, projectName, now, now],
-   );
+         schema_version, app_version, project_name, duration, fps, width, height,
+         background_color, playback_quality, safe_zone_enabled, safe_zone_margin, layout_preset,
+         layout_sizes, created_at, updated_at
+       )
+       VALUES (?, ?, ?, 60, 30, 1920, 1080, '#000000', 'med', 1, 0.1, 'timeline', '{}', ?, ?)`,
+      [CURRENT_SCHEMA_VERSION, appVersion, projectName, now, now],
+    );
 
   db.run(
     `INSERT OR IGNORE INTO sequence_preview (

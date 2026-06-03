@@ -47,6 +47,9 @@ ehthumbs.db
 Thumbs.db
 desktop.ini
 
+# Composer temporary files
+.composer-headless-*.html
+
 # Environment and secrets
 .env
 .env.local

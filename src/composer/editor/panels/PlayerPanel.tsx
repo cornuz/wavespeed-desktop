@@ -4,7 +4,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
 } from "react";
 import {
   ChevronDown,
@@ -40,7 +39,14 @@ import {
   composerAssetIpc,
   composerProjectIpc,
 } from "@/composer/ipc/ipc-client";
+import { buildLivePreviewFilterSpec } from "@/composer/shared/live-preview-filters";
 import { normalizeClipAdjustments } from "@/composer/shared/clipAdjustments";
+import { normalizeProjectBackgroundColor } from "@/composer/shared/projectBackground";
+import {
+  paintNoiseCanvas,
+  getNoiseSeed,
+  normalizeNoiseAmount,
+} from "@/composer/shared/procedural-noise";
 import { useComposerProjectStore } from "@/composer/stores/project.store";
 import type {
   Clip,
@@ -82,6 +88,27 @@ function syncMediaElementTime(
   ) {
     element.currentTime = targetTime;
   }
+}
+
+function syncMediaElementTimeForwardOnly(
+  element: HTMLMediaElement,
+  targetTime: number,
+  threshold: number,
+): "ahead" | "synced" {
+  if (!Number.isFinite(element.currentTime)) {
+    element.currentTime = targetTime;
+    return "synced";
+  }
+
+  if (element.currentTime - targetTime > threshold) {
+    return "ahead";
+  }
+
+  if (targetTime - element.currentTime > threshold) {
+    element.currentTime = targetTime;
+  }
+
+  return "synced";
 }
 
 function handoffMediaElementPlayback(
@@ -208,6 +235,9 @@ const PLAYBACK_QUALITIES: Array<{
     description: "Use the Low sequence preview when it is ready",
   },
 ];
+const MIN_PLAYER_ZOOM = 0.25;
+const MAX_PLAYER_ZOOM = 2;
+const PLAYER_WHEEL_ZOOM_STEP = 0.1;
 
 type EditInteraction =
   | {
@@ -227,6 +257,10 @@ type EditInteraction =
 
 function isImagePath(path: string | null | undefined): boolean {
   return path?.match(/\.(png|jpe?g|gif|webp|bmp|svg)$/i) != null;
+}
+
+function isSvgPath(path: string | null | undefined): boolean {
+  return path?.match(/\.svg$/i) != null;
 }
 
 function getCanonicalSourcePath(
@@ -304,29 +338,59 @@ function getActiveVisualClipsAtTime(
   );
 }
 
+function getActiveAudioTrackClipsAtTime(
+  clips: Clip[],
+  tracks: {
+    id: string;
+    type: "video" | "audio";
+    order: number;
+    visible: boolean;
+    muted?: boolean;
+  }[],
+  playhead: number,
+): Clip[] {
+  const sortedVisibleAudioTrackIds = tracks
+    .filter((track) => track.type === "audio" && track.visible && !track.muted)
+    .sort((left, right) => left.order - right.order)
+    .map((track) => track.id);
+
+  return sortedVisibleAudioTrackIds.flatMap((trackId) =>
+    clips.filter(
+      (clip) =>
+        clip.trackId === trackId &&
+        playhead >= clip.startTime &&
+        playhead < clip.startTime + clip.duration,
+    ),
+  );
+}
+
+function getClipEffectiveAudioVolume(clip: Clip, clipLocalTime: number): number {
+  const fadeInFactor =
+    clip.fadeInDuration > 0
+      ? clamp(clipLocalTime / clip.fadeInDuration, 0, 1)
+      : 1;
+  const fadeOutFactor =
+    clip.fadeOutDuration > 0
+      ? clamp((clip.duration - clipLocalTime) / clip.fadeOutDuration, 0, 1)
+      : 1;
+
+  return clamp(clip.volume * Math.min(fadeInFactor, fadeOutFactor), 0, 1);
+}
+
 function getVisualAdjustmentFilter(
   clip: {
+    id: string;
     adjustments: Clip["adjustments"];
   } | null,
-): string | undefined {
+): ReturnType<typeof buildLivePreviewFilterSpec> {
   if (!clip) {
-    return undefined;
+    return { filter: undefined, sharpenFilter: undefined };
   }
 
-  const adjustments = normalizeClipAdjustments(clip.adjustments);
-  const filters = [
-    `brightness(${Math.max(0, 1 + adjustments.lightnessCorrection.exposure / 100)})`,
-    `contrast(${Math.max(0, 1 + adjustments.lightnessCorrection.contrast / 100)})`,
-    `saturate(${Math.max(0, 1 + adjustments.colorCorrection.saturation / 100)})`,
-    Math.abs(adjustments.colorCorrection.hue) > 0.1
-      ? `hue-rotate(${adjustments.colorCorrection.hue * 1.8}deg)`
-      : null,
-    adjustments.effects.blur > 0.001
-      ? `blur(${Math.min(Math.max(adjustments.effects.blur, 0), 50)}px)`
-      : null,
-  ].filter(Boolean);
-
-  return filters.length > 0 ? filters.join(" ") : undefined;
+  return buildLivePreviewFilterSpec(
+    clip.adjustments,
+    `player-panel-sharpen-${clip.id}`,
+  );
 }
 
 function getVisualBlendMode(clip: { adjustments: Clip["adjustments"] } | null) {
@@ -338,88 +402,40 @@ function getVisualBlendMode(clip: { adjustments: Clip["adjustments"] } | null) {
   return blendMode === "normal" ? undefined : blendMode;
 }
 
-function getTemperatureOverlayStyle(
-  clip: { adjustments: Clip["adjustments"] } | null,
-): CSSProperties | undefined {
-  if (!clip) {
-    return undefined;
-  }
+function NoiseOverlayCanvas({
+  amount,
+  seed,
+  frameIndex,
+  width,
+  height,
+}: {
+  amount: number;
+  seed: number;
+  frameIndex: number;
+  width: number;
+  height: number;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  const { temperature } = normalizeClipAdjustments(
-    clip.adjustments,
-  ).colorCorrection;
-  if (Math.abs(temperature) < 0.1) {
-    return undefined;
-  }
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || width <= 0 || height <= 0) {
+      return;
+    }
 
-  return {
-    backgroundColor:
-      temperature >= 0 ? "rgba(255, 150, 70, 1)" : "rgba(70, 165, 255, 1)",
-    mixBlendMode: "soft-light",
-    opacity: Math.min(Math.abs(temperature) / 100, 1) * 0.28,
-  };
-}
+    paintNoiseCanvas(canvas, width, height, seed, frameIndex);
+  }, [frameIndex, height, seed, width]);
 
-function getTintOverlayStyle(
-  clip: { adjustments: Clip["adjustments"] } | null,
-): CSSProperties | undefined {
-  if (!clip) {
-    return undefined;
-  }
-
-  const { tint } = normalizeClipAdjustments(clip.adjustments).colorCorrection;
-  if (Math.abs(tint) < 0.1) {
-    return undefined;
-  }
-
-  return {
-    backgroundColor:
-      tint >= 0 ? "rgba(255, 90, 205, 1)" : "rgba(120, 255, 160, 1)",
-    mixBlendMode: "soft-light",
-    opacity: Math.min(Math.abs(tint) / 100, 1) * 0.18,
-  };
-}
-
-function getVignetteOverlayStyle(
-  clip: { adjustments: Clip["adjustments"] } | null,
-): CSSProperties | undefined {
-  if (!clip) {
-    return undefined;
-  }
-
-  const { vignette } = normalizeClipAdjustments(clip.adjustments).effects;
-  if (vignette <= 0) {
-    return undefined;
-  }
-
-  return {
-    background:
-      "radial-gradient(circle at center, rgba(0,0,0,0) 48%, rgba(0,0,0,0.72) 100%)",
-    opacity: Math.min(vignette / 100, 1) * 0.8,
-  };
-}
-
-function getNoiseOverlayStyle(
-  clip: { adjustments: Clip["adjustments"] } | null,
-): CSSProperties | undefined {
-  if (!clip) {
-    return undefined;
-  }
-
-  const { noise } = normalizeClipAdjustments(clip.adjustments).effects;
-  if (noise <= 0) {
-    return undefined;
-  }
-
-  return {
-    backgroundImage: [
-      "linear-gradient(0deg, rgba(255,255,255,0.95) 50%, rgba(0,0,0,0.95) 50%)",
-      "linear-gradient(90deg, rgba(255,255,255,0.85) 50%, rgba(0,0,0,0.85) 50%)",
-    ].join(","),
-    backgroundSize: "3px 3px, 4px 4px",
-    mixBlendMode: "overlay",
-    opacity: Math.min(noise / 100, 1) * 0.08,
-  };
+  return (
+    <canvas
+      ref={canvasRef}
+      className="pointer-events-none absolute inset-0 h-full w-full"
+      style={{
+        mixBlendMode: "overlay",
+        opacity: amount / 100,
+      }}
+    />
+  );
 }
 
 export function PlayerPanel() {
@@ -445,12 +461,17 @@ export function PlayerPanel() {
     getAssetUrl,
     previewLibraryAsset,
     updateClipTransform,
+    shouldAnimateClipVisualChanges,
   } = useComposerRuntime();
   const panelRef = useRef<HTMLDivElement | null>(null);
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const frameRef = useRef<HTMLDivElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const audioPlaybackHostRef = useRef<HTMLDivElement | null>(null);
   const playerZoomControlRef = useRef<HTMLDivElement | null>(null);
+  const previousTransformSelectionClipIdRef = useRef<string | null>(null);
+  const previousViewScaleRef = useRef<number | null>(null);
+  const previousIsPlayingRef = useRef(false);
 
   const [panelSize, setPanelSize] = useState<Size | null>(null);
   const [mediaSizes, setMediaSizes] = useState<Record<string, Size>>({});
@@ -475,6 +496,7 @@ export function PlayerPanel() {
     >
   >({});
   const playbackQuality = project.playbackQuality ?? "med";
+  const projectBackgroundColor = normalizeProjectBackgroundColor(project.backgroundColor);
 
   const handlePlaybackQualityChange = useCallback(
     async (value: string) => {
@@ -550,11 +572,25 @@ export function PlayerPanel() {
     Boolean(sequencePreview.filePath) &&
     Boolean(sequencePreviewUrl);
   const isSequencePlaybackActive =
-    !previewAsset && isPlaying && isSequencePreviewReady;
+    playbackQuality !== "full" &&
+    !previewAsset &&
+    isPlaying &&
+    isSequencePreviewReady;
+  const previewFrameIndex = useMemo(
+    () => Math.max(0, Math.round(playhead * project.fps)),
+    [playhead, project.fps],
+  );
   const activeVisualClips = useMemo(
     () =>
       !previewAsset && !isSequencePlaybackActive
         ? getActiveVisualClipsAtTime(clips, tracks, playhead)
+        : [],
+    [clips, isSequencePlaybackActive, playhead, previewAsset, tracks],
+  );
+  const activeAudioTrackClips = useMemo(
+    () =>
+      !previewAsset && !isSequencePlaybackActive
+        ? getActiveAudioTrackClipsAtTime(clips, tracks, playhead)
         : [],
     [clips, isSequencePlaybackActive, playhead, previewAsset, tracks],
   );
@@ -600,6 +636,64 @@ export function PlayerPanel() {
       }),
     [activeVisualClips, getAssetUrl, libraryAssets, mediaSizes, playhead],
   );
+  const activeAudioPlaybackLayers = useMemo(() => {
+    const activeLayersByClipId = new Map<
+      string,
+      {
+        clip: Clip;
+        canonicalUrl: string;
+        clipLocalTime: number;
+        effectiveVolume: number;
+      }
+    >();
+
+    const registerClip = (clip: Clip) => {
+      const asset = findAssetForClip(clip, libraryAssets);
+      const track = tracks.find((entry) => entry.id === clip.trackId) ?? null;
+      const hasAudio =
+        asset?.type === "audio" || asset?.hasAudio === true || track?.type === "audio";
+      if (!hasAudio) {
+        return;
+      }
+
+      const canonicalPath =
+        asset?.workingPath ?? clip.sourcePath ?? asset?.filePath ?? null;
+      const canonicalUrl = getAssetUrl(canonicalPath);
+      if (!canonicalUrl) {
+        return;
+      }
+
+      const clipLocalTime = getClipLocalTime(
+        playhead,
+        clip.startTime,
+        clip.trimStart,
+        clip.speed,
+      );
+      const effectiveVolume = getClipEffectiveAudioVolume(clip, clipLocalTime);
+      if (effectiveVolume <= 0) {
+        return;
+      }
+
+      activeLayersByClipId.set(clip.id, {
+        clip,
+        canonicalUrl,
+        clipLocalTime,
+        effectiveVolume,
+      });
+    };
+
+    activeAudioTrackClips.forEach(registerClip);
+    activeVisualClips.forEach(registerClip);
+
+    return Array.from(activeLayersByClipId.values());
+  }, [
+    activeAudioTrackClips,
+    activeVisualClips,
+    getAssetUrl,
+    libraryAssets,
+    playhead,
+    tracks,
+  ]);
   const activeInstanceLutProxyRequests = useMemo(
     () =>
       activeVisualLayers
@@ -607,6 +701,7 @@ export function PlayerPanel() {
           (layer) =>
             typeof layer.clip.sourcePath === "string" &&
             layer.clip.sourcePath.length > 0 &&
+            !isSvgPath(layer.clip.sourcePath) &&
             typeof layer.lutAssetId === "string" &&
             layer.lutAssetId.length > 0,
         )
@@ -721,6 +816,9 @@ export function PlayerPanel() {
 
   const baseScale = isFullscreen ? 1.0 : fitScale;
   const viewScale = baseScale * playerZoom;
+  useEffect(() => {
+    previousViewScaleRef.current = viewScale;
+  }, [viewScale]);
 
   const screenCenter = useMemo(() => {
     return {
@@ -736,6 +834,13 @@ export function PlayerPanel() {
           if (!layer.mediaSize || !layer.canonicalUrl) {
             return null;
           }
+
+          const normalizedAdjustments = normalizeClipAdjustments(
+            layer.clip.adjustments,
+          );
+          const normalizedNoiseAmount = normalizeNoiseAmount(
+            normalizedAdjustments.effects.noise,
+          );
 
           const uRect = getUniversalClipRect(
             layer.mediaSize,
@@ -768,23 +873,29 @@ export function PlayerPanel() {
               transform: `rotate(${layer.clip.rotationZ}deg) scaleX(${layer.clip.flipHorizontal ? -1 : 1}) scaleY(${layer.clip.flipVertical ? -1 : 1})`,
               transformOrigin: "center center",
             },
-            adjustmentFilter: getVisualAdjustmentFilter(layer.clip),
+            adjustmentPreview: getVisualAdjustmentFilter(layer.clip),
+            noisePreview:
+              normalizedNoiseAmount > 0
+                ? {
+                    amount: normalizedNoiseAmount,
+                    seed: getNoiseSeed(layer.clip.id),
+                    frameIndex: previewFrameIndex,
+                  }
+                : null,
             blendMode: getVisualBlendMode(layer.clip),
-            temperatureOverlayStyle: getTemperatureOverlayStyle(layer.clip),
-            tintOverlayStyle: getTintOverlayStyle(layer.clip),
-            vignetteOverlayStyle: getVignetteOverlayStyle(layer.clip),
-            noiseOverlayStyle: getNoiseOverlayStyle(layer.clip),
           };
         })
         .filter((layer): layer is NonNullable<typeof layer> => layer !== null),
     [
       activeVisualLayers,
       getAssetUrl,
+      project.fps,
       resolvedInstanceLutProxyPaths,
       screenCenter,
       viewScale,
       project.width,
       project.height,
+      previewFrameIndex,
     ],
   );
   const selectedVisualRenderLayer = useMemo(
@@ -796,6 +907,20 @@ export function PlayerPanel() {
         : null,
     [activeVisualRenderLayers, selectedVisualClip],
   );
+  const activeSharpenFilterDefinitions = useMemo(() => {
+    const definitions = new Map<string, NonNullable<(typeof activeVisualRenderLayers)[number]["adjustmentPreview"]["sharpenFilter"]>>();
+
+    activeVisualRenderLayers.forEach((layer) => {
+      if (layer.adjustmentPreview.sharpenFilter) {
+        definitions.set(
+          layer.adjustmentPreview.sharpenFilter.filterId,
+          layer.adjustmentPreview.sharpenFilter,
+        );
+      }
+    });
+
+    return Array.from(definitions.values());
+  }, [activeVisualRenderLayers]);
   const previewAssetUrl = useMemo(
     () =>
       getAssetUrl(
@@ -844,6 +969,43 @@ export function PlayerPanel() {
   const playbackSourceBadge = useMemo(() => {
     return null;
   }, []);
+  const handlePlayerWheelZoom = useCallback(
+    (event: globalThis.WheelEvent) => {
+      if (previewAsset || event.deltaY === 0) {
+        return;
+      }
+
+      if (event.cancelable) {
+        event.preventDefault();
+      }
+      setPlayerZoom((value) =>
+        clamp(
+          Number(
+            (
+              value +
+              (event.deltaY < 0
+                ? PLAYER_WHEEL_ZOOM_STEP
+                : -PLAYER_WHEEL_ZOOM_STEP)
+            ).toFixed(2),
+          ),
+          MIN_PLAYER_ZOOM,
+          MAX_PLAYER_ZOOM,
+        ),
+      );
+    },
+    [previewAsset],
+  );
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) {
+      return;
+    }
+
+    viewport.addEventListener("wheel", handlePlayerWheelZoom, { passive: false });
+    return () => {
+      viewport.removeEventListener("wheel", handlePlayerWheelZoom);
+    };
+  }, [handlePlayerWheelZoom]);
   const unsupportedLiveVideoLutMessage = useMemo(() => {
     if (previewAsset || isSequencePlaybackActive) {
       return null;
@@ -974,20 +1136,130 @@ export function PlayerPanel() {
       }
     : undefined;
   const selectedVisualClipForTransform = transformVisualLayer?.clip ?? null;
+  useEffect(() => {
+    previousTransformSelectionClipIdRef.current =
+      selectedVisualClipForTransform?.id ?? null;
+  }, [selectedVisualClipForTransform?.id]);
   const syncVisualLayerVideoElement = useCallback(
     (
       element: HTMLVideoElement,
       layer: (typeof activeVisualRenderLayers)[number],
     ) => {
       const syncThreshold = 0.5 / project.fps;
-      element.pause();
+      const shouldFrameStepFullPlayback =
+        playbackQuality === "full" &&
+        isPlaying &&
+        !previewAsset &&
+        !isSequencePlaybackActive;
       if (Math.abs(element.playbackRate - layer.clip.speed) > 0.001) {
         element.playbackRate = layer.clip.speed;
       }
-      syncMediaElementTime(element, layer.clipLocalTime, syncThreshold);
+
+      const shouldPlayLiveLayer =
+        isPlaying && !previewAsset && !isSequencePlaybackActive;
+      const shouldUseForwardOnlySync =
+        playbackQuality === "full" &&
+        shouldPlayLiveLayer &&
+        !shouldFrameStepFullPlayback;
+
+      const syncMode = shouldFrameStepFullPlayback
+        ? (syncMediaElementTime(element, layer.clipLocalTime, 0), "synced" as const)
+        : shouldUseForwardOnlySync
+          ? syncMediaElementTimeForwardOnly(
+              element,
+              layer.clipLocalTime,
+              syncThreshold,
+            )
+          : (syncMediaElementTime(element, layer.clipLocalTime, syncThreshold),
+            "synced" as const);
+
+      if (!shouldPlayLiveLayer) {
+        element.pause();
+        return;
+      }
+
+      if (shouldFrameStepFullPlayback) {
+        element.pause();
+        return;
+      }
+
+      if (syncMode === "ahead") {
+        element.pause();
+        return;
+      }
+
+      if (element.paused) {
+        void element.play().catch(() => undefined);
+      }
     },
-    [project.fps],
+    [
+      isPlaying,
+      isSequencePlaybackActive,
+      playbackQuality,
+      previewAsset,
+      project.fps,
+    ],
   );
+  const syncAudioPlaybackElement = useCallback(
+    (
+      element: HTMLAudioElement,
+      layer: (typeof activeAudioPlaybackLayers)[number],
+    ) => {
+      const syncThreshold = 0.5 / project.fps;
+      if (Math.abs(element.playbackRate - layer.clip.speed) > 0.001) {
+        element.playbackRate = layer.clip.speed;
+      }
+
+      if (Math.abs(element.volume - layer.effectiveVolume) > 0.001) {
+        element.volume = layer.effectiveVolume;
+      }
+      element.muted = false;
+      const shouldUseForwardOnlySync =
+        playbackQuality === "full" && isPlaying && !previewAsset && !isSequencePlaybackActive;
+      const syncMode = shouldUseForwardOnlySync
+        ? syncMediaElementTimeForwardOnly(
+            element,
+            layer.clipLocalTime,
+            syncThreshold,
+          )
+        : (syncMediaElementTime(element, layer.clipLocalTime, syncThreshold),
+          "synced" as const);
+
+      if (!isPlaying || previewAsset || isSequencePlaybackActive) {
+        element.pause();
+        return;
+      }
+
+      if (syncMode === "ahead") {
+        element.pause();
+        return;
+      }
+
+      if (element.paused) {
+        void element.play().catch(() => undefined);
+      }
+    },
+    [
+      isPlaying,
+      isSequencePlaybackActive,
+      playbackQuality,
+      previewAsset,
+      project.fps,
+    ],
+  );
+  const shouldAnimateTransformOverlay =
+    !isPlaying &&
+    !interaction &&
+    previousViewScaleRef.current === viewScale &&
+    selectedVisualClipForTransform != null &&
+    previousTransformSelectionClipIdRef.current === selectedVisualClipForTransform.id &&
+    shouldAnimateClipVisualChanges(selectedVisualClipForTransform.id);
+  const shouldAnimateSelectedClipVisualChanges =
+    !isPlaying &&
+    previousViewScaleRef.current === viewScale &&
+    selectedVisualClipForTransform != null &&
+    previousTransformSelectionClipIdRef.current === selectedVisualClipForTransform.id &&
+    shouldAnimateClipVisualChanges(selectedVisualClipForTransform.id);
   const renderVisualLayer = useCallback(
     (
       layer: (typeof activeVisualRenderLayers)[number],
@@ -996,76 +1268,89 @@ export function PlayerPanel() {
         offsetX?: number;
         offsetY?: number;
       },
-    ) => (
-      <div
-        className="absolute"
-        style={{
-          left: layer.screenRect.x + (options?.offsetX ?? 0),
-          top: layer.screenRect.y + (options?.offsetY ?? 0),
-          width: layer.screenRect.width,
-          height: layer.screenRect.height,
-          opacity: options?.opacity ?? layer.effectiveOpacity,
-          mixBlendMode: layer.blendMode,
-        }}
-      >
+    ) => {
+      const shouldAnimateVisualChanges =
+        shouldAnimateSelectedClipVisualChanges &&
+        layer.clip.id === selectedVisualClipForTransform?.id;
+
+      return (
         <div
-          className="relative h-full w-full"
+          className="absolute"
           style={{
-            filter: layer.adjustmentFilter,
-            ...layer.rotationStyle,
+            left: layer.screenRect.x + (options?.offsetX ?? 0),
+            top: layer.screenRect.y + (options?.offsetY ?? 0),
+            width: layer.screenRect.width,
+            height: layer.screenRect.height,
+            opacity: options?.opacity ?? layer.effectiveOpacity,
+            mixBlendMode: layer.blendMode,
+            transition: shouldAnimateVisualChanges
+              ? "left 360ms linear, top 360ms linear, width 360ms linear, height 360ms linear, opacity 360ms linear"
+              : undefined,
           }}
         >
-          {isImagePath(layer.clip.sourcePath) ? (
-            <img
-              src={layer.canonicalUrl}
-              alt={layer.clip.sourcePath}
-              className="h-full w-full object-fill"
-              draggable={false}
-            />
-          ) : (
-            <video
-              data-player-clip-id={layer.clip.id}
-              src={layer.canonicalUrl}
-              className="h-full w-full object-fill"
-              playsInline
-              muted
-              preload="auto"
-              onLoadedMetadata={(event) =>
-                syncVisualLayerVideoElement(event.currentTarget, layer)
-              }
-              onCanPlay={(event) =>
-                syncVisualLayerVideoElement(event.currentTarget, layer)
-              }
-            />
-          )}
-          {layer.temperatureOverlayStyle ? (
-            <div
-              className="pointer-events-none absolute inset-0"
-              style={layer.temperatureOverlayStyle}
-            />
-          ) : null}
-          {layer.tintOverlayStyle ? (
-            <div
-              className="pointer-events-none absolute inset-0"
-              style={layer.tintOverlayStyle}
-            />
-          ) : null}
-          {layer.vignetteOverlayStyle ? (
-            <div
-              className="pointer-events-none absolute inset-0"
-              style={layer.vignetteOverlayStyle}
-            />
-          ) : null}
-          {layer.noiseOverlayStyle ? (
-            <div
-              className="pointer-events-none absolute inset-0"
-              style={layer.noiseOverlayStyle}
-            />
-          ) : null}
+          <div
+            className="relative h-full w-full"
+            style={{
+              isolation: "isolate",
+              transition: shouldAnimateVisualChanges
+                ? "transform 360ms linear"
+                : undefined,
+              ...layer.rotationStyle,
+            }}
+          >
+            {isImagePath(layer.clip.sourcePath) ? (
+              <img
+                src={layer.canonicalUrl}
+                alt={layer.clip.sourcePath}
+                className="h-full w-full object-fill"
+                draggable={false}
+                style={{
+                  filter: layer.adjustmentPreview.filter,
+                  transition: shouldAnimateVisualChanges
+                    ? "filter 360ms linear"
+                    : undefined,
+                }}
+              />
+            ) : (
+              <video
+                data-player-clip-id={layer.clip.id}
+                src={layer.canonicalUrl}
+                className="h-full w-full object-fill"
+                playsInline
+                muted
+                preload="auto"
+                style={{
+                  filter: layer.adjustmentPreview.filter,
+                  transition: shouldAnimateVisualChanges
+                    ? "filter 360ms linear"
+                    : undefined,
+                }}
+                onLoadedMetadata={(event) =>
+                  syncVisualLayerVideoElement(event.currentTarget, layer)
+                }
+                onCanPlay={(event) =>
+                  syncVisualLayerVideoElement(event.currentTarget, layer)
+                }
+              />
+            )}
+            {layer.noisePreview ? (
+              <NoiseOverlayCanvas
+                amount={layer.noisePreview.amount}
+                seed={layer.noisePreview.seed}
+                frameIndex={layer.noisePreview.frameIndex}
+                width={Math.max(1, Math.round(layer.screenRect.width))}
+                height={Math.max(1, Math.round(layer.screenRect.height))}
+              />
+            ) : null}
+          </div>
         </div>
-      </div>
-    ),
-    [activeVisualRenderLayers, syncVisualLayerVideoElement],
+      );
+    },
+    [
+      selectedVisualClipForTransform?.id,
+      shouldAnimateSelectedClipVisualChanges,
+      syncVisualLayerVideoElement,
+    ],
   );
 
   useEffect(() => {
@@ -1243,6 +1528,120 @@ export function PlayerPanel() {
   ]);
 
   useEffect(() => {
+    const wasPlaying = previousIsPlayingRef.current;
+    previousIsPlayingRef.current = isPlaying;
+
+    if (previewAsset || isSequencePlaybackActive) {
+      return;
+    }
+
+    const frame = frameRef.current;
+    const audioHost = audioPlaybackHostRef.current;
+    if (!frame && !audioHost) {
+      return;
+    }
+
+    if (wasPlaying && !isPlaying) {
+      frame
+        ?.querySelectorAll<HTMLVideoElement>("video[data-player-clip-id]")
+        .forEach((element) => {
+          element.pause();
+        });
+      audioHost
+        ?.querySelectorAll<HTMLAudioElement>("audio[data-player-audio-clip-id]")
+        .forEach((element) => {
+          element.pause();
+        });
+      return;
+    }
+
+    if (!wasPlaying && isPlaying) {
+      const syncThreshold = 0.5 / project.fps;
+
+      activeVisualLayers.forEach((layer) => {
+        if (isImagePath(layer.clip.sourcePath)) {
+          return;
+        }
+
+        frame
+          ?.querySelectorAll<HTMLVideoElement>(
+            `video[data-player-clip-id="${layer.clip.id}"]`,
+          )
+          .forEach((element) => {
+            if (Math.abs(element.playbackRate - layer.clip.speed) > 0.001) {
+              element.playbackRate = layer.clip.speed;
+            }
+            if (playbackQuality === "full") {
+              syncMediaElementTime(element, layer.clipLocalTime, 0);
+              element.pause();
+              return;
+            }
+            syncMediaElementTime(element, layer.clipLocalTime, syncThreshold);
+            void element.play().catch(() => undefined);
+          });
+      });
+
+      activeAudioPlaybackLayers.forEach((layer) => {
+        const element = audioHost?.querySelector<HTMLAudioElement>(
+          `audio[data-player-audio-clip-id="${layer.clip.id}"]`,
+        );
+        if (!element) {
+          return;
+        }
+
+        if (Math.abs(element.playbackRate - layer.clip.speed) > 0.001) {
+          element.playbackRate = layer.clip.speed;
+        }
+        if (Math.abs(element.volume - layer.effectiveVolume) > 0.001) {
+          element.volume = layer.effectiveVolume;
+        }
+        element.muted = false;
+        syncMediaElementTime(element, layer.clipLocalTime, syncThreshold);
+        void element.play().catch(() => undefined);
+      });
+    }
+  }, [
+    activeAudioPlaybackLayers,
+    activeVisualLayers,
+    isPlaying,
+    isSequencePlaybackActive,
+    playbackQuality,
+    previewAsset,
+    project.fps,
+  ]);
+
+  useEffect(() => {
+    const audioElements =
+      audioPlaybackHostRef.current?.querySelectorAll<HTMLAudioElement>(
+        "audio[data-player-audio-clip-id]",
+      ) ?? [];
+
+    if (!isPlaying || previewAsset || isSequencePlaybackActive) {
+      audioElements.forEach((element) => {
+        element.pause();
+      });
+      return;
+    }
+
+    activeAudioPlaybackLayers.forEach((layer) => {
+      const audio = audioPlaybackHostRef.current?.querySelector<HTMLAudioElement>(
+        `audio[data-player-audio-clip-id="${layer.clip.id}"]`,
+      );
+      if (!audio) {
+        return;
+      }
+
+      syncAudioPlaybackElement(audio, layer);
+    });
+  }, [
+    activeAudioPlaybackLayers,
+    isPlaying,
+    isSequencePlaybackActive,
+    previewAsset,
+    syncAudioPlaybackElement,
+  ]);
+
+  useEffect(() => {
     const video = videoRef.current;
     const targetTime = pendingSequencePlaybackStartTime ?? playhead;
 
@@ -1290,10 +1689,11 @@ export function PlayerPanel() {
   ]);
 
   useEffect(() => {
-    if (isPlaying && playhead >= project.duration) {
-      stopPlayback(project.duration);
+    const previewPlaybackEndTime = Math.max(0, project.duration - 1 / project.fps);
+    if (isPlaying && playhead >= previewPlaybackEndTime) {
+      stopPlayback(previewPlaybackEndTime);
     }
-  }, [isPlaying, playhead, project.duration, stopPlayback]);
+  }, [isPlaying, playhead, project.duration, project.fps, stopPlayback]);
 
   useEffect(() => {
     if (!interaction || !displayedRect) {
@@ -1419,7 +1819,7 @@ export function PlayerPanel() {
   };
 
   return (
-    <div ref={panelRef} className="flex h-full w-full flex-col bg-black">
+    <div ref={panelRef} className="flex h-full w-full flex-col bg-background">
       <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
         <Play className="h-4 w-4 text-muted-foreground" />
         <span className="flex-1 text-sm font-medium text-muted-foreground">
@@ -1459,12 +1859,49 @@ export function PlayerPanel() {
         <div className="flex h-full w-full items-center justify-center overflow-visible">
           <div
             ref={frameRef}
-            className="relative flex items-center justify-center overflow-visible bg-black"
+            className="relative flex items-center justify-center overflow-visible"
             style={{
               ...activeFrameStyle,
+              backgroundColor: projectBackgroundColor,
               isolation: "isolate",
             }}
           >
+            {activeSharpenFilterDefinitions.length > 0 ? (
+              <svg className="pointer-events-none absolute h-0 w-0" aria-hidden="true">
+                <defs>
+                  {activeSharpenFilterDefinitions.map((definition) => (
+                    <filter
+                      key={definition.filterId}
+                      id={definition.filterId}
+                      colorInterpolationFilters="sRGB"
+                    >
+                      <feConvolveMatrix
+                        order="3"
+                        kernelMatrix={definition.kernelMatrix}
+                        edgeMode="duplicate"
+                        preserveAlpha="true"
+                      />
+                    </filter>
+                  ))}
+                </defs>
+              </svg>
+            ) : null}
+            <div ref={audioPlaybackHostRef} className="hidden" aria-hidden="true">
+              {activeAudioPlaybackLayers.map((layer) => (
+                <audio
+                  key={layer.clip.id}
+                  data-player-audio-clip-id={layer.clip.id}
+                  src={layer.canonicalUrl}
+                  preload="auto"
+                  onLoadedMetadata={(event) =>
+                    syncAudioPlaybackElement(event.currentTarget, layer)
+                  }
+                  onCanPlay={(event) =>
+                    syncAudioPlaybackElement(event.currentTarget, layer)
+                  }
+                />
+              ))}
+            </div>
             <div
               className={cn(
                 "absolute inset-0",
@@ -1618,6 +2055,9 @@ export function PlayerPanel() {
                       top: displayedScreenRect.y,
                       width: displayedScreenRect.width,
                       height: displayedScreenRect.height,
+                      transition: shouldAnimateTransformOverlay
+                        ? "left 360ms linear, top 360ms linear, width 360ms linear, height 360ms linear, transform 360ms linear"
+                        : undefined,
                       ...visualRotationStyle,
                     }}
                     onMouseDown={(event) => {
@@ -1820,7 +2260,7 @@ export function PlayerPanel() {
                           className="h-7 w-7"
                           onClick={() =>
                             setPlayerZoom((value) =>
-                              Math.max(0.25, value - 0.1),
+                              Math.max(MIN_PLAYER_ZOOM, value - 0.1),
                             )
                           }
                         >
@@ -1832,9 +2272,10 @@ export function PlayerPanel() {
                     <div className="w-24 px-1">
                       <Slider
                         value={[playerZoom]}
-                        min={0.25}
-                        max={2}
+                        min={MIN_PLAYER_ZOOM}
+                        max={MAX_PLAYER_ZOOM}
                         step={0.05}
+                        gradientFill
                         onValueChange={(values) => {
                           const nextZoom = values[0];
                           if (typeof nextZoom === "number") {
@@ -1851,7 +2292,9 @@ export function PlayerPanel() {
                           size="icon"
                           className="h-7 w-7"
                           onClick={() =>
-                            setPlayerZoom((value) => Math.min(2, value + 0.1))
+                            setPlayerZoom((value) =>
+                              Math.min(MAX_PLAYER_ZOOM, value + 0.1),
+                            )
                           }
                         >
                           <ZoomIn className="h-4 w-4" />

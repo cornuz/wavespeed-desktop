@@ -13,6 +13,11 @@ import {
   composerSequencePreviewIpc,
   composerTrackIpc,
 } from "@/composer/ipc/ipc-client";
+import {
+  applyLegacyFilterInputsToAdjustmentPatch,
+  getClipAdjustmentFilterValues,
+  mergeClipAdjustments,
+} from "@/composer/shared/clipAdjustments";
 import { useComposerProjectStore } from "@/composer/stores/project.store";
 import type {
   Clip,
@@ -21,13 +26,13 @@ import type {
   ComposerAssetType,
   Track,
 } from "@/composer/types/project";
-import { getFrameDuration, snapTimeToFrame } from "../utils/timeline";
 
 const DEFAULT_IMAGE_DURATION = 5;
 const DEFAULT_MEDIA_DURATION = 5;
 const DEFAULT_ZOOM = 72;
 const MIN_CLIP_DURATION = 0.25;
 const MAX_UNDO = 20;
+const TIME_PRECISION = 6;
 
 type EditableClipPatch = Partial<
   Pick<
@@ -53,6 +58,8 @@ type EditableClipPatch = Partial<
     | "fadeOutDuration"
   >
 >;
+
+type ClipUpdateSource = "panel" | "viewer" | "other";
 
 type ClipUndoSnapshot = Pick<
   Clip,
@@ -151,7 +158,11 @@ interface ComposerRuntimeContextValue {
     clipId: string,
     nextValues: Pick<Clip, "startTime" | "duration" | "trimStart" | "trimEnd">,
   ) => Promise<void>;
-  updateClip: (clipId: string, patch: EditableClipPatch) => Promise<void>;
+  updateClip: (
+    clipId: string,
+    patch: EditableClipPatch,
+    source?: ClipUpdateSource,
+  ) => Promise<void>;
   updateClipTransform: (
     clipId: string,
     nextValues: Pick<Clip, "transformOffsetX" | "transformOffsetY" | "transformScale">,
@@ -159,6 +170,7 @@ interface ComposerRuntimeContextValue {
   splitSelectedClip: () => Promise<void>;
   deleteSelectedClip: () => Promise<void>;
   undo: () => Promise<void>;
+  shouldAnimateClipVisualChanges: (clipId: string) => boolean;
   getAssetUrl: (filePath: string | null) => string | null;
   getMediaDuration: (filePath: string, type: ComposerAssetType) => Promise<number>;
 }
@@ -169,8 +181,23 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-function roundTime(value: number): number {
-  return Number(value.toFixed(3));
+function patchTouchesAnimatedVisualProperties(patch: EditableClipPatch): boolean {
+  return (
+    patch.adjustments !== undefined ||
+    patch.opacity !== undefined ||
+    patch.transformOffsetX !== undefined ||
+    patch.transformOffsetY !== undefined ||
+    patch.transformScale !== undefined ||
+    patch.rotationZ !== undefined
+  );
+}
+
+function normalizeTime(value: number): number {
+  return Number(Math.max(0, value).toFixed(TIME_PRECISION));
+}
+
+function normalizeDuration(value: number, min = MIN_CLIP_DURATION): number {
+  return normalizeTime(Math.max(min, value));
 }
 
 function getClipEnd(clip: Clip): number {
@@ -351,6 +378,7 @@ export function ComposerRuntimeProvider({
   >("timeline");
   const [zoom, setZoom] = useState(DEFAULT_ZOOM);
   const [undoStack, setUndoStack] = useState<UndoEntry[]>([]);
+  const visualChangeOriginByClipIdRef = useRef<Record<string, ClipUpdateSource>>({});
   const playbackRef = useRef({ rafId: 0, startedAt: 0, originPlayhead: 0 });
   const playheadRef = useRef(playhead);
   const durationCacheRef = useRef<Record<string, number>>({});
@@ -366,7 +394,11 @@ export function ComposerRuntimeProvider({
     const latestClipEnd = clips.reduce((max, clip) => Math.max(max, getClipEnd(clip)), 0);
     return Math.max(project.duration, latestClipEnd, DEFAULT_IMAGE_DURATION);
   }, [clips, project.duration]);
-  const frameDuration = useMemo(() => getFrameDuration(project.fps), [project.fps]);
+  const frameDuration = useMemo(() => 1 / project.fps, [project.fps]);
+  const previewPlaybackEndTime = useMemo(
+    () => normalizeTime(Math.max(0, project.duration - frameDuration)),
+    [frameDuration, project.duration],
+  );
   const selectedClip = useMemo(
     () => clips.find((clip) => clip.id === selectedClipId) ?? null,
     [clips, selectedClipId],
@@ -627,7 +659,7 @@ export function ComposerRuntimeProvider({
 
   const seek = useCallback(
     (time: number) => {
-      const nextTime = clamp(snapTimeToFrame(time, project.fps), 0, timelineDuration);
+      const nextTime = normalizeTime(clamp(time, 0, timelineDuration));
       setPlayhead(nextTime);
       if (isPlaybackWaiting) {
         setPendingSequencePlaybackStartTime(nextTime);
@@ -637,7 +669,7 @@ export function ComposerRuntimeProvider({
         playbackRef.current.originPlayhead = nextTime;
       }
     },
-    [isPlaybackWaiting, isPlaying, project.fps, timelineDuration],
+    [isPlaybackWaiting, isPlaying, timelineDuration],
   );
 
   useEffect(() => {
@@ -650,14 +682,14 @@ export function ComposerRuntimeProvider({
         return;
       }
 
-      const nextTime = clamp(snapTimeToFrame(time, project.fps), 0, timelineDuration);
+      const nextTime = normalizeTime(clamp(time, 0, previewPlaybackEndTime));
       setPlayhead((current) =>
         Math.abs(current - nextTime) < 0.0001 ? current : nextTime,
       );
       playbackRef.current.startedAt = performance.now();
       playbackRef.current.originPlayhead = nextTime;
     },
-    [isPlaying, project.fps, timelineDuration],
+    [isPlaying, previewPlaybackEndTime],
   );
 
   const setPlaybackClockSource = useCallback((source: "timeline" | "media") => {
@@ -696,13 +728,13 @@ export function ComposerRuntimeProvider({
         return;
       }
 
-      const nextTime = clamp(snapTimeToFrame(time, project.fps), 0, timelineDuration);
+      const nextTime = normalizeTime(clamp(time, 0, timelineDuration));
       playheadRef.current = nextTime;
       setPlayhead(nextTime);
       playbackRef.current.startedAt = performance.now();
       playbackRef.current.originPlayhead = nextTime;
     },
-    [project.fps, timelineDuration],
+    [timelineDuration],
   );
 
   const togglePlayback = useCallback(() => {
@@ -715,11 +747,13 @@ export function ComposerRuntimeProvider({
       return;
     }
 
+    const shouldUseSequencePreview =
+      (project.playbackQuality ?? "med") !== "full";
     const sequencePreviewReady =
       project.sequencePreview.status === "ready" &&
       typeof project.sequencePreview.filePath === "string" &&
       project.sequencePreview.filePath.length > 0;
-    const atEnd = playheadRef.current >= project.duration - 0.5 / project.fps;
+    const atEnd = playheadRef.current >= previewPlaybackEndTime;
     const requestedStartTime = atEnd ? 0 : playheadRef.current;
     setSelectedClipId(null);
     setSelectedClipIds([]);
@@ -729,9 +763,10 @@ export function ComposerRuntimeProvider({
       setPlayhead(0);
     }
 
-    if (!sequencePreviewReady) {
+    if (shouldUseSequencePreview && !sequencePreviewReady) {
       setPendingSequencePlaybackStartTime(requestedStartTime);
       setIsPlaybackWaiting(true);
+      void refreshSequencePreview();
       return;
     }
 
@@ -744,10 +779,12 @@ export function ComposerRuntimeProvider({
     isPlaybackWaiting,
     isPlaying,
     previewAsset,
-    project.duration,
     project.fps,
+    project.playbackQuality,
+    previewPlaybackEndTime,
     project.sequencePreview.filePath,
     project.sequencePreview.status,
+    refreshSequencePreview,
     stopPlayback,
   ]);
 
@@ -814,11 +851,12 @@ export function ComposerRuntimeProvider({
         sourceType: "asset",
         sourcePath: mediaPath,
         sourceAssetId: asset.id,
-        startTime: snapTimeToFrame(startTime, project.fps),
-        duration: Math.max(frameDuration, snapTimeToFrame(duration, project.fps)),
+        startTime: normalizeTime(startTime),
+        duration: normalizeDuration(duration),
         trimStart: 0,
         trimEnd: 0,
         speed: 1,
+        volume: asset.type === "audio" || asset.type === "video" ? 1 : undefined,
       });
 
       updateClipList([...getLiveProject().clips, createdClip]);
@@ -827,7 +865,7 @@ export function ComposerRuntimeProvider({
       setSelectedClipIds([createdClip.id]);
       pushUndo({ type: "delete-added", clipId: createdClip.id });
     },
-    [frameDuration, getLiveProject, getMediaDuration, project.fps, project.id, pushUndo, updateClipList],
+    [getLiveProject, getMediaDuration, project.id, pushUndo, updateClipList],
   );
 
   const updateTrack = useCallback(
@@ -928,7 +966,11 @@ export function ComposerRuntimeProvider({
   );
 
   const updateClip = useCallback(
-    async (clipId: string, patch: EditableClipPatch) => {
+    async (
+      clipId: string,
+      patch: EditableClipPatch,
+      source: ClipUpdateSource = "panel",
+    ) => {
       const currentProject = getLiveProject();
       const currentClip = currentProject.clips.find((clip) => clip.id === clipId);
       if (!currentClip) {
@@ -953,9 +995,70 @@ export function ComposerRuntimeProvider({
         return;
       }
 
-      const optimisticClip = { ...currentClip, ...patch };
+      if (patchTouchesAnimatedVisualProperties(patch)) {
+        if (source === "panel") {
+          visualChangeOriginByClipIdRef.current[clipId] = "panel";
+        } else if (source === "viewer") {
+          visualChangeOriginByClipIdRef.current[clipId] = "viewer";
+        } else {
+          delete visualChangeOriginByClipIdRef.current[clipId];
+        }
+      }
+
+      const adjustmentsPatch =
+        patch.adjustments !== undefined ||
+        patch.brightness !== undefined ||
+        patch.contrast !== undefined ||
+        patch.saturation !== undefined
+          ? applyLegacyFilterInputsToAdjustmentPatch({
+              brightness: patch.brightness,
+              contrast: patch.contrast,
+              saturation: patch.saturation,
+              adjustments: patch.adjustments,
+            })
+          : undefined;
+      const optimisticAdjustments =
+        adjustmentsPatch == null
+          ? currentClip.adjustments
+          : mergeClipAdjustments(currentClip.adjustments, adjustmentsPatch);
+      const optimisticFilterValues =
+        adjustmentsPatch == null
+          ? null
+          : getClipAdjustmentFilterValues(optimisticAdjustments);
+      const normalizedPatch: EditableClipPatch = { ...patch };
+      if (normalizedPatch.startTime !== undefined) {
+        normalizedPatch.startTime = normalizeTime(normalizedPatch.startTime);
+      }
+      if (normalizedPatch.duration !== undefined) {
+        normalizedPatch.duration = normalizeDuration(normalizedPatch.duration);
+      }
+      if (normalizedPatch.trimStart !== undefined) {
+        normalizedPatch.trimStart = normalizeTime(normalizedPatch.trimStart);
+      }
+      if (normalizedPatch.trimEnd !== undefined) {
+        normalizedPatch.trimEnd = normalizeTime(normalizedPatch.trimEnd);
+      }
+      if (normalizedPatch.fadeInDuration !== undefined) {
+        normalizedPatch.fadeInDuration = normalizeTime(normalizedPatch.fadeInDuration);
+      }
+      if (normalizedPatch.fadeOutDuration !== undefined) {
+        normalizedPatch.fadeOutDuration = normalizeTime(normalizedPatch.fadeOutDuration);
+      }
+
+      const optimisticClip = {
+        ...currentClip,
+        ...normalizedPatch,
+        ...(adjustmentsPatch == null
+          ? {}
+          : {
+              adjustments: optimisticAdjustments,
+              brightness: optimisticFilterValues?.brightness ?? currentClip.brightness,
+              contrast: optimisticFilterValues?.contrast ?? currentClip.contrast,
+              saturation: optimisticFilterValues?.saturation ?? currentClip.saturation,
+            }),
+      };
       updateClipList(
-        currentProject.clips.map((clip) => (clip.id === clipId ? optimisticClip : clip)),
+          currentProject.clips.map((clip) => (clip.id === clipId ? optimisticClip : clip)),
       );
       setSelectedClipId(clipId);
 
@@ -963,7 +1066,7 @@ export function ComposerRuntimeProvider({
         const updatedClip = await composerClipIpc.update({
           projectId: project.id,
           clipId,
-          ...patch,
+          ...normalizedPatch,
         });
 
         updateClipList(
@@ -1014,7 +1117,7 @@ export function ComposerRuntimeProvider({
         sourceType: sourceClip.sourceType,
         sourcePath: sourceClip.sourcePath,
         sourceAssetId: sourceClip.sourceAssetId,
-        startTime: snapTimeToFrame(startTime, project.fps),
+        startTime: normalizeTime(startTime),
         duration: sourceClip.duration,
         trimStart: sourceClip.trimStart,
         trimEnd: sourceClip.trimEnd,
@@ -1026,6 +1129,7 @@ export function ComposerRuntimeProvider({
         flipVertical: sourceClip.flipVertical,
         rotationZ: sourceClip.rotationZ,
         opacity: sourceClip.opacity,
+        volume: sourceClip.volume,
         brightness: sourceClip.brightness,
         contrast: sourceClip.contrast,
         saturation: sourceClip.saturation,
@@ -1040,7 +1144,7 @@ export function ComposerRuntimeProvider({
       setSelectedClipIds([createdClip.id]);
       pushUndo({ type: "delete-added", clipId: createdClip.id });
     },
-    [getLiveProject, project.fps, project.id, pushUndo, updateClipList],
+    [getLiveProject, project.id, pushUndo, updateClipList],
   );
 
   const moveClip = useCallback(
@@ -1059,7 +1163,7 @@ export function ComposerRuntimeProvider({
         return;
       }
 
-      const nextStartTime = snapTimeToFrame(startTime, project.fps);
+      const nextStartTime = normalizeTime(startTime);
       if (
         Math.abs(nextStartTime - currentClip.startTime) < 0.001 &&
         nextTrackId === currentClip.trackId
@@ -1068,7 +1172,7 @@ export function ComposerRuntimeProvider({
       }
       await updateClip(clipId, { startTime: nextStartTime, trackId: nextTrackId });
     },
-    [getLiveProject, project.fps, updateClip],
+    [getLiveProject, updateClip],
   );
 
   const trimClip = useCallback(
@@ -1086,10 +1190,10 @@ export function ComposerRuntimeProvider({
       }
 
       const normalized = {
-        startTime: snapTimeToFrame(nextValues.startTime, project.fps),
-        duration: Math.max(frameDuration, snapTimeToFrame(Math.max(MIN_CLIP_DURATION, nextValues.duration), project.fps)),
-        trimStart: snapTimeToFrame(Math.max(0, nextValues.trimStart), project.fps),
-        trimEnd: snapTimeToFrame(Math.max(0, nextValues.trimEnd ?? 0), project.fps),
+        startTime: normalizeTime(nextValues.startTime),
+        duration: normalizeDuration(nextValues.duration),
+        trimStart: normalizeTime(nextValues.trimStart),
+        trimEnd: normalizeTime(nextValues.trimEnd ?? 0),
       };
 
       const unchanged =
@@ -1103,7 +1207,7 @@ export function ComposerRuntimeProvider({
 
       await updateClip(clipId, normalized);
     },
-    [frameDuration, getLiveProject, project.fps, updateClip],
+    [getLiveProject, updateClip],
   );
 
   const updateClipTransform = useCallback(
@@ -1128,10 +1232,14 @@ export function ComposerRuntimeProvider({
         return;
       }
 
-      await updateClip(clipId, nextValues);
+      await updateClip(clipId, nextValues, "viewer");
     },
     [getLiveProject, updateClip],
   );
+
+  const shouldAnimateClipVisualChanges = useCallback((clipId: string) => {
+    return visualChangeOriginByClipIdRef.current[clipId] === "panel";
+  }, []);
 
   const splitSelectedClip = useCallback(async () => {
     const idsToSplit = selectedClipIds.length > 0 ? selectedClipIds : selectedClipId ? [selectedClipId] : [];
@@ -1150,7 +1258,7 @@ export function ComposerRuntimeProvider({
       const currentTrack = liveTracks.find((track) => track.id === currentClip.trackId);
       if (currentTrack?.locked) continue;
 
-      const splitOffset = snapTimeToFrame(playhead - currentClip.startTime, project.fps);
+      const splitOffset = normalizeTime(playhead - currentClip.startTime);
       if (splitOffset <= MIN_CLIP_DURATION || splitOffset >= currentClip.duration - MIN_CLIP_DURATION) {
         continue;
       }
@@ -1160,7 +1268,7 @@ export function ComposerRuntimeProvider({
         projectId: project.id,
         clipId: currentClip.id,
         duration: splitOffset,
-        trimEnd: snapTimeToFrame(originalTrimEnd + (currentClip.duration - splitOffset), project.fps),
+        trimEnd: normalizeTime(originalTrimEnd + (currentClip.duration - splitOffset)),
       });
 
       const rightClip = await composerClipIpc.add({
@@ -1169,9 +1277,9 @@ export function ComposerRuntimeProvider({
         sourceType: currentClip.sourceType,
         sourcePath: currentClip.sourcePath,
         sourceAssetId: currentClip.sourceAssetId,
-        startTime: snapTimeToFrame(playhead, project.fps),
-        duration: Math.max(frameDuration, snapTimeToFrame(currentClip.duration - splitOffset, project.fps)),
-        trimStart: snapTimeToFrame(currentClip.trimStart + splitOffset, project.fps),
+        startTime: normalizeTime(playhead),
+        duration: normalizeDuration(currentClip.duration - splitOffset),
+        trimStart: normalizeTime(currentClip.trimStart + splitOffset),
         trimEnd: originalTrimEnd,
         speed: currentClip.speed,
         transformOffsetX: currentClip.transformOffsetX,
@@ -1181,6 +1289,7 @@ export function ComposerRuntimeProvider({
         flipVertical: currentClip.flipVertical,
         rotationZ: currentClip.rotationZ,
         opacity: currentClip.opacity,
+        volume: currentClip.volume,
         brightness: currentClip.brightness,
         contrast: currentClip.contrast,
         saturation: currentClip.saturation,
@@ -1203,7 +1312,7 @@ export function ComposerRuntimeProvider({
       setSelectedClipId(newRightClipIds[newRightClipIds.length - 1]);
       setSelectedClipIds(newRightClipIds);
     }
-  }, [frameDuration, getLiveProject, playhead, project.fps, project.id, pushUndo, selectedClipId, selectedClipIds, updateClipList]);
+  }, [getLiveProject, playhead, project.id, pushUndo, selectedClipId, selectedClipIds, updateClipList]);
 
   const deleteSelectedClip = useCallback(async () => {
     const idsToDelete = selectedClipIds.length > 0 ? selectedClipIds : selectedClipId ? [selectedClipId] : [];
@@ -1285,6 +1394,7 @@ export function ComposerRuntimeProvider({
           flipVertical: previousEntry.clip.flipVertical,
           rotationZ: previousEntry.clip.rotationZ,
           opacity: previousEntry.clip.opacity,
+          volume: previousEntry.clip.volume,
           brightness: previousEntry.clip.brightness,
           contrast: previousEntry.clip.contrast,
           saturation: previousEntry.clip.saturation,
@@ -1501,23 +1611,29 @@ export function ComposerRuntimeProvider({
       return;
     }
 
-    playbackRef.current.startedAt = performance.now();
-    playbackRef.current.originPlayhead = playhead;
+    const shouldCapLiveFullPlaybackToProjectFps =
+      !previewAsset && (project.playbackQuality ?? "med") === "full";
 
     const tick = (now: number) => {
-      const nextTime = clamp(
-        snapTimeToFrame(
-          playbackRef.current.originPlayhead + (now - playbackRef.current.startedAt) / 1000,
-          project.fps,
+      const elapsedSeconds = (now - playbackRef.current.startedAt) / 1000;
+      const cappedElapsedSeconds =
+        shouldCapLiveFullPlaybackToProjectFps && frameDuration > 0
+          ? Math.floor(elapsedSeconds / frameDuration) * frameDuration
+          : elapsedSeconds;
+      const nextTime = normalizeTime(
+        clamp(
+          playbackRef.current.originPlayhead + cappedElapsedSeconds,
+          0,
+          previewPlaybackEndTime,
         ),
-        0,
-        timelineDuration,
       );
-      setPlayhead(nextTime);
+      playheadRef.current = nextTime;
+      setPlayhead((current) =>
+        Math.abs(current - nextTime) < 0.0001 ? current : nextTime,
+      );
 
-      if (nextTime >= timelineDuration) {
-        setPendingSequencePlaybackStartTime(null);
-        setIsPlaying(false);
+      if (nextTime >= previewPlaybackEndTime) {
+        stopPlayback(previewPlaybackEndTime);
         return;
       }
 
@@ -1531,7 +1647,15 @@ export function ComposerRuntimeProvider({
         playbackRef.current.rafId = 0;
       }
     };
-  }, [isPlaying, playbackClockSource, playhead, project.fps, timelineDuration]);
+  }, [
+    frameDuration,
+    isPlaying,
+    playbackClockSource,
+    previewAsset,
+    previewPlaybackEndTime,
+    project.playbackQuality,
+    stopPlayback,
+  ]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -1610,6 +1734,7 @@ export function ComposerRuntimeProvider({
       splitSelectedClip,
       deleteSelectedClip,
       undo,
+      shouldAnimateClipVisualChanges,
       getAssetUrl,
       getMediaDuration,
     }),
@@ -1640,6 +1765,7 @@ export function ComposerRuntimeProvider({
       selectedClipId,
       selectedClipIds,
       selectedVisualClip,
+      shouldAnimateClipVisualChanges,
       splitSelectedClip,
       stopPlayback,
       syncPlaybackToMediaClock,

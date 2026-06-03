@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain } from "electron";
 import { writeFileSync, unlinkSync } from "fs";
 import { join } from "path";
 import { pathToFileURL } from "url";
+import { DEFAULT_COMPOSER_PROJECT_BACKGROUND_COLOR } from "../../src/composer/types/project";
 import type {
   RenderSegmentProgress,
   RenderSegmentRequest,
@@ -26,15 +27,15 @@ function buildHeadlessRendererHtml(): string {
   <head>
     <meta charset="utf-8" />
     <title>Composer Headless Renderer</title>
-    <style>
-      html, body {
-        margin: 0;
-        padding: 0;
-        background: #000;
-        overflow: hidden;
-      }
-      canvas {
-        display: block;
+      <style>
+        html, body {
+          margin: 0;
+          padding: 0;
+          background: ${DEFAULT_COMPOSER_PROJECT_BACKGROUND_COLOR};
+          overflow: hidden;
+        }
+        canvas {
+          display: block;
       }
     </style>
   </head>
@@ -47,8 +48,12 @@ function buildHeadlessRendererHtml(): string {
       const canvas = document.getElementById('composer-headless-canvas');
       const imageCache = new Map();
       const processedImageCache = new Map();
+      const sharpenedImageCache = new Map();
       const videoCache = new Map();
       const audioCache = new Map();
+      const SHARPEN_EPSILON = 0.0001;
+      const BLUR_EPSILON = 0.0001;
+      const NOISE_EPSILON = 0.0001;
 
       function clamp(value, min, max) {
         return Math.min(Math.max(value, min), max);
@@ -56,6 +61,83 @@ function buildHeadlessRendererHtml(): string {
 
       function clamp01(value) {
         return clamp(value, 0, 1);
+      }
+
+      function clampByte(value) {
+        return Math.round(clamp(value, 0, 255));
+      }
+
+      function normalizeSharpenAmount(value) {
+        if (!Number.isFinite(value)) {
+          return 0;
+        }
+        return clamp(value, 0, 200);
+      }
+
+      function normalizeNoiseAmount(value) {
+        if (!Number.isFinite(value)) {
+          return 0;
+        }
+        return clamp(value, 0, 100);
+      }
+
+      function normalizeBlurAmount(value) {
+        if (!Number.isFinite(value)) {
+          return 0;
+        }
+        return clamp(value, 0, 50);
+      }
+
+      function hashUint32(value) {
+        let hash = value >>> 0;
+        hash ^= hash >>> 16;
+        hash = Math.imul(hash, 0x7feb352d);
+        hash ^= hash >>> 15;
+        hash = Math.imul(hash, 0x846ca68b);
+        hash ^= hash >>> 16;
+        return hash >>> 0;
+      }
+
+      function getNoiseSeed(source) {
+        let hash = 2166136261;
+        for (let index = 0; index < source.length; index += 1) {
+          hash ^= source.charCodeAt(index);
+          hash = Math.imul(hash, 16777619);
+        }
+        return hash >>> 0;
+      }
+
+      function getNoiseByte(seed, frameIndex, x, y) {
+        const frameSeed = hashUint32(
+          seed ^
+          Math.imul((Math.max(0, Math.round(frameIndex)) + 1) >>> 0, 0x9e3779b1),
+        );
+        const mixed =
+          frameSeed ^
+          Math.imul((x + 1) >>> 0, 374761393) ^
+          Math.imul((y + 1) >>> 0, 668265263);
+        return hashUint32(mixed) & 255;
+      }
+
+      function overlayBlendChannel(base, blend) {
+        return base < 0.5
+          ? 2 * base * blend
+          : 1 - 2 * (1 - base) * (1 - blend);
+      }
+
+      function createProcessingCanvas(width, height) {
+        const offscreen = document.createElement('canvas');
+        offscreen.width = Math.max(1, Math.round(width));
+        offscreen.height = Math.max(1, Math.round(height));
+        return offscreen;
+      }
+
+      function getProcessingContext(target, errorMessage) {
+        const context = target.getContext('2d', { willReadFrequently: true });
+        if (!context) {
+          throw new Error(errorMessage);
+        }
+        return context;
       }
 
       function getCubeLutOffset(size, redIndex, greenIndex, blueIndex) {
@@ -175,12 +257,164 @@ function buildHeadlessRendererHtml(): string {
         }
       }
 
+      function applySharpenToImageData(imageData, sharpenAmount) {
+        const strength = clamp(normalizeSharpenAmount(sharpenAmount) / 100, 0, 2);
+        if (strength <= SHARPEN_EPSILON) {
+          return;
+        }
+
+        const { data, width, height } = imageData;
+        const source = new Uint8ClampedArray(data);
+        const edgeWeight = -strength;
+        const centerWeight = 1 + strength * 4;
+        const getPixelOffset = (x, y) =>
+          (clamp(y, 0, height - 1) * width + clamp(x, 0, width - 1)) * 4;
+
+        for (let y = 0; y < height; y += 1) {
+          for (let x = 0; x < width; x += 1) {
+            const index = (y * width + x) * 4;
+            const top = getPixelOffset(x, y - 1);
+            const bottom = getPixelOffset(x, y + 1);
+            const left = getPixelOffset(x - 1, y);
+            const right = getPixelOffset(x + 1, y);
+
+            data[index] = clampByte(
+              source[index] * centerWeight +
+                edgeWeight *
+                  (source[top] + source[bottom] + source[left] + source[right]),
+            );
+            data[index + 1] = clampByte(
+              source[index + 1] * centerWeight +
+                edgeWeight *
+                  (source[top + 1] +
+                    source[bottom + 1] +
+                    source[left + 1] +
+                    source[right + 1]),
+            );
+            data[index + 2] = clampByte(
+              source[index + 2] * centerWeight +
+                edgeWeight *
+                  (source[top + 2] +
+                    source[bottom + 2] +
+                    source[left + 2] +
+                    source[right + 2]),
+            );
+            data[index + 3] = source[index + 3];
+          }
+        }
+      }
+
+      function applyNoiseToImageData(imageData, noiseAmount, noiseSeed, frameIndex) {
+        const amount = normalizeNoiseAmount(noiseAmount) / 100;
+        if (amount <= NOISE_EPSILON) {
+          return;
+        }
+
+        const { data, width, height } = imageData;
+
+        for (let y = 0; y < height; y += 1) {
+          for (let x = 0; x < width; x += 1) {
+            const index = (y * width + x) * 4;
+            const blend = getNoiseByte(noiseSeed, frameIndex, x, y) / 255;
+            const red = data[index] / 255;
+            const green = data[index + 1] / 255;
+            const blue = data[index + 2] / 255;
+
+            data[index] = clampByte(
+              (red + (overlayBlendChannel(red, blend) - red) * amount) * 255,
+            );
+            data[index + 1] = clampByte(
+              (green + (overlayBlendChannel(green, blend) - green) * amount) * 255,
+            );
+            data[index + 2] = clampByte(
+              (blue + (overlayBlendChannel(blue, blend) - blue) * amount) * 255,
+            );
+          }
+        }
+      }
+
+      function renderProcessedVisualSource(source, rect, sharpenAmount, blurAmount, noiseAmount, noiseSeed, frameIndex) {
+        const baseCanvas = createProcessingCanvas(rect.width, rect.height);
+        const baseCtx = getProcessingContext(
+          baseCanvas,
+          'Failed to create effect processing context',
+        );
+
+        baseCtx.clearRect(0, 0, baseCanvas.width, baseCanvas.height);
+        baseCtx.drawImage(source, 0, 0, baseCanvas.width, baseCanvas.height);
+
+        const normalizedSharpenAmount = normalizeSharpenAmount(sharpenAmount);
+        const normalizedBlurAmount = normalizeBlurAmount(blurAmount);
+        const normalizedNoiseAmount = normalizeNoiseAmount(noiseAmount);
+        if (normalizedSharpenAmount > SHARPEN_EPSILON) {
+          const imageData = baseCtx.getImageData(
+            0,
+            0,
+            baseCanvas.width,
+            baseCanvas.height,
+          );
+          applySharpenToImageData(imageData, normalizedSharpenAmount);
+          baseCtx.putImageData(imageData, 0, 0);
+        }
+
+        let processedCanvas = baseCanvas;
+        if (normalizedBlurAmount > BLUR_EPSILON) {
+          const blurredCanvas = createProcessingCanvas(rect.width, rect.height);
+          const blurredCtx = getProcessingContext(
+            blurredCanvas,
+            'Failed to create blur processing context',
+          );
+          blurredCtx.filter = 'blur(' + normalizedBlurAmount + 'px)';
+          blurredCtx.drawImage(
+            processedCanvas,
+            0,
+            0,
+            blurredCanvas.width,
+            blurredCanvas.height,
+          );
+          blurredCtx.filter = 'none';
+          processedCanvas = blurredCanvas;
+        }
+
+        if (normalizedNoiseAmount > NOISE_EPSILON) {
+          const processedCtx = getProcessingContext(
+            processedCanvas,
+            'Failed to create noise processing context',
+          );
+          const imageData = processedCtx.getImageData(
+            0,
+            0,
+            processedCanvas.width,
+            processedCanvas.height,
+          );
+          applyNoiseToImageData(
+            imageData,
+            normalizedNoiseAmount,
+            noiseSeed,
+            frameIndex,
+          );
+          processedCtx.putImageData(imageData, 0, 0);
+        }
+
+        return processedCanvas;
+      }
+
       function getProcessedImageCacheKey(clip, width, height) {
         return [
           clip.sourcePath,
           width,
           height,
           clip.lut?.cacheKey || '',
+        ].join('|');
+      }
+
+      function getSharpenedImageCacheKey(clip, width, height, sourceKey) {
+        return [
+          clip.sourcePath,
+          width,
+          height,
+          sourceKey,
+          normalizeSharpenAmount(clip.sharpen),
         ].join('|');
       }
 
@@ -192,13 +426,11 @@ function buildHeadlessRendererHtml(): string {
         if (!processedImageCache.has(cacheKey)) {
           processedImageCache.set(cacheKey, (async () => {
             const image = await loadImage(clip.sourcePath);
-            const offscreen = document.createElement('canvas');
-            offscreen.width = width;
-            offscreen.height = height;
-            const offscreenCtx = offscreen.getContext('2d', { willReadFrequently: true });
-            if (!offscreenCtx) {
-              throw new Error('Failed to create LUT processing context');
-            }
+            const offscreen = createProcessingCanvas(width, height);
+            const offscreenCtx = getProcessingContext(
+              offscreen,
+              'Failed to create LUT processing context',
+            );
 
             offscreenCtx.clearRect(0, 0, width, height);
             offscreenCtx.drawImage(image, 0, 0, width, height);
@@ -214,6 +446,33 @@ function buildHeadlessRendererHtml(): string {
           return await processedImageCache.get(cacheKey);
         } catch (error) {
           processedImageCache.delete(cacheKey);
+          throw error;
+        }
+      }
+
+      async function loadSharpenedImage(clip, rect, sourceKey, sourceLoader) {
+        const width = Math.max(1, Math.round(rect.width));
+        const height = Math.max(1, Math.round(rect.height));
+        const cacheKey = getSharpenedImageCacheKey(clip, width, height, sourceKey);
+
+        if (!sharpenedImageCache.has(cacheKey)) {
+          sharpenedImageCache.set(cacheKey, (async () => {
+            const source = await sourceLoader();
+            return renderProcessedVisualSource(
+              source,
+              rect,
+              clip.sharpen,
+              0,
+              getNoiseSeed(clip.id || clip.sourcePath || ''),
+              0,
+            );
+          })());
+        }
+
+        try {
+          return await sharpenedImageCache.get(cacheKey);
+        } catch (error) {
+          sharpenedImageCache.delete(cacheKey);
           throw error;
         }
       }
@@ -352,9 +611,15 @@ function buildHeadlessRendererHtml(): string {
         });
       }
 
-      async function renderFrame(ctx, request, globalTime) {
+      async function renderFrame(ctx, request, globalTime, frameIndex) {
+        const backgroundColor =
+          typeof request.backgroundColor === 'string' && request.backgroundColor.length > 0
+            ? request.backgroundColor
+            : '${DEFAULT_COMPOSER_PROJECT_BACKGROUND_COLOR}';
+        document.documentElement.style.backgroundColor = backgroundColor;
+        document.body.style.backgroundColor = backgroundColor;
         ctx.clearRect(0, 0, request.outputWidth, request.outputHeight);
-        ctx.fillStyle = '#000000';
+        ctx.fillStyle = backgroundColor;
         ctx.fillRect(0, 0, request.outputWidth, request.outputHeight);
 
         const clips = getActiveVisualClips(request.clips, globalTime);
@@ -370,11 +635,30 @@ function buildHeadlessRendererHtml(): string {
             clip.inputKind === 'image' &&
             clip.lutApplication === 'cube-image' &&
             clip.lut;
+          const sharpenAmount = normalizeSharpenAmount(clip.sharpen);
+          const shouldSharpen = sharpenAmount > SHARPEN_EPSILON;
+          const blurAmount = normalizeBlurAmount(clip.blur);
+          const shouldBlur = blurAmount > BLUR_EPSILON;
+          const noiseAmount = normalizeNoiseAmount(clip.noise);
+          const shouldNoise = noiseAmount > NOISE_EPSILON;
+          const noiseSeed = shouldNoise
+            ? getNoiseSeed(clip.id || clip.sourcePath || '')
+            : 0;
+          const clipFilter =
+            typeof clip.filter === 'string' && clip.filter.length > 0
+              ? clip.filter
+              : null;
 
           ctx.save();
-          ctx.globalCompositeOperation = clip.blendMode || 'source-over';
-          ctx.globalAlpha = alpha;
-          ctx.filter = clip.filter || 'none';
+          if (clip.blendMode) {
+            ctx.globalCompositeOperation = clip.blendMode;
+          }
+          if (alpha < 0.9999) {
+            ctx.globalAlpha = alpha;
+          }
+          if (clipFilter) {
+            ctx.filter = clipFilter;
+          }
 
           const centerX = rect.x + rect.width / 2;
           const centerY = rect.y + rect.height / 2;
@@ -388,17 +672,49 @@ function buildHeadlessRendererHtml(): string {
 
           if (clip.inputKind === 'image') {
             let image = await loadImage(clip.sourcePath);
+            let lutApplied = false;
             if (shouldApplyImageLut) {
               try {
                 image = await loadProcessedImage(clip, rect);
+                lutApplied = true;
               } catch (error) {
                 console.warn('[Composer Preview][renderer] image LUT skipped ' + JSON.stringify({
                   clipId: clip.id,
                   lutAssetId: clip.requestedLutAssetId,
                   errorMessage: error instanceof Error ? error.message : String(error),
                 }));
-                ctx.filter = clip.filter || 'none';
               }
+            }
+
+            if (shouldSharpen && !shouldBlur && !shouldNoise) {
+              try {
+                const sourceImage = image;
+                image = await loadSharpenedImage(
+                  clip,
+                  rect,
+                  lutApplied
+                    ? 'lut:' + (clip.lut?.cacheKey || '')
+                    : 'source',
+                  () => Promise.resolve(sourceImage),
+                );
+              } catch (error) {
+                console.warn('[Composer Preview][renderer] image sharpen skipped ' + JSON.stringify({
+                  clipId: clip.id,
+                  sharpen: sharpenAmount,
+                  errorMessage: error instanceof Error ? error.message : String(error),
+                }));
+              }
+            }
+            if (shouldBlur || shouldNoise) {
+              image = renderProcessedVisualSource(
+                image,
+                rect,
+                sharpenAmount,
+                blurAmount,
+                noiseAmount,
+                noiseSeed,
+                frameIndex,
+              );
             }
             ctx.drawImage(
               image,
@@ -416,8 +732,20 @@ function buildHeadlessRendererHtml(): string {
                 ? Math.max(0, clip.sourceDuration - 0.001)
                 : rawSourceTime;
             await seekVideo(video, Math.min(rawSourceTime, maxSeekTime));
+            const videoFrame =
+              shouldSharpen || shouldBlur || shouldNoise
+                ? renderProcessedVisualSource(
+                    video,
+                    rect,
+                    sharpenAmount,
+                    blurAmount,
+                    noiseAmount,
+                    noiseSeed,
+                    frameIndex,
+                  )
+                : video;
             ctx.drawImage(
-              video,
+              videoFrame,
               -rect.width / 2,
               -rect.height / 2,
               rect.width,
@@ -437,14 +765,14 @@ function buildHeadlessRendererHtml(): string {
         const fadeOutStart = clip.renderedDuration - clip.fadeOutDuration;
 
         const gainAt = (clipLocalTime) => {
-          let value = 1;
+          let value = clip.volume ?? 1;
           if (clip.fadeInDuration > 0 && clipLocalTime < clip.fadeInDuration) {
             value *= clamp(clipLocalTime / clip.fadeInDuration, 0, 1);
           }
           if (clip.fadeOutDuration > 0 && clipLocalTime > fadeOutStart) {
             value *= clamp((clip.renderedDuration - clipLocalTime) / clip.fadeOutDuration, 0, 1);
           }
-          return clamp(value, 0, 1);
+          return Math.max(0, value);
         };
 
         gainNode.gain.setValueAtTime(gainAt(clipLocalStart), segmentLocalStart);
@@ -624,7 +952,7 @@ function buildHeadlessRendererHtml(): string {
             0.001,
             Math.min(1 / request.fps, segmentDuration - localTime),
           );
-          await renderFrame(ctx, request, globalTime);
+          await renderFrame(ctx, request, globalTime, frameIndex);
           await videoSource.add(localTime, frameDuration);
           ipcRenderer.send('composer:segment-progress', {
             projectId: request.projectId,
@@ -728,9 +1056,12 @@ function registerHeadlessRendererIpc(): void {
     pending.resolve(buffer);
   });
 
-  ipcMain.on("composer:segment-progress", (_event, payload: RenderSegmentProgress) => {
-    progressListener?.(payload);
-  });
+  ipcMain.on(
+    "composer:segment-progress",
+    (_event, payload: RenderSegmentProgress) => {
+      progressListener?.(payload);
+    },
+  );
 }
 
 function rejectPendingSegments(error: Error): void {
@@ -801,18 +1132,29 @@ export async function createHeadlessRenderer(): Promise<BrowserWindow> {
     });
 
     window.webContents.once("did-fail-load", (_event, _code, description) => {
-      finishWithError(new Error(description || "Failed to load headless renderer"));
+      finishWithError(
+        new Error(description || "Failed to load headless renderer"),
+      );
     });
 
     try {
       const appPath = app.getAppPath();
-      headlessTempHtmlPath = join(appPath, `.composer-headless-${Date.now()}.html`);
+      headlessTempHtmlPath = join(
+        appPath,
+        `.composer-headless-${Date.now()}.html`,
+      );
       writeFileSync(headlessTempHtmlPath, buildHeadlessRendererHtml(), "utf-8");
-      void window.loadURL(pathToFileURL(headlessTempHtmlPath).href).catch((error) => {
-        finishWithError(error instanceof Error ? error : new Error(String(error)));
-      });
+      void window
+        .loadURL(pathToFileURL(headlessTempHtmlPath).href)
+        .catch((error) => {
+          finishWithError(
+            error instanceof Error ? error : new Error(String(error)),
+          );
+        });
     } catch (error) {
-      finishWithError(error instanceof Error ? error : new Error(String(error)));
+      finishWithError(
+        error instanceof Error ? error : new Error(String(error)),
+      );
     }
   });
 
@@ -855,7 +1197,7 @@ export async function renderSegmentInHeadlessRenderer(
   }
 
   const renderer = await createHeadlessRenderer();
-  const requestId = `segment-${Date.now()}-${requestCounter += 1}`;
+  const requestId = `segment-${Date.now()}-${(requestCounter += 1)}`;
   console.info("[Composer Preview] dispatching headless segment", {
     projectId: request.projectId,
     requestSignature: request.requestSignature,
@@ -866,6 +1208,9 @@ export async function renderSegmentInHeadlessRenderer(
 
   return new Promise<Buffer>((resolve, reject) => {
     pendingSegmentResults.set(requestId, { resolve, reject });
-    renderer.webContents.send("composer:render-segment", { requestId, request });
+    renderer.webContents.send("composer:render-segment", {
+      requestId,
+      request,
+    });
   });
 }

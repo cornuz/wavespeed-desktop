@@ -573,6 +573,11 @@ export function AssetsPanel() {
                     </div>
                     <div className="flex flex-col gap-1">
                       <div className="flex flex-wrap items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground">
+                        {asset.type === "audio" || asset.hasAudio ? (
+                          <span className="inline-flex items-center">
+                            <Music2 className="h-3 w-3" />
+                          </span>
+                        ) : null}
                         <span className="normal-case">
                           {details?.summary ?? formatBytes(asset.fileSize)}
                         </span>

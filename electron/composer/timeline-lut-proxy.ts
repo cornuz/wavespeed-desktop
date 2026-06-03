@@ -28,7 +28,6 @@ const STILL_EXTS = new Set([
   ".gif",
   ".webp",
   ".bmp",
-  ".svg",
 ]);
 const VIDEO_EXTS = new Set([".mp4", ".webm", ".mov", ".avi", ".mkv", ".m4v"]);
 const INSTANCE_LUT_PROXY_DIR = "instance-lut";

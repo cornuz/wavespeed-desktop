@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -16,7 +17,6 @@ import {
   Layers,
   Lock,
   MoreVertical,
-  Music2,
   Plus,
   Ruler,
   Scissors,
@@ -38,7 +38,7 @@ import { Slider } from "@/components/ui/slider";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/useToast";
-import { composerClipIpc } from "@/composer/ipc/ipc-client";
+import { composerAssetIpc, composerClipIpc } from "@/composer/ipc/ipc-client";
 import type { Clip, ComposerAsset, Track } from "@/composer/types/project";
 import { useComposerRuntime } from "../context/ComposerRuntimeContext";
 import {
@@ -51,6 +51,7 @@ import {
   getFrameDuration,
   getTrimEnd,
   MIN_CLIP_DURATION,
+  resolveTrackStart,
   snapTimeToFrame,
 } from "../utils/timeline";
 
@@ -59,10 +60,11 @@ const TRACK_ROW_HEIGHT = 60;
 const ADD_TRACK_TARGET_HEIGHT = 15;
 const CROSS_TRACK_DRAG_TOLERANCE = 15;
 const MIN_VIEWPORT_WIDTH = 720;
-const MIN_FRAME_PIXEL_WIDTH = 32;
-const MAX_FRAME_PIXEL_WIDTH = 128;
+const MIN_SUBSECOND_PIXEL_WIDTH = 32;
+const MAX_SUBSECOND_PIXEL_WIDTH = 128;
 const TARGET_TICK_WIDTH = 84;
 const MAX_ZOOM_OUT_PROJECT_MULTIPLIER = 3;
+const MUTED_VOLUME_EPSILON = 0.0001;
 
 type Interaction =
   | {
@@ -101,34 +103,29 @@ type TimelineLutProxyState = {
   requestKey: string;
 };
 
+function isSvgPath(path: string | null | undefined): boolean {
+  return path?.match(/\.svg$/i) != null;
+}
+
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-function getFramePixelWidth(zoom: number, fps: number): number {
-  return zoom / fps;
-}
-
-function shouldUseFrameRuler(zoom: number, fps: number): boolean {
-  const framePixelWidth = getFramePixelWidth(zoom, fps);
-  return framePixelWidth >= MIN_FRAME_PIXEL_WIDTH && framePixelWidth <= MAX_FRAME_PIXEL_WIDTH;
+function getSubSecondPixelWidth(zoom: number, stepSeconds: number): number {
+  return zoom * stepSeconds;
 }
 
 function getTimeTickStep(zoom: number): number {
-  const steps = [0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300];
+  const steps = [0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300];
   return steps.find((step) => step * zoom >= TARGET_TICK_WIDTH) ?? steps[steps.length - 1];
-}
-
-function formatFrameLabel(frame: number): string {
-  return `${frame}f`;
 }
 
 function formatRulerTimeLabel(time: number): string {
   if (time < 1) {
-    return `${time.toFixed(2)}s`;
+    return `${Number(time.toFixed(1))}s`;
   }
   if (time < 10) {
-    return `${time.toFixed(1)}s`;
+    return `${Number(time.toFixed(1))}s`;
   }
   return formatTimelineTime(time);
 }
@@ -141,51 +138,12 @@ function isImageClip(clip: Clip): boolean {
   return clip.sourcePath?.match(/\.(png|jpe?g|gif|webp|bmp|svg)$/i) != null;
 }
 
-function getSnapThreshold(fps: number): number {
-  return 10 / fps;
+function supportsClipVolume(clip: Clip): boolean {
+  return clip.sourcePath?.match(/\.(mp4|webm|mov|avi|mkv|m4v|mp3|wav|ogg|flac|aac|m4a|wma)$/i) != null;
 }
 
-function resolveTrackStart(
-  desiredStart: number,
-  duration: number,
-  otherClips: Clip[],
-  fps: number,
-): number {
-  const threshold = getSnapThreshold(fps);
-  let nextStart = Math.max(0, desiredStart);
-
-  for (let iteration = 0; iteration < 8; iteration += 1) {
-    const overlappingClip = otherClips.find(
-      (clip) => nextStart < getClipEnd(clip) && nextStart + duration > clip.startTime,
-    );
-    if (!overlappingClip) {
-      break;
-    }
-
-    const leftCandidate = Math.max(0, overlappingClip.startTime - duration);
-    const rightCandidate = getClipEnd(overlappingClip);
-    nextStart =
-      Math.abs(nextStart - leftCandidate) <= Math.abs(nextStart - rightCandidate)
-        ? leftCandidate
-        : rightCandidate;
-  }
-
-  if (Math.abs(nextStart) <= threshold) {
-    return 0;
-  }
-
-  for (const clip of otherClips) {
-    const previousEdge = getClipEnd(clip);
-    const nextEdge = clip.startTime - duration;
-    if (Math.abs(nextStart - previousEdge) <= threshold) {
-      return snapTimeToFrame(previousEdge, fps);
-    }
-    if (nextEdge >= 0 && Math.abs(nextStart - nextEdge) <= threshold) {
-      return snapTimeToFrame(nextEdge, fps);
-    }
-  }
-
-  return snapTimeToFrame(nextStart, fps);
+function isClipMutedByProperties(clip: Clip): boolean {
+  return clip.volume <= MUTED_VOLUME_EPSILON;
 }
 
 function getClipFill(trackType: Track["type"], selected: boolean): string {
@@ -204,7 +162,35 @@ function isTrackDimmed(track: Track): boolean {
 }
 
 function getTrackTypeIcon(trackType: Track["type"]) {
-  return trackType === "audio" ? Music2 : Film;
+  return trackType === "audio" ? Volume2 : Film;
+}
+
+function findAssetForClip(
+  clip: { sourceAssetId: string | null; sourcePath: string | null } | null,
+  assets: ComposerAsset[],
+): ComposerAsset | null {
+  if (!clip) {
+    return null;
+  }
+
+  if (clip.sourceAssetId) {
+    const byId = assets.find((asset) => asset.id === clip.sourceAssetId);
+    if (byId) {
+      return byId;
+    }
+  }
+
+  if (!clip.sourcePath) {
+    return null;
+  }
+
+  return (
+    assets.find(
+      (asset) =>
+        asset.filePath === clip.sourcePath ||
+        asset.workingPath === clip.sourcePath,
+    ) ?? null
+  );
 }
 
 export function TimelinePanel() {
@@ -249,6 +235,7 @@ export function TimelinePanel() {
   const [timelineLutProxyStates, setTimelineLutProxyStates] = useState<
     Record<string, TimelineLutProxyState>
   >({});
+  const [libraryAssets, setLibraryAssets] = useState<ComposerAsset[]>([]);
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const trackListRef = useRef<HTMLDivElement | null>(null);
   const rulerRef = useRef<HTMLDivElement | null>(null);
@@ -258,15 +245,41 @@ export function TimelinePanel() {
   const autoFitProjectRef = useRef<string | null>(null);
   const groupDragRef = useRef<{ snappedDelta: number; targetTrackId: string } | null>(null);
   const [viewportWidth, setViewportWidth] = useState(MIN_VIEWPORT_WIDTH);
-  const frameDuration = useMemo(() => getFrameDuration(project.fps), [project.fps]);
+  const timelineStepDuration = useMemo(() => getFrameDuration(project.fps), [project.fps]);
   const tracksById = useMemo(() => new Map(tracks.map((track) => [track.id, track])), [tracks]);
 
+  const loadLibraryAssets = useCallback(async () => {
+    try {
+      const nextAssets = await composerAssetIpc.list({ projectId: project.id });
+      setLibraryAssets(nextAssets);
+    } catch {
+      setLibraryAssets((current) => current);
+    }
+  }, [project.id]);
+
+  useEffect(() => {
+    void loadLibraryAssets();
+  }, [loadLibraryAssets]);
+
+  useEffect(() => {
+    if (!project.id || !libraryAssets.some((asset) => asset.status === "processing")) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      void loadLibraryAssets();
+    }, 2000);
+    return () => window.clearInterval(intervalId);
+  }, [libraryAssets, loadLibraryAssets, project.id]);
+
   const minZoom = useMemo(() => {
-    const safeDuration = Math.max(project.duration, 1 / project.fps);
+    const safeDuration = Math.max(project.duration, timelineStepDuration);
     return viewportWidth / (safeDuration * MAX_ZOOM_OUT_PROJECT_MULTIPLIER);
-  }, [project.duration, project.fps, viewportWidth]);
-  const maxZoom = useMemo(() => project.fps * MAX_FRAME_PIXEL_WIDTH, [project.fps]);
-  const frameRuler = useMemo(() => shouldUseFrameRuler(zoom, project.fps), [project.fps, zoom]);
+  }, [project.duration, timelineStepDuration, viewportWidth]);
+  const maxZoom = useMemo(
+    () => MAX_SUBSECOND_PIXEL_WIDTH / timelineStepDuration,
+    [timelineStepDuration],
+  );
   const timelineWidth = Math.max(timelineDuration * zoom, viewportWidth);
   const timelineLutProxyRequests = useMemo(
     () =>
@@ -275,6 +288,7 @@ export function TimelinePanel() {
           (clip) =>
             typeof clip.sourcePath === "string" &&
             clip.sourcePath.length > 0 &&
+            !isSvgPath(clip.sourcePath) &&
             typeof clip.adjustments?.lutAssetId === "string" &&
             clip.adjustments.lutAssetId.length > 0,
         )
@@ -289,35 +303,18 @@ export function TimelinePanel() {
     [clips],
   );
   const rulerTicks = useMemo(() => {
-    if (frameRuler) {
-      const frameWidth = getFramePixelWidth(zoom, project.fps);
-      const frameStep = Math.max(1, Math.ceil(TARGET_TICK_WIDTH / frameWidth));
-      const totalFrames = Math.ceil(timelineDuration * project.fps);
-
-      return Array.from({ length: Math.ceil(totalFrames / frameStep) + 1 }, (_, index) => {
-        const frame = index * frameStep;
-        const time = frame / project.fps;
-        return {
-          key: `frame-${frame}`,
-          left: time * zoom,
-          label: formatFrameLabel(frame),
-          major: frame % Math.max(1, Math.round(project.fps)) === 0,
-        };
-      }).filter((tick) => tick.left <= timelineWidth);
-    }
-
     const tickStep = getTimeTickStep(zoom);
     const totalTicks = Math.ceil(timelineDuration / tickStep);
     return Array.from({ length: totalTicks + 1 }, (_, index) => {
-      const time = index * tickStep;
+      const time = Number((index * tickStep).toFixed(6));
       return {
         key: `time-${time}`,
         left: time * zoom,
         label: formatRulerTimeLabel(time),
-        major: Number.isInteger(time) || tickStep >= 1,
+        major: tickStep >= 1 || Math.abs(time - Math.round(time)) < 0.0001,
       };
     }).filter((tick) => tick.left <= timelineWidth);
-  }, [frameRuler, project.fps, timelineDuration, timelineWidth, zoom]);
+  }, [timelineDuration, timelineWidth, zoom]);
 
   useEffect(() => {
     const element = viewportRef.current;
@@ -457,7 +454,7 @@ export function TimelinePanel() {
     }
 
     const fittedZoom = clamp(
-      viewportWidth / Math.max(timelineDuration, frameDuration),
+      viewportWidth / Math.max(timelineDuration, timelineStepDuration),
       minZoom,
       maxZoom,
     );
@@ -467,7 +464,7 @@ export function TimelinePanel() {
     if (viewportRef.current) {
       viewportRef.current.scrollLeft = 0;
     }
-  }, [frameDuration, maxZoom, minZoom, project.id, setZoom, timelineDuration, viewportWidth]);
+  }, [maxZoom, minZoom, project.id, setZoom, timelineDuration, timelineStepDuration, viewportWidth]);
 
   useLayoutEffect(() => {
     const element = viewportRef.current;
@@ -519,24 +516,17 @@ export function TimelinePanel() {
   };
 
   const handleZoomToFit = () => {
-    const fittedZoom = viewportWidth / Math.max(timelineDuration, 1 / project.fps);
+    const fittedZoom = viewportWidth / Math.max(timelineDuration, timelineStepDuration);
     setZoom(clamp(fittedZoom, minZoom, maxZoom));
   };
 
   const handleZoomStep = (direction: -1 | 1) => {
-    const frameWidth = getFramePixelWidth(zoom, project.fps);
-    if (frameRuler) {
-      const nextFrameWidth = clamp(
-        frameWidth + direction * 8,
-        MIN_FRAME_PIXEL_WIDTH,
-        MAX_FRAME_PIXEL_WIDTH,
-      );
-      setZoom(clamp(nextFrameWidth * project.fps, minZoom, maxZoom));
-      return;
-    }
-
-    const factor = direction > 0 ? 1.25 : 0.8;
-    setZoom(clamp(zoom * factor, minZoom, maxZoom));
+    const nextStepWidth = clamp(
+      getSubSecondPixelWidth(zoom, timelineStepDuration) + direction * 8,
+      MIN_SUBSECOND_PIXEL_WIDTH,
+      MAX_SUBSECOND_PIXEL_WIDTH,
+    );
+    setZoom(clamp(nextStepWidth / timelineStepDuration, minZoom, maxZoom));
   };
 
   const resolveTrackFromClientY = (clientY: number, fallbackTrackId: string): Track | null => {
@@ -664,7 +654,7 @@ export function TimelinePanel() {
           setDraftClip({
             ...baseClip,
             startTime: snapTimeToFrame(baseClip.startTime + delta, project.fps),
-            duration: Math.max(frameDuration, snapTimeToFrame(baseClip.duration - delta, project.fps)),
+            duration: Math.max(MIN_CLIP_DURATION, snapTimeToFrame(baseClip.duration - delta, project.fps)),
             trimStart: 0,
             trimEnd: 0,
           });
@@ -682,7 +672,7 @@ export function TimelinePanel() {
         setDraftClip({
           ...baseClip,
           startTime: snapTimeToFrame(baseClip.startTime + delta, project.fps),
-          duration: Math.max(frameDuration, snapTimeToFrame(baseClip.duration - delta, project.fps)),
+          duration: Math.max(MIN_CLIP_DURATION, snapTimeToFrame(baseClip.duration - delta, project.fps)),
           trimStart: snapTimeToFrame(baseClip.trimStart + delta, project.fps),
         });
         return;
@@ -697,7 +687,7 @@ export function TimelinePanel() {
         );
         setDraftClip({
           ...baseClip,
-          duration: Math.max(frameDuration, snapTimeToFrame(baseClip.duration + delta, project.fps)),
+          duration: Math.max(MIN_CLIP_DURATION, snapTimeToFrame(baseClip.duration + delta, project.fps)),
           trimEnd: 0,
         });
         return;
@@ -712,7 +702,7 @@ export function TimelinePanel() {
       );
       setDraftClip({
         ...baseClip,
-        duration: Math.max(frameDuration, snapTimeToFrame(baseClip.duration + delta, project.fps)),
+        duration: Math.max(MIN_CLIP_DURATION, snapTimeToFrame(baseClip.duration + delta, project.fps)),
         trimEnd: snapTimeToFrame(rightHandleRoom - delta, project.fps),
       });
     };
@@ -773,7 +763,7 @@ export function TimelinePanel() {
       document.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [clips, draftClip, draftGroupClips, frameDuration, interaction, moveClip, project.fps, trimClip, zoom]);
+  }, [clips, draftClip, draftGroupClips, interaction, moveClip, project.fps, trimClip, zoom]);
 
   const handleTimelineSeek = (
     event: MouseEvent<HTMLDivElement>,
@@ -781,7 +771,7 @@ export function TimelinePanel() {
   ) => {
     selectClip(null);
     const rect = element.getBoundingClientRect();
-    const time = (event.clientX - rect.left) / zoom;
+    const time = snapTimeToFrame((event.clientX - rect.left) / zoom, project.fps);
     if (isPlaying) {
       stopPlayback(time);
       return;
@@ -792,7 +782,7 @@ export function TimelinePanel() {
   const seekToTimelineClientX = (clientX: number, element: HTMLDivElement) => {
     selectClip(null);
     const rect = element.getBoundingClientRect();
-    const time = (clientX - rect.left) / zoom;
+    const time = snapTimeToFrame((clientX - rect.left) / zoom, project.fps);
     if (isPlaying) {
       stopPlayback(time);
       return;
@@ -823,7 +813,7 @@ export function TimelinePanel() {
       document.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [isDraggingPlayhead, isPlaying, seek, selectClip, stopPlayback, zoom]);
+  }, [isDraggingPlayhead, isPlaying, project.fps, seek, selectClip, stopPlayback, zoom]);
 
   const handleAssetDrop = async (
     event: DragEvent<HTMLDivElement>,
@@ -902,6 +892,14 @@ export function TimelinePanel() {
     clipKey: string;
   }) => {
     const clipLutState = timelineLutProxyStates[sourceClip.id] ?? null;
+    const sourceAsset = findAssetForClip(sourceClip, libraryAssets);
+    const hasAudioSpec =
+      track.type === "audio" ||
+      sourceAsset?.type === "audio" ||
+      sourceAsset?.hasAudio === true ||
+      supportsClipVolume(sourceClip);
+    const AudioIndicatorIcon =
+      hasAudioSpec && isClipMutedByProperties(sourceClip) ? VolumeX : Volume2;
     const hasLut =
       typeof renderedClip.adjustments?.lutAssetId === "string" &&
       renderedClip.adjustments.lutAssetId.length > 0;
@@ -972,9 +970,8 @@ export function TimelinePanel() {
             {renderedClip.sourcePath?.split(/[\\/]/).pop() ?? "Clip"}
           </div>
           <div className="truncate text-[10px] text-white/80">
-            <span>{renderedClip.duration.toFixed(2)}s</span>
-            <span className="px-1">-</span>
-            <span>{Math.round(renderedClip.duration * project.fps)}f</span>
+            {hasAudioSpec ? <AudioIndicatorIcon className="mr-1 inline h-3 w-3 align-[-1px]" /> : null}
+            <span>{formatTimelineTime(renderedClip.duration)}</span>
             {hasLut ? (
               <>
                 <span className="px-1">-</span>
@@ -1026,7 +1023,7 @@ export function TimelinePanel() {
 
     return {
       label: draftClip.sourcePath?.split(/[\\/]/).pop() ?? "Clip",
-      detail: `${draftClip.duration.toFixed(2)}s · ${Math.round(draftClip.duration * project.fps)}f`,
+      detail: formatTimelineTime(draftClip.duration),
       trackType: tracksById.get(draftClip.trackId)?.type ?? "video",
       width: getInstanceGhostWidth(draftClip.duration, zoom),
     } as const;
@@ -1035,7 +1032,6 @@ export function TimelinePanel() {
     interaction?.type,
     isCrossTrackDrag,
     moveGhostPointer,
-    project.fps,
     tracksById,
     zoom,
   ]);
@@ -1146,7 +1142,7 @@ export function TimelinePanel() {
         <Layers className="h-4 w-4 text-muted-foreground" />
         <span className="flex-1 text-sm font-medium text-muted-foreground">Timeline</span>
         <div className="text-[11px] text-muted-foreground">
-          {Math.round(playhead * project.fps)}f - {playhead.toFixed(2)}s / {project.duration.toFixed(2)}s
+          {formatTimelineTime(Math.min(playhead, project.duration))} / {formatTimelineTime(project.duration)}
         </div>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -1180,6 +1176,7 @@ export function TimelinePanel() {
             min={minZoom}
             max={maxZoom}
             step={0.1}
+            gradientFill
             onValueChange={(values) => {
               const nextZoom = values[0];
               if (typeof nextZoom === "number") {
@@ -1663,3 +1660,4 @@ export function TimelinePanel() {
     </div>
   );
 }
+

@@ -3,11 +3,7 @@
  * Handles track and clip CRUD operations.
  */
 import { ipcMain } from "electron";
-import {
-  createTrack,
-  updateTrack,
-  deleteTrack,
-} from "../db/tracks.repo";
+import { createTrack, updateTrack, deleteTrack } from "../db/tracks.repo";
 import {
   createClip,
   getClipById,
@@ -15,6 +11,7 @@ import {
   deleteClip,
 } from "../db/clips.repo";
 import {
+  SEQUENCE_PREVIEW_ADJUSTMENT_DEBOUNCE_MS,
   buildDirtyRangeForClip,
   invalidateProjectSequencePreview,
   scheduleProjectSequencePreviewRefresh,
@@ -107,9 +104,11 @@ export function registerTimelineIpc(): void {
         flipVertical: input.flipVertical,
         rotationZ: input.rotationZ,
         opacity: input.opacity,
+        volume: input.volume,
         brightness: input.brightness,
         contrast: input.contrast,
         saturation: input.saturation,
+        // Shared adjustment patches carry correction-level gain/gamma/offset.
         adjustments: input.adjustments,
         fadeInDuration: input.fadeInDuration,
         fadeOutDuration: input.fadeOutDuration,
@@ -124,7 +123,10 @@ export function registerTimelineIpc(): void {
           lutProxyPath: derived.path,
         });
       } catch (error) {
-        console.warn("[Composer] Failed to generate timeline LUT proxy on clip add:", error);
+        console.warn(
+          "[Composer] Failed to generate timeline LUT proxy on clip add:",
+          error,
+        );
       }
       invalidateProjectSequencePreview(input.projectId, ["timeline"], {
         dirtyRange: buildDirtyRangeForClip(clip),
@@ -152,9 +154,11 @@ export function registerTimelineIpc(): void {
         flipVertical: input.flipVertical,
         rotationZ: input.rotationZ,
         opacity: input.opacity,
+        volume: input.volume,
         brightness: input.brightness,
         contrast: input.contrast,
         saturation: input.saturation,
+        // Shared adjustment patches carry correction-level gain/gamma/offset.
         adjustments: input.adjustments,
         fadeInDuration: input.fadeInDuration,
         fadeOutDuration: input.fadeOutDuration,
@@ -185,14 +189,24 @@ export function registerTimelineIpc(): void {
           ),
         },
       });
-      void scheduleProjectSequencePreviewRefresh(input.projectId);
+      const previewDebounceMs =
+        input.adjustments !== undefined
+          ? SEQUENCE_PREVIEW_ADJUSTMENT_DEBOUNCE_MS
+          : undefined;
+      void scheduleProjectSequencePreviewRefresh(
+        input.projectId,
+        previewDebounceMs == null ? undefined : { debounceMs: previewDebounceMs },
+      );
       return clip;
     },
   );
 
   ipcMain.handle(
     "composer:clip-resolve-timeline-lut-proxy",
-    async (_event, input: { projectId: string; clipId: string }): Promise<ResolveTimelineLutProxyResult> => {
+    async (
+      _event,
+      input: { projectId: string; clipId: string },
+    ): Promise<ResolveTimelineLutProxyResult> => {
       const clip = getClipById(input.projectId, input.clipId);
       const resolution = await ensureTimelineLutProxy(input.projectId, clip);
       if (

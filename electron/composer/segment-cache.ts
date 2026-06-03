@@ -10,15 +10,28 @@ import {
   writeFileSync,
 } from "fs";
 import { basename, dirname, join } from "path";
-import type { CachedSegment, SegmentManifest } from "./sequence-preview-contract";
+import type {
+  CachedSegment,
+  SegmentManifest,
+} from "./sequence-preview-contract";
 import { loadRegistry } from "./db/project-registry";
 
 const SEGMENT_CACHE_SUBDIR = "seqseg";
 const SEGMENT_MANIFEST_FILE = "manifest.json";
 const SEGMENT_DURATION_SECONDS = 5;
 
+interface BlankSegmentOptions {
+  duration: number;
+  outputWidth: number;
+  outputHeight: number;
+  fps: number;
+  backgroundColor: string;
+}
+
 function getProjectPath(projectId: string): string {
-  const project = loadRegistry().projects.find((entry) => entry.id === projectId);
+  const project = loadRegistry().projects.find(
+    (entry) => entry.id === projectId,
+  );
   if (!project) {
     throw new Error(`Project ${projectId} not found in registry`);
   }
@@ -52,7 +65,9 @@ function getManifestPath(projectId: string): string {
 }
 
 export function getSegmentCacheDir(projectId: string): string {
-  return ensureDir(join(getProjectPath(projectId), "cache", SEGMENT_CACHE_SUBDIR));
+  return ensureDir(
+    join(getProjectPath(projectId), "cache", SEGMENT_CACHE_SUBDIR),
+  );
 }
 
 export function createInitialManifest(
@@ -104,7 +119,9 @@ export function loadSegmentManifest(projectId: string): SegmentManifest | null {
   }
 
   try {
-    const parsed = JSON.parse(readFileSync(manifestPath, "utf-8")) as SegmentManifest;
+    const parsed = JSON.parse(
+      readFileSync(manifestPath, "utf-8"),
+    ) as SegmentManifest;
     if (!Array.isArray(parsed.segments)) {
       return null;
     }
@@ -138,13 +155,20 @@ export function saveSegmentManifest(
   projectId: string,
   manifest: SegmentManifest,
 ): SegmentManifest {
-  writeFileSync(getManifestPath(projectId), JSON.stringify(manifest, null, 2), "utf-8");
+  writeFileSync(
+    getManifestPath(projectId),
+    JSON.stringify(manifest, null, 2),
+    "utf-8",
+  );
   return manifest;
 }
 
 export function isManifestReusable(
   manifest: SegmentManifest | null,
-  next: Pick<SegmentManifest, "duration" | "outputWidth" | "outputHeight" | "fps">,
+  next: Pick<
+    SegmentManifest,
+    "duration" | "outputWidth" | "outputHeight" | "fps"
+  >,
 ): boolean {
   if (!manifest) {
     return false;
@@ -186,7 +210,9 @@ export function markAllDirty(manifest: SegmentManifest): SegmentManifest {
   };
 }
 
-export function getNextDirtySegment(manifest: SegmentManifest): CachedSegment | null {
+export function getNextDirtySegment(
+  manifest: SegmentManifest,
+): CachedSegment | null {
   return manifest.segments.find((segment) => segment.dirty) ?? null;
 }
 
@@ -198,9 +224,7 @@ export function markRendered(
   return {
     ...manifest,
     segments: manifest.segments.map((segment) =>
-      segment.id === segmentId
-        ? { ...segment, file, dirty: false }
-        : segment,
+      segment.id === segmentId ? { ...segment, file, dirty: false } : segment,
     ),
   };
 }
@@ -227,12 +251,18 @@ export function computeOverallProgress(
       return total + duration;
     }
     if (segment.id === activeSegmentId && activeSegmentPercent != null) {
-      return total + duration * Math.min(Math.max(activeSegmentPercent, 0), 100) / 100;
+      return (
+        total +
+        (duration * Math.min(Math.max(activeSegmentPercent, 0), 100)) / 100
+      );
     }
     return total;
   }, 0);
 
-  return Math.min(100, Math.max(0, (completedDuration / manifest.duration) * 100));
+  return Math.min(
+    100,
+    Math.max(0, (completedDuration / manifest.duration) * 100),
+  );
 }
 
 export function writeSegment(
@@ -246,8 +276,76 @@ export function writeSegment(
   return filePath;
 }
 
-export function readSegment(projectId: string, segment: CachedSegment): Buffer | null {
-  const expectedPath = join(getSegmentCacheDir(projectId), buildSegmentFileName(segment));
+function normalizeFfmpegColor(backgroundColor: string): string {
+  const normalized = backgroundColor.trim().toLowerCase();
+  return /^#[0-9a-f]{6}$/.test(normalized)
+    ? `0x${normalized.slice(1)}`
+    : "0x000000";
+}
+
+export async function renderBlankSegment(
+  projectId: string,
+  segment: CachedSegment,
+  options: BlankSegmentOptions,
+): Promise<string> {
+  const dir = getSegmentCacheDir(projectId);
+  const filePath = join(dir, buildSegmentFileName(segment));
+  const duration = Math.max(0.04, options.duration);
+  const color = normalizeFfmpegColor(options.backgroundColor);
+
+  if (existsSync(filePath)) {
+    rmSync(filePath, { force: true });
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    let stderr = "";
+    const proc = spawn(
+      "ffmpeg",
+      [
+        "-f",
+        "lavfi",
+        "-i",
+        `color=c=${color}:s=${options.outputWidth}x${options.outputHeight}:r=${options.fps}:d=${duration.toFixed(3)}`,
+        "-an",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "ultrafast",
+        "-pix_fmt",
+        "yuv420p",
+        "-movflags",
+        "+faststart",
+        "-y",
+        filePath,
+      ],
+      { windowsHide: true },
+    );
+
+    proc.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+
+    proc.once("error", reject);
+    proc.once("exit", (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      reject(new Error(stderr || `FFmpeg exited with code ${code}`));
+    });
+  });
+
+  return filePath;
+}
+
+export function readSegment(
+  projectId: string,
+  segment: CachedSegment,
+): Buffer | null {
+  const expectedPath = join(
+    getSegmentCacheDir(projectId),
+    buildSegmentFileName(segment),
+  );
   if (!existsSync(expectedPath)) {
     return null;
   }
@@ -259,7 +357,9 @@ export function deleteSegments(
   exceptFiles: string[] = [],
 ): void {
   const cacheDir = getSegmentCacheDir(projectId);
-  const allowed = new Set(exceptFiles.map((filePath) => filePath.toLowerCase()));
+  const allowed = new Set(
+    exceptFiles.map((filePath) => filePath.toLowerCase()),
+  );
 
   for (const entry of readdirSync(cacheDir, { withFileTypes: true })) {
     if (!entry.isFile()) {
@@ -285,7 +385,9 @@ export async function concatSegments(
   outputPath: string,
 ): Promise<void> {
   if (segmentPaths.length === 0) {
-    throw new Error("No sequence preview segments are available to concatenate");
+    throw new Error(
+      "No sequence preview segments are available to concatenate",
+    );
   }
 
   if (segmentPaths.length === 1) {
@@ -306,7 +408,9 @@ export async function concatSegments(
 
   writeFileSync(
     listPath,
-    segmentPaths.map((filePath) => `file '${escapeConcatPath(filePath)}'`).join("\n"),
+    segmentPaths
+      .map((filePath) => `file '${escapeConcatPath(filePath)}'`)
+      .join("\n"),
     "utf-8",
   );
 

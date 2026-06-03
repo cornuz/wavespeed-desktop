@@ -1,4 +1,8 @@
 import { getProjectDatabase, persistProjectDatabase } from "./connection";
+import {
+  DEFAULT_COMPOSER_PROJECT_BACKGROUND_COLOR,
+  normalizeComposerProjectBackgroundColor,
+} from "../../../src/composer/types/project";
 import type {
   ComposerPlaybackQuality,
   ComposerSequencePreview,
@@ -16,6 +20,7 @@ function parseRequest(value: unknown): ComposerSequencePreviewRequest {
     projectWidth: 0,
     projectHeight: 0,
     playbackQuality: "med",
+    backgroundColor: DEFAULT_COMPOSER_PROJECT_BACKGROUND_COLOR,
   };
 
   try {
@@ -28,6 +33,9 @@ function parseRequest(value: unknown): ComposerSequencePreviewRequest {
       projectWidth: parsed.projectWidth ?? fallback.projectWidth,
       projectHeight: parsed.projectHeight ?? fallback.projectHeight,
       playbackQuality: parsed.playbackQuality ?? fallback.playbackQuality,
+      backgroundColor: normalizeComposerProjectBackgroundColor(
+        parsed.backgroundColor,
+      ),
     };
   } catch {
     return fallback;
@@ -45,7 +53,8 @@ function parseInvalidationReasons(
       ): cause is ComposerSequencePreviewInvalidationCause =>
         cause === "timeline" ||
         cause === "dimensions" ||
-        cause === "playback-quality",
+        cause === "playback-quality" ||
+        cause === "background-color",
     );
   } catch {
     return [];

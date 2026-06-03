@@ -58,6 +58,7 @@ export interface SaveProjectInput {
   fps?: number;
   width?: number;
   height?: number;
+  backgroundColor?: string;
   playbackQuality?: ComposerPlaybackQuality;
   safeZoneEnabled?: boolean;
   safeZoneMargin?: number;
@@ -123,9 +124,14 @@ export interface AddClipInput {
   flipVertical?: boolean;
   rotationZ?: number;
   opacity?: number;
+  volume?: number;
+  /** Legacy multiplier compatibility surface. Prefer `adjustments` for gain/gamma/offset-aware edits. */
   brightness?: number;
+  /** Legacy multiplier compatibility surface. Prefer `adjustments` for gain/gamma/offset-aware edits. */
   contrast?: number;
+  /** Legacy multiplier compatibility surface. Prefer `adjustments` for gain/gamma/offset-aware edits. */
   saturation?: number;
+  /** Preferred partial adjustment patch, persisted after normalization, including gain/gamma/offset. */
   adjustments?: ClipAdjustmentsPatch;
   fadeInDuration?: number;
   fadeOutDuration?: number;
@@ -148,9 +154,14 @@ export interface UpdateClipInput {
   flipVertical?: boolean;
   rotationZ?: number;
   opacity?: number;
+  volume?: number;
+  /** Legacy multiplier compatibility surface. Prefer `adjustments` for gain/gamma/offset-aware edits. */
   brightness?: number;
+  /** Legacy multiplier compatibility surface. Prefer `adjustments` for gain/gamma/offset-aware edits. */
   contrast?: number;
+  /** Legacy multiplier compatibility surface. Prefer `adjustments` for gain/gamma/offset-aware edits. */
   saturation?: number;
+  /** Preferred partial adjustment patch, persisted after normalization, including gain/gamma/offset. */
   adjustments?: ClipAdjustmentsPatch;
   fadeInDuration?: number;
   fadeOutDuration?: number;

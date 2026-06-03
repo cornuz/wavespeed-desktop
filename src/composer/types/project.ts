@@ -35,6 +35,32 @@ export type LayoutSizesMap = Partial<Record<LayoutPreset, LayoutSizes>>;
 
 // ─── Primitives ──────────────────────────────────────────────────────────────
 
+export const DEFAULT_COMPOSER_PROJECT_BACKGROUND_COLOR = "#000000";
+
+export function normalizeComposerProjectBackgroundColor(
+  value: unknown,
+): string {
+  if (typeof value !== "string") {
+    return DEFAULT_COMPOSER_PROJECT_BACKGROUND_COLOR;
+  }
+
+  const trimmed = value.trim();
+  const match = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(trimmed);
+  if (!match) {
+    return DEFAULT_COMPOSER_PROJECT_BACKGROUND_COLOR;
+  }
+
+  const hex = match[1].toLowerCase();
+  if (hex.length === 3) {
+    return `#${hex
+      .split("")
+      .map((char) => `${char}${char}`)
+      .join("")}`;
+  }
+
+  return `#${hex}`;
+}
+
 export type TrackType = "video" | "audio";
 
 export type SourceType = "asset" | "import" | "ai-result" | "workflow-ref";
@@ -127,6 +153,8 @@ export interface Clip {
   rotationZ: number;
   /** Visual opacity, where 1 is fully opaque. */
   opacity: number;
+  /** Audio gain multiplier, where 1 is 100%. */
+  volume: number;
   /** Optional visual brightness multiplier, where 1 is neutral. */
   brightness?: number;
   /** Optional visual contrast multiplier, where 1 is neutral. */
@@ -154,7 +182,14 @@ export interface ClipColorCorrection {
 }
 
 export interface ClipLightnessCorrection {
+  /** Brightness-like correction control. */
   exposure: number;
+  /** Gain-style correction, approximated through shared brightness-like filters. */
+  gain: number;
+  /** Gamma-style correction, approximated through shared contrast-like filters. */
+  gamma: number;
+  /** Offset-style correction, approximated through shared brightness-like filters. */
+  offset: number;
   contrast: number;
   highlights: number;
   shadows: number;
@@ -206,7 +241,8 @@ export type ComposerSequencePreviewStatus =
 export type ComposerSequencePreviewInvalidationCause =
   | "timeline"
   | "dimensions"
-  | "playback-quality";
+  | "playback-quality"
+  | "background-color";
 
 export interface ComposerSequencePreviewRequest {
   version: number;
@@ -216,6 +252,7 @@ export interface ComposerSequencePreviewRequest {
   projectWidth: number;
   projectHeight: number;
   playbackQuality: ComposerPlaybackQuality;
+  backgroundColor: string;
 }
 
 export interface ComposerSequencePreview {
@@ -288,6 +325,8 @@ export interface ComposerAsset {
   statusMessage?: string;
   /** For videos: true if audio codec is unsupported but video is usable */
   hasUnsupportedAudio?: boolean;
+  /** True when the asset contains an audio stream. */
+  hasAudio?: boolean;
   /** For videos that were transcoded: path to the working/canonical file */
   workingPath?: string;
   /** Import/pipeline progress for renderer polling. */
@@ -331,6 +370,7 @@ export interface ComposerProject extends ComposerProjectSummary {
   fps: number;
   width: number;
   height: number;
+  backgroundColor: string;
   playbackQuality: ComposerPlaybackQuality;
   safeZoneEnabled: boolean;
   safeZoneMargin: number;

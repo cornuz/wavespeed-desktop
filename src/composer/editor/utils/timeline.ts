@@ -1,23 +1,24 @@
 import type { Clip } from "@/composer/types/project";
 
 export const MIN_CLIP_DURATION = 0.25;
+export const TIMELINE_STEP_SECONDS = 0.1;
 
-export function getFrameDuration(fps: number): number {
-  return 1 / fps;
+export function getFrameDuration(_fps: number): number {
+  return TIMELINE_STEP_SECONDS;
 }
 
-export function snapTimeToFrame(value: number, fps: number): number {
-  return Number((Math.round(Math.max(0, value) * fps) / fps).toFixed(6));
+export function snapTimeToFrame(value: number, _fps: number): number {
+  return Number(
+    (Math.round(Math.max(0, value) / TIMELINE_STEP_SECONDS) * TIMELINE_STEP_SECONDS).toFixed(6),
+  );
 }
 
 export function formatTimelineTime(value: number): string {
-  const totalSeconds = Math.max(0, value);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = Math.floor(totalSeconds % 60);
-  const milliseconds = Math.floor((totalSeconds % 1) * 100);
-  return `${minutes}:${seconds.toString().padStart(2, "0")}.${milliseconds
-    .toString()
-    .padStart(2, "0")}`;
+  const roundedTenths = Math.max(0, Math.round(value * 10));
+  const minutes = Math.floor(roundedTenths / 600);
+  const seconds = Math.floor((roundedTenths % 600) / 10);
+  const tenths = roundedTenths % 10;
+  return `${minutes}:${seconds.toString().padStart(2, "0")}.${tenths}`;
 }
 
 export function getClipEnd(clip: Clip): number {
@@ -28,8 +29,8 @@ export function getTrimEnd(clip: Clip): number {
   return clip.trimEnd ?? 0;
 }
 
-export function getSnapThreshold(fps: number): number {
-  return 10 / fps;
+export function getSnapThreshold(_fps: number): number {
+  return TIMELINE_STEP_SECONDS;
 }
 
 export function resolveTrackStart(
@@ -49,20 +50,29 @@ export function resolveTrackStart(
       break;
     }
 
-    const previousClip = [...otherClips]
-      .reverse()
-      .find((clip) => getClipEnd(clip) <= desiredStart + threshold);
-
-    if (previousClip && Math.abs(nextStart - getClipEnd(previousClip)) <= threshold) {
-      nextStart = getClipEnd(previousClip);
-      continue;
-    }
-
+    const leftCandidate = Math.max(0, overlappingClip.startTime - duration);
+    const rightCandidate = getClipEnd(overlappingClip);
     nextStart =
-      desiredStart >= overlappingClip.startTime
-        ? getClipEnd(overlappingClip)
-        : Math.max(0, overlappingClip.startTime - duration);
+      Math.abs(nextStart - leftCandidate) <= Math.abs(nextStart - rightCandidate)
+        ? leftCandidate
+        : rightCandidate;
+  }
+
+  if (Math.abs(nextStart) <= threshold) {
+    return 0;
+  }
+
+  for (const clip of otherClips) {
+    const previousEdge = getClipEnd(clip);
+    const nextEdge = clip.startTime - duration;
+    if (Math.abs(nextStart - previousEdge) <= threshold) {
+      return snapTimeToFrame(previousEdge, fps);
+    }
+    if (nextEdge >= 0 && Math.abs(nextStart - nextEdge) <= threshold) {
+      return snapTimeToFrame(nextEdge, fps);
+    }
   }
 
   return snapTimeToFrame(nextStart, fps);
 }
+

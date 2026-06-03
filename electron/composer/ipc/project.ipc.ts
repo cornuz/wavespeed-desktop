@@ -55,6 +55,10 @@ import type {
   LayoutPreset,
   LayoutSizesMap,
 } from "../../../src/composer/types/project";
+import {
+  DEFAULT_COMPOSER_PROJECT_BACKGROUND_COLOR,
+  normalizeComposerProjectBackgroundColor,
+} from "../../../src/composer/types/project";
 import type {
   ComposerFfmpegStatus,
   CreateProjectInput,
@@ -254,12 +258,32 @@ function enrichProjectSummary(
   };
 }
 
+function getMetaColumns(db: ReturnType<typeof getProjectDatabase>): string[] {
+  if (!db) {
+    return [];
+  }
+  const info = db.exec(`PRAGMA table_info(meta)`);
+  return (info[0]?.values ?? []).map((row) => String(row[1]));
+}
+
+function ensureProjectBackgroundColorColumn(projectId: string): void {
+  const db = getProjectDatabase(projectId);
+  if (!db) {
+    throw new Error(`Project ${projectId} is not open`);
+  }
+  const columns = getMetaColumns(db);
+  if (!columns.includes("background_color")) {
+    db.run(`ALTER TABLE meta ADD COLUMN background_color TEXT NOT NULL DEFAULT '#000000'`);
+  }
+}
+
 /** Reads meta row from an open DB and returns duration + fps + layout. */
 function readProjectMeta(projectId: string): {
   duration: number;
   fps: number;
   width: number;
   height: number;
+  backgroundColor: string;
   playbackQuality: ComposerPlaybackQuality;
   safeZoneEnabled: boolean;
   safeZoneMargin: number;
@@ -269,14 +293,19 @@ function readProjectMeta(projectId: string): {
 } {
   const db = getProjectDatabase(projectId);
   if (!db) throw new Error(`Project ${projectId} is not open`);
+  const metaColumns = getMetaColumns(db);
+  const hasBackgroundColor = metaColumns.includes("background_color");
   const result = db.exec(
-    `SELECT duration, fps, width, height, playback_quality, safe_zone_enabled, safe_zone_margin, project_name, layout_preset, layout_sizes FROM meta LIMIT 1`,
+    hasBackgroundColor
+      ? `SELECT duration, fps, width, height, background_color, playback_quality, safe_zone_enabled, safe_zone_margin, project_name, layout_preset, layout_sizes FROM meta LIMIT 1`
+      : `SELECT duration, fps, width, height, playback_quality, safe_zone_enabled, safe_zone_margin, project_name, layout_preset, layout_sizes FROM meta LIMIT 1`,
   );
   const row = result[0]?.values?.[0];
   if (!row) throw new Error("meta row missing");
   let layoutSizes: LayoutSizesMap = {};
+  const layoutSizesIndex = hasBackgroundColor ? 10 : 9;
   try {
-    layoutSizes = JSON.parse(row[9] as string) as LayoutSizesMap;
+    layoutSizes = JSON.parse(row[layoutSizesIndex] as string) as LayoutSizesMap;
   } catch {
     /* keep empty map */
   }
@@ -285,11 +314,14 @@ function readProjectMeta(projectId: string): {
     fps: row[1] as number,
     width: row[2] as number,
     height: row[3] as number,
-    playbackQuality: ((row[4] as string) || "med") as ComposerPlaybackQuality,
-    safeZoneEnabled: Boolean(row[5]),
-    safeZoneMargin: row[6] as number,
-    projectName: row[7] as string,
-    layoutPreset: ((row[8] as string) || "timeline") as LayoutPreset,
+    backgroundColor: normalizeComposerProjectBackgroundColor(
+      hasBackgroundColor ? row[4] : DEFAULT_COMPOSER_PROJECT_BACKGROUND_COLOR,
+    ),
+    playbackQuality: ((row[hasBackgroundColor ? 5 : 4] as string) || "med") as ComposerPlaybackQuality,
+    safeZoneEnabled: Boolean(row[hasBackgroundColor ? 6 : 5]),
+    safeZoneMargin: row[hasBackgroundColor ? 7 : 6] as number,
+    projectName: row[hasBackgroundColor ? 8 : 7] as string,
+    layoutPreset: ((row[hasBackgroundColor ? 9 : 8] as string) || "timeline") as LayoutPreset,
     layoutSizes,
   };
 }
@@ -304,6 +336,7 @@ function buildProject(
     fps,
     width,
     height,
+    backgroundColor,
     playbackQuality,
     safeZoneEnabled,
     safeZoneMargin,
@@ -313,20 +346,29 @@ function buildProject(
   const tracks = listTracks(projectId);
   const clips = listClips(projectId);
 
-  // Migrate old fractional transform values to universal pixel coordinates
-  const migratedClips = clips.map((clip) => {
-    if (
-      Math.abs(clip.transformOffsetX) < 5.0 &&
-      Math.abs(clip.transformOffsetY) < 5.0
-    ) {
-      return {
+  // Migrate only clearly legacy projects that still store normalized offsets.
+  // Per-clip migration was unsafe because a modern clip centered near (0, 0)
+  // could be remigrated on every reopen and jump far out of frame.
+  const shouldMigrateLegacyFractionalOffsets =
+    clips.length > 0 &&
+    clips.every(
+      (clip) =>
+        Math.abs(clip.transformOffsetX) <= 1 &&
+        Math.abs(clip.transformOffsetY) <= 1,
+    ) &&
+    clips.some(
+      (clip) =>
+        Math.abs(clip.transformOffsetX) > 0.0001 ||
+        Math.abs(clip.transformOffsetY) > 0.0001,
+    );
+
+  const migratedClips = shouldMigrateLegacyFractionalOffsets
+    ? clips.map((clip) => ({
         ...clip,
         transformOffsetX: clip.transformOffsetX * width,
         transformOffsetY: -clip.transformOffsetY * height,
-      };
-    }
-    return clip;
-  });
+      }))
+    : clips;
   const hasMigrations = migratedClips.some(
     (clip, index) =>
       clip.transformOffsetX !== clips[index].transformOffsetX ||
@@ -350,6 +392,7 @@ function buildProject(
     fps,
     width,
     height,
+    backgroundColor,
     playbackQuality,
     safeZoneEnabled,
     safeZoneMargin,
@@ -506,6 +549,11 @@ export function registerProjectIpc(): void {
         updates.push("height = ?");
         values.push(input.height);
       }
+      if (input.backgroundColor !== undefined) {
+        ensureProjectBackgroundColorColumn(input.id);
+        updates.push("background_color = ?");
+        values.push(normalizeComposerProjectBackgroundColor(input.backgroundColor));
+      }
       if (input.playbackQuality !== undefined) {
         updates.push("playback_quality = ?");
         values.push(input.playbackQuality);
@@ -536,6 +584,7 @@ export function registerProjectIpc(): void {
       if (
         input.duration !== undefined ||
         input.fps !== undefined ||
+        input.backgroundColor !== undefined ||
         input.playbackQuality !== undefined ||
         input.width !== undefined ||
         input.height !== undefined
@@ -546,6 +595,9 @@ export function registerProjectIpc(): void {
             : []),
           ...(input.playbackQuality !== undefined
             ? (["playback-quality"] as const)
+            : []),
+          ...(input.backgroundColor !== undefined
+            ? (["background-color"] as const)
             : []),
           ...(input.width !== undefined || input.height !== undefined
             ? (["dimensions"] as const)

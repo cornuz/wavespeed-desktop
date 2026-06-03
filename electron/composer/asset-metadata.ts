@@ -22,6 +22,7 @@ export interface AssetMetadata {
   status: "ready" | "processing" | "error";
   statusMessage?: string;
   hasUnsupportedAudio?: boolean;
+  hasAudio?: boolean;
   workingPath?: string;
   importProgress?: ComposerAssetImportProgress;
   previewProxies?: Partial<Record<ComposerPreviewProxyTier, AssetPreviewProxyMetadata>>;

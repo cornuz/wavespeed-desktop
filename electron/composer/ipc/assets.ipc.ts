@@ -32,6 +32,7 @@ import {
 } from "../asset-metadata";
 import {
   checkVideoSafety,
+  probeVideoFileSync,
   transcodeVideoToSafeFormat,
 } from "../video-processor";
 import { ensureComposerFfmpegToolsAvailable } from "../ffmpeg";
@@ -317,13 +318,14 @@ async function processImportedVideoAsset(
       const workingPath = join(assetsDir, workingFileName);
 
       const metadata = loadAssetMetadata(assetsDir);
-      metadata[assetPath] = {
-        ...(metadata[assetPath] ?? {}),
-        status: "processing",
-        statusMessage: "Generating canonical media...",
-        hasUnsupportedAudio: safety.hasUnsupportedAudio,
-        workingPath,
-        importProgress: createImportProgress("canonical", { stageProgress: 0 }),
+        metadata[assetPath] = {
+          ...(metadata[assetPath] ?? {}),
+          status: "processing",
+          statusMessage: "Generating canonical media...",
+          hasAudio: safety.hasAudio,
+          hasUnsupportedAudio: safety.hasUnsupportedAudio,
+          workingPath,
+          importProgress: createImportProgress("canonical", { stageProgress: 0 }),
       };
       saveAssetMetadata(assetsDir, metadata);
 
@@ -342,6 +344,7 @@ async function processImportedVideoAsset(
 
           currentMetadata.status = "processing";
           currentMetadata.statusMessage = "Generating canonical media...";
+          currentMetadata.hasAudio = safety.hasAudio;
           currentMetadata.hasUnsupportedAudio = safety.hasUnsupportedAudio;
           currentMetadata.workingPath = workingPath;
           currentMetadata.importProgress = createImportProgress("canonical", {
@@ -357,11 +360,12 @@ async function processImportedVideoAsset(
 
       if (!result) {
         updated[assetPath] = {
-          ...currentMetadata,
-          status: "error",
-          statusMessage: "Failed to generate canonical media",
-          hasUnsupportedAudio: safety.hasUnsupportedAudio,
-          workingPath,
+            ...currentMetadata,
+            status: "error",
+            statusMessage: "Failed to generate canonical media",
+            hasAudio: safety.hasAudio,
+            hasUnsupportedAudio: safety.hasUnsupportedAudio,
+            workingPath,
           importProgress: createErrorImportProgress(
             updated[assetPath],
             "Failed to generate canonical media",
@@ -375,6 +379,7 @@ async function processImportedVideoAsset(
         ...currentMetadata,
         status: "ready",
         statusMessage: undefined,
+        hasAudio: safety.hasAudio,
         hasUnsupportedAudio: safety.hasUnsupportedAudio,
         workingPath: result,
         importProgress: createImportProgress("complete"),
@@ -389,6 +394,7 @@ async function processImportedVideoAsset(
       ...(metadata[assetPath] ?? {}),
       status: "ready",
       statusMessage: undefined,
+      hasAudio: safety.hasAudio,
       hasUnsupportedAudio: safety.hasUnsupportedAudio,
       importProgress: createImportProgress("complete"),
     };
@@ -435,6 +441,17 @@ function listProjectAssets(projectId: string): ComposerAsset[] {
     if (cleanupObsoletePreviewProxies(assetPath, assetMetadata)) {
       metadataChanged = true;
     }
+    if (assetMetadata.hasAudio === undefined) {
+      const probeTarget =
+        typeof assetMetadata.workingPath === "string" && existsSync(assetMetadata.workingPath)
+          ? assetMetadata.workingPath
+          : assetPath;
+      const probe = probeVideoFileSync(probeTarget);
+      if (probe) {
+        assetMetadata.hasAudio = Boolean(probe.audio && probe.audio.length > 0);
+        metadataChanged = true;
+      }
+    }
     if (
       assetMetadata.status === "processing" &&
       assetMetadata.importProgress?.stage === "proxy"
@@ -477,6 +494,7 @@ function listProjectAssets(projectId: string): ComposerAsset[] {
         modifiedAt: stats.mtime.toISOString(),
         status: type === "lut" ? "ready" : (meta?.status ?? "ready"),
         statusMessage: type === "lut" ? undefined : meta?.statusMessage,
+        hasAudio: type === "audio" ? true : type === "video" ? meta?.hasAudio : undefined,
         hasUnsupportedAudio: type === "lut" ? undefined : meta?.hasUnsupportedAudio,
         workingPath: type === "lut" ? undefined : meta?.workingPath,
         importProgress: type === "lut" ? undefined : meta?.importProgress,

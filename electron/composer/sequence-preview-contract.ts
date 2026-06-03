@@ -25,10 +25,14 @@ export interface HeadlessRenderClip {
   createdAt: string;
   hasVisual: boolean;
   hasAudio: boolean;
+  volume: number;
   rect: HeadlessRenderRect | null;
   opacity: number;
-  blendMode: GlobalCompositeOperation;
-  filter: string;
+  blendMode: GlobalCompositeOperation | null;
+  filter: string | null;
+  blur: number;
+  sharpen: number;
+  noise: number;
   requestedLutAssetId: string | null;
   lutApplication: "none" | "cube-image";
   lut: HeadlessRenderResolvedLut | null;
@@ -44,6 +48,7 @@ export interface RenderSegmentRequest {
   projectId: string;
   requestSignature: string;
   playbackQuality: "full" | "high" | "med" | "low";
+  backgroundColor: string;
   segmentId: string;
   segmentIndex: number;
   startTime: number;

@@ -7,7 +7,14 @@ import stringify from "json-stable-stringify";
 import { getCanvasBlendMode } from "../../src/composer/shared/blend-modes";
 import { normalizeClipAdjustments } from "../../src/composer/shared/clipAdjustments";
 import { buildCssFilter as buildSharedCssFilter } from "../../src/composer/shared/filter-builder";
-import { getUniversalClipRect, universalRectToScreen } from "../../src/composer/shared/compositionGeometry";
+import {
+  DEFAULT_COMPOSER_PROJECT_BACKGROUND_COLOR,
+  normalizeComposerProjectBackgroundColor,
+} from "../../src/composer/types/project";
+import {
+  getUniversalClipRect,
+  universalRectToScreen,
+} from "../../src/composer/shared/compositionGeometry";
 import type {
   Clip,
   ComposerPlaybackQuality,
@@ -44,6 +51,7 @@ import {
   markAllDirty,
   markDirty,
   markRendered,
+  renderBlankSegment,
   saveSegmentManifest,
   writeSegment,
 } from "./segment-cache";
@@ -55,12 +63,24 @@ import type {
   SequencePreviewProgressEvent,
 } from "./sequence-preview-contract";
 
-export const SEQUENCE_PREVIEW_REQUEST_VERSION = 8;
+export const SEQUENCE_PREVIEW_REQUEST_VERSION = 13;
 const SEQUENCE_PREVIEW_EDIT_DEBOUNCE_MS = 600;
+export const SEQUENCE_PREVIEW_ADJUSTMENT_DEBOUNCE_MS = 5000;
 const SEQUENCE_PREVIEW_RECONCILE_INTERVAL_MS = 15_000;
 
-const IMAGE_EXTS = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg"]);
-const SEQUENCE_PREVIEW_SCALE_BY_QUALITY: Record<ComposerPlaybackQuality, number> = {
+const IMAGE_EXTS = new Set([
+  ".jpg",
+  ".jpeg",
+  ".png",
+  ".gif",
+  ".webp",
+  ".bmp",
+  ".svg",
+]);
+const SEQUENCE_PREVIEW_SCALE_BY_QUALITY: Record<
+  ComposerPlaybackQuality,
+  number
+> = {
   full: 1,
   high: 0.85,
   med: 0.7,
@@ -73,6 +93,7 @@ interface ProjectSequencePreviewSettings {
   width: number;
   height: number;
   playbackQuality: ComposerPlaybackQuality;
+  backgroundColor: string;
 }
 
 interface MediaProbeResult {
@@ -98,7 +119,10 @@ interface SequencePreviewRenderPlan {
 
 interface ProjectSequencePreviewJobState {
   running: boolean;
+  runningRequestSignature: string | null;
+  cancelRequested: boolean;
   rerunRequested: boolean;
+  rerunDebounceMs: number | null;
   scheduledTimer: ReturnType<typeof setTimeout> | null;
 }
 
@@ -120,11 +144,26 @@ interface ClipLutSignature {
   errorMessage?: string;
 }
 
-const activeSequencePreviewJobs = new Map<string, ProjectSequencePreviewJobState>();
+const activeSequencePreviewJobs = new Map<
+  string,
+  ProjectSequencePreviewJobState
+>();
 const trackedSequencePreviewProjects = new Set<string>();
-const pendingSequencePreviewInvalidations = new Map<string, PendingInvalidationState>();
+const pendingSequencePreviewInvalidations = new Map<
+  string,
+  PendingInvalidationState
+>();
 const sequencePreviewProgressLogBuckets = new Map<string, number>();
 let sequencePreviewReconcileTimer: ReturnType<typeof setInterval> | null = null;
+
+class SequencePreviewJobCancelledError extends Error {
+  constructor(projectId: string, requestSignature: string) {
+    super(
+      `Sequence preview job cancelled for project ${projectId} (${requestSignature})`,
+    );
+    this.name = "SequencePreviewJobCancelledError";
+  }
+}
 
 function buildClipLutSignature(
   projectId: string,
@@ -172,7 +211,10 @@ function logSequencePreviewDebug(
   console.info(`[Composer Preview] ${message}`);
 }
 
-function clearSequencePreviewProgressLog(projectId: string, requestSignature: string): void {
+function clearSequencePreviewProgressLog(
+  projectId: string,
+  requestSignature: string,
+): void {
   sequencePreviewProgressLogBuckets.delete(`${projectId}:${requestSignature}`);
 }
 
@@ -198,6 +240,19 @@ function clampOpacity(value: number): number {
   return Math.min(Math.max(value, 0), 1);
 }
 
+function clampVolume(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 1;
+  }
+  return Math.min(Math.max(value, 0), 1);
+}
+
+function isSvgPath(filePath: string | null | undefined): boolean {
+  return (
+    typeof filePath === "string" && extname(filePath).toLowerCase() === ".svg"
+  );
+}
+
 function clampFadeDuration(value: number, clipDuration: number): number {
   if (!Number.isFinite(value) || value <= 0) {
     return 0;
@@ -205,8 +260,8 @@ function clampFadeDuration(value: number, clipDuration: number): number {
   return Math.min(value, clipDuration);
 }
 
-function buildCssFilter(clip: Clip): string {
-  return buildSharedCssFilter(clip.adjustments);
+function buildCssFilter(adjustments: Clip["adjustments"]): string {
+  return buildSharedCssFilter(adjustments);
 }
 
 function mergeDirtyRanges(
@@ -234,7 +289,10 @@ function rememberSequencePreviewInvalidation(
     fullReset: false,
   };
   pendingSequencePreviewInvalidations.set(projectId, {
-    dirtyRange: mergeDirtyRanges(previous.dirtyRange, options.dirtyRange ?? null),
+    dirtyRange: mergeDirtyRanges(
+      previous.dirtyRange,
+      options.dirtyRange ?? null,
+    ),
     fullReset: previous.fullReset || options.fullReset === true,
   });
 }
@@ -251,7 +309,9 @@ function consumeSequencePreviewInvalidation(
 }
 
 function getProjectSummary(projectId: string) {
-  const summary = loadRegistry().projects.find((project) => project.id === projectId);
+  const summary = loadRegistry().projects.find(
+    (project) => project.id === projectId,
+  );
   if (!summary) {
     throw new Error(`Project ${projectId} not found in registry`);
   }
@@ -339,7 +399,11 @@ function pruneProjectSequencePreviewCacheForCurrent(
   }
 }
 
-export function computeProjectTimelineSignature(projectId: string): string {
+export function computeProjectTimelineSignature(
+  projectId: string,
+  playbackQuality?: ComposerPlaybackQuality,
+): string {
+  const shouldIgnoreNoiseInPreview = playbackQuality !== "full";
   const lutAssetsById = new Map(
     listProjectLuts(projectId).map((asset) => [
       normalize(asset.id),
@@ -356,6 +420,15 @@ export function computeProjectTimelineSignature(projectId: string): string {
   }));
   const clips = listClips(projectId).map((clip) => {
     const adjustments = normalizeClipAdjustments(clip.adjustments);
+    const previewAdjustments = shouldIgnoreNoiseInPreview
+      ? {
+          ...adjustments,
+          effects: {
+            ...adjustments.effects,
+            noise: 0,
+          },
+        }
+      : adjustments;
     return {
       id: clip.id,
       trackId: clip.trackId,
@@ -376,13 +449,14 @@ export function computeProjectTimelineSignature(projectId: string): string {
       flipVertical: clip.flipVertical,
       rotationZ: clip.rotationZ,
       opacity: clip.opacity,
+      volume: clip.volume,
       brightness: clip.brightness,
       contrast: clip.contrast,
       saturation: clip.saturation,
-      adjustments,
+      adjustments: previewAdjustments,
       lutSignature: buildClipLutSignature(
         projectId,
-        adjustments.lutAssetId,
+        previewAdjustments.lutAssetId,
         lutAssetsById,
       ),
       fadeInDuration: clip.fadeInDuration,
@@ -411,8 +485,14 @@ function getProjectSequencePreviewSettings(
     throw new Error(`Project ${projectId} is not open`);
   }
 
+  const metaInfo = db.exec(`PRAGMA table_info(meta)`);
+  const metaColumns = (metaInfo[0]?.values ?? []).map((row) => String(row[1]));
+  const hasBackgroundColor = metaColumns.includes("background_color");
+
   const result = db.exec(
-    `SELECT duration, fps, width, height, playback_quality FROM meta LIMIT 1`,
+    hasBackgroundColor
+      ? `SELECT duration, fps, width, height, playback_quality, background_color FROM meta LIMIT 1`
+      : `SELECT duration, fps, width, height, playback_quality FROM meta LIMIT 1`,
   );
   const row = result[0]?.values?.[0];
   if (!row) {
@@ -425,6 +505,9 @@ function getProjectSequencePreviewSettings(
     width: row[2] as number,
     height: row[3] as number,
     playbackQuality: ((row[4] as string) || "med") as ComposerPlaybackQuality,
+    backgroundColor: normalizeComposerProjectBackgroundColor(
+      hasBackgroundColor ? row[5] : DEFAULT_COMPOSER_PROJECT_BACKGROUND_COLOR,
+    ),
   };
 }
 
@@ -434,16 +517,22 @@ export function buildCurrentSequencePreviewRequest(
   const settings = getProjectSequencePreviewSettings(projectId);
   return {
     version: SEQUENCE_PREVIEW_REQUEST_VERSION,
-    timelineSignature: computeProjectTimelineSignature(projectId),
+    timelineSignature: computeProjectTimelineSignature(
+      projectId,
+      settings.playbackQuality,
+    ),
     duration: settings.duration,
     fps: settings.fps,
     projectWidth: settings.width,
     projectHeight: settings.height,
     playbackQuality: settings.playbackQuality,
+    backgroundColor: settings.backgroundColor,
   };
 }
 
-function buildCurrentSequencePreviewPlan(projectId: string): SequencePreviewRenderPlan {
+function buildCurrentSequencePreviewPlan(
+  projectId: string,
+): SequencePreviewRenderPlan {
   const request = buildCurrentSequencePreviewRequest(projectId);
   const requestSignature = computeHash(request);
   return {
@@ -500,7 +589,8 @@ function areRequestsEqual(
     left.fps === right.fps &&
     left.projectWidth === right.projectWidth &&
     left.projectHeight === right.projectHeight &&
-    left.playbackQuality === right.playbackQuality
+    left.playbackQuality === right.playbackQuality &&
+    left.backgroundColor === right.backgroundColor
   );
 }
 
@@ -536,18 +626,30 @@ function deriveInvalidationReasons(
   ) {
     reasons.add("playback-quality");
   }
+  if (
+    !previousRequest ||
+    normalizeComposerProjectBackgroundColor(previousRequest.backgroundColor) !==
+      currentRequest.backgroundColor
+  ) {
+    reasons.add("background-color");
+  }
 
   return [...reasons];
 }
 
-function getOrCreateJobState(projectId: string): ProjectSequencePreviewJobState {
+function getOrCreateJobState(
+  projectId: string,
+): ProjectSequencePreviewJobState {
   const current = activeSequencePreviewJobs.get(projectId);
   if (current) {
     return current;
   }
   const created: ProjectSequencePreviewJobState = {
     running: false,
+    runningRequestSignature: null,
+    cancelRequested: false,
     rerunRequested: false,
+    rerunDebounceMs: null,
     scheduledTimer: null,
   };
   activeSequencePreviewJobs.set(projectId, created);
@@ -566,6 +668,43 @@ function clearScheduledSequencePreviewRefresh(projectId: string): void {
 
   clearTimeout(jobState.scheduledTimer);
   jobState.scheduledTimer = null;
+}
+
+function requestSequencePreviewJobCancellation(
+  projectId: string,
+  keepRequestSignature: string,
+): void {
+  const jobState = activeSequencePreviewJobs.get(projectId);
+  if (
+    !jobState?.running ||
+    !jobState.runningRequestSignature ||
+    jobState.runningRequestSignature === keepRequestSignature
+  ) {
+    return;
+  }
+
+  jobState.cancelRequested = true;
+  jobState.rerunRequested = false;
+  jobState.rerunDebounceMs = null;
+  logSequencePreviewDebug("cancelling obsolete job", {
+    projectId,
+    runningRequestSignature: jobState.runningRequestSignature,
+    keepRequestSignature,
+  });
+}
+
+function throwIfSequencePreviewJobCancelled(
+  projectId: string,
+  requestSignature: string,
+): void {
+  const jobState = activeSequencePreviewJobs.get(projectId);
+  if (
+    jobState?.running &&
+    jobState.cancelRequested &&
+    jobState.runningRequestSignature === requestSignature
+  ) {
+    throw new SequencePreviewJobCancelledError(projectId, requestSignature);
+  }
 }
 
 function shouldRefreshProjectSequencePreview(
@@ -649,6 +788,11 @@ export function getProjectSequencePreview(
   trackProjectSequencePreview(projectId);
   const stored = getStoredSequencePreview(projectId);
   const currentPlan = buildCurrentSequencePreviewPlan(projectId);
+  const currentOutputPath = getProjectSequencePreviewFilePath(
+    projectId,
+    currentPlan.requestSignature,
+  );
+  const activeJob = activeSequencePreviewJobs.get(projectId);
 
   if (!stored) {
     const created = buildBaseSequencePreviewRecord(projectId, "missing", []);
@@ -659,6 +803,53 @@ export function getProjectSequencePreview(
     stored.requestSignature.length > 0 &&
     areRequestsEqual(stored.request, currentPlan.request) &&
     stored.requestSignature === currentPlan.requestSignature;
+
+  if (
+    existsSync(currentOutputPath) &&
+    (
+      stored.requestSignature !== currentPlan.requestSignature ||
+      stored.status === "stale" ||
+      stored.status === "missing" ||
+      stored.status === "error" ||
+      (stored.status === "processing" &&
+        (activeJob?.running !== true ||
+          activeJob.runningRequestSignature !== currentPlan.requestSignature))
+    )
+  ) {
+    const now = new Date().toISOString();
+    const restored = saveStoredSequencePreview(projectId, {
+      status: "ready",
+      requestSignature: currentPlan.requestSignature,
+      request: currentPlan.request,
+      filePath: currentOutputPath,
+      playbackQuality: currentPlan.request.playbackQuality,
+      invalidationReasons: [],
+      errorMessage: undefined,
+      createdAt: stored.createdAt,
+      updatedAt: now,
+      lastRequestedAt:
+        stored.requestSignature === currentPlan.requestSignature
+          ? stored.lastRequestedAt
+          : undefined,
+      startedAt:
+        stored.requestSignature === currentPlan.requestSignature
+          ? stored.startedAt
+          : undefined,
+      completedAt: stored.completedAt ?? now,
+      invalidatedAt: undefined,
+    });
+    clearSequencePreviewProgressLog(projectId, restored.requestSignature);
+    logSequencePreviewDebug("restored preview from cached signature", {
+      projectId,
+      requestSignature: restored.requestSignature,
+      previousStatus: stored.status,
+      outputPath: currentOutputPath,
+    });
+    pendingSequencePreviewInvalidations.delete(projectId);
+    requestSequencePreviewJobCancellation(projectId, restored.requestSignature);
+    pruneProjectSequencePreviewCacheForCurrent(projectId, restored);
+    return restored;
+  }
 
   if (!currentMatchesStored) {
     if (stored.requestSignature.length === 0 && stored.status === "missing") {
@@ -708,7 +899,10 @@ export function getProjectSequencePreview(
   ) {
     const normalized = {
       ...stored,
-      filePath: getProjectSequencePreviewFilePath(projectId, stored.requestSignature),
+      filePath: getProjectSequencePreviewFilePath(
+        projectId,
+        stored.requestSignature,
+      ),
     };
     const saved = saveStoredSequencePreview(projectId, normalized);
     pruneProjectSequencePreviewCacheForCurrent(projectId, saved);
@@ -779,6 +973,26 @@ function markProjectSequencePreviewProcessing(
     outputPath: processing.filePath,
   });
   return processing;
+}
+
+function markProjectSequencePreviewQueuedWhileRunning(
+  projectId: string,
+  current: ComposerSequencePreview,
+): ComposerSequencePreview {
+  if (current.status === "processing") {
+    return current;
+  }
+
+  const now = new Date().toISOString();
+  return saveStoredSequencePreview(projectId, {
+    ...current,
+    status: "processing",
+    updatedAt: now,
+    lastRequestedAt: now,
+    filePath:
+      current.filePath ??
+      getProjectSequencePreviewFilePath(projectId, current.requestSignature),
+  });
 }
 
 function markProjectSequencePreviewReadyForSignature(
@@ -903,8 +1117,12 @@ function runFfprobe(filePath: string): Promise<MediaProbeResult | null> {
           format?: { duration?: string };
         };
         const streams = parsed.streams ?? [];
-        const videoStream = streams.find((stream) => stream.codec_type === "video");
-        const audioStream = streams.find((stream) => stream.codec_type === "audio");
+        const videoStream = streams.find(
+          (stream) => stream.codec_type === "video",
+        );
+        const audioStream = streams.find(
+          (stream) => stream.codec_type === "audio",
+        );
         const durationCandidates = [
           parsed.format?.duration,
           videoStream?.duration,
@@ -930,7 +1148,10 @@ function runFfprobe(filePath: string): Promise<MediaProbeResult | null> {
   });
 }
 
-function buildClipSourceDuration(clip: Clip, probe: MediaProbeResult | null): number {
+function buildClipSourceDuration(
+  clip: Clip,
+  probe: MediaProbeResult | null,
+): number {
   const desiredSourceDuration = clip.duration * Math.max(clip.speed, 0.01);
   if (!probe?.duration || clip.trimEnd == null) {
     return clampClipDuration(desiredSourceDuration);
@@ -969,7 +1190,8 @@ function computeRenderedVideoPlacement(
   projectHeight: number,
   clip: Clip,
 ): { width: number; height: number; x: number; y: number } {
-  const sourceWidth = probe?.width && probe.width > 0 ? probe.width : projectWidth;
+  const sourceWidth =
+    probe?.width && probe.width > 0 ? probe.width : projectWidth;
   const sourceHeight =
     probe?.height && probe.height > 0 ? probe.height : projectHeight;
   return universalRectToScreen(
@@ -985,7 +1207,9 @@ function computeRenderedVideoPlacement(
   );
 }
 
-function parseSvgDimensions(filePath: string): { width: number; height: number } | null {
+function parseSvgDimensions(
+  filePath: string,
+): { width: number; height: number } | null {
   try {
     const content = readFileSync(filePath, "utf-8");
     const viewBoxMatch = content.match(/viewBox=["']([^"']+)["']/i);
@@ -993,7 +1217,10 @@ function parseSvgDimensions(filePath: string): { width: number; height: number }
     const heightMatch = content.match(/\bheight=["'](\d+(?:\.\d+)?)(px)?["']/i);
 
     if (widthMatch && heightMatch) {
-      return { width: parseFloat(widthMatch[1]), height: parseFloat(heightMatch[1]) };
+      return {
+        width: parseFloat(widthMatch[1]),
+        height: parseFloat(heightMatch[1]),
+      };
     }
 
     if (viewBoxMatch) {
@@ -1023,7 +1250,9 @@ async function resolveClipMediaSource(
     clip.lutProxyPath,
     assetMetadata?.workingPath,
     sourcePath,
-  ].filter((value): value is string => typeof value === "string" && value.length > 0);
+  ].filter(
+    (value): value is string => typeof value === "string" && value.length > 0,
+  );
 
   const selectedPath = candidatePaths.find((value) => existsSync(value));
   if (!selectedPath) {
@@ -1056,14 +1285,18 @@ async function resolveClipMediaSource(
   };
 }
 
-function getOrderedClips(projectId: string): Array<{ clip: Clip; track: Track }> {
+function getOrderedClips(
+  projectId: string,
+): Array<{ clip: Clip; track: Track }> {
   const tracks = listTracks(projectId);
   const clips = listClips(projectId);
   const trackMap = new Map(tracks.map((track) => [track.id, track]));
 
   return clips
     .map((clip) => ({ clip, track: trackMap.get(clip.trackId) }))
-    .filter((entry): entry is { clip: Clip; track: Track } => entry.track != null)
+    .filter(
+      (entry): entry is { clip: Clip; track: Track } => entry.track != null,
+    )
     .sort((left, right) => {
       if (left.track.order !== right.track.order) {
         return right.track.order - left.track.order;
@@ -1086,7 +1319,17 @@ async function buildHeadlessRenderClips(
   const clips: HeadlessRenderClip[] = [];
 
   for (const { clip, track } of getOrderedClips(projectId)) {
-    if (!clip.sourcePath || clip.duration <= 0 || clip.startTime >= plan.request.duration) {
+    if (
+      !clip.sourcePath ||
+      clip.duration <= 0 ||
+      clip.startTime >= plan.request.duration
+    ) {
+      continue;
+    }
+    if (track.type === "audio" && track.muted) {
+      continue;
+    }
+    if (track.type === "video" && !track.visible) {
       continue;
     }
 
@@ -1100,7 +1343,10 @@ async function buildHeadlessRenderClips(
     }
 
     const clipVisibleDuration = clampClipDuration(
-      Math.min(clip.duration, Math.max(0.04, plan.request.duration - clip.startTime)),
+      Math.min(
+        clip.duration,
+        Math.max(0.04, plan.request.duration - clip.startTime),
+      ),
     );
     const clipSourceDuration =
       resolvedSource.inputKind === "image"
@@ -1118,6 +1364,7 @@ async function buildHeadlessRenderClips(
     const resolvedLut =
       requestedLutAssetId &&
       resolvedSource.inputKind === "image" &&
+      !isSvgPath(resolvedSource.path) &&
       !resolvedSource.sourceIsLutProxy
         ? (() => {
             const lutCacheKey = normalize(requestedLutAssetId);
@@ -1126,7 +1373,10 @@ async function buildHeadlessRenderClips(
             }
 
             try {
-              const resolved = resolveProjectLut(projectId, requestedLutAssetId);
+              const resolved = resolveProjectLut(
+                projectId,
+                requestedLutAssetId,
+              );
               const value = resolved
                 ? {
                     assetId: resolved.assetId,
@@ -1152,8 +1402,12 @@ async function buildHeadlessRenderClips(
     const hasVisual =
       track.type === "video" &&
       track.visible &&
-      (resolvedSource.inputKind === "image" || resolvedSource.probe?.hasVideo !== false);
+      (resolvedSource.inputKind === "image" ||
+        resolvedSource.probe?.hasVideo !== false);
     const hasAudio = !track.muted && resolvedSource.probe?.hasAudio === true;
+    if (!hasVisual && !hasAudio) {
+      continue;
+    }
     const placement = hasVisual
       ? computeRenderedVideoPlacement(
           resolvedSource.probe,
@@ -1177,17 +1431,47 @@ async function buildHeadlessRenderClips(
       createdAt: clip.createdAt,
       hasVisual,
       hasAudio,
+      volume: clampVolume(clip.volume),
       rect: placement,
       opacity: clampOpacity(clip.opacity),
-      blendMode: getCanvasBlendMode(adjustments.blendMode),
-      filter: buildCssFilter(clip),
+      blendMode:
+        getCanvasBlendMode(adjustments.blendMode) === "source-over"
+          ? null
+          : getCanvasBlendMode(adjustments.blendMode),
+      filter:
+        buildCssFilter({
+          ...adjustments,
+          effects: {
+            ...adjustments.effects,
+            blur: 0,
+          },
+        }) === "none"
+          ? null
+          : buildCssFilter({
+              ...adjustments,
+              effects: {
+                ...adjustments.effects,
+                blur: 0,
+              },
+            }),
+      blur: adjustments.effects.blur > 0.0001 ? adjustments.effects.blur : 0,
+      sharpen:
+        adjustments.effects.sharpen > 0.0001 ? adjustments.effects.sharpen : 0,
+      noise:
+        plan.request.playbackQuality === "full" &&
+        adjustments.effects.noise > 0.0001
+          ? adjustments.effects.noise
+          : 0,
       requestedLutAssetId,
       lutApplication: resolvedLut ? "cube-image" : "none",
       lut: resolvedLut,
       flipHorizontal: clip.flipHorizontal,
       flipVertical: clip.flipVertical,
       rotation: clip.rotationZ,
-      fadeInDuration: clampFadeDuration(clip.fadeInDuration, clipRenderedDuration),
+      fadeInDuration: clampFadeDuration(
+        clip.fadeInDuration,
+        clipRenderedDuration,
+      ),
       fadeOutDuration: clampFadeDuration(
         clip.fadeOutDuration,
         Math.max(0, clipRenderedDuration),
@@ -1279,12 +1563,15 @@ async function renderProjectSequencePreview(
   plan: SequencePreviewRenderPlan,
 ): Promise<void> {
   await ensureComposerFfmpegToolsAvailable();
-  await createHeadlessRenderer();
 
   const currentPreview = getProjectSequencePreview(projectId);
   const pendingInvalidation = consumeSequencePreviewInvalidation(projectId);
   let manifest = prepareSegmentManifest(projectId, plan, pendingInvalidation);
   const renderClips = await buildHeadlessRenderClips(projectId, plan);
+  const hasRenderableClips = renderClips.length > 0;
+  if (hasRenderableClips) {
+    await createHeadlessRenderer();
+  }
   logSequencePreviewDebug("render plan prepared", {
     projectId,
     requestSignature: plan.requestSignature,
@@ -1293,8 +1580,10 @@ async function renderProjectSequencePreview(
     fps: plan.request.fps,
     outputPath: plan.outputPath,
     clipCount: renderClips.length,
+    blankTimeline: !hasRenderableClips,
     segmentCount: manifest.segments.length,
-    dirtySegmentCount: manifest.segments.filter((segment) => segment.dirty).length,
+    dirtySegmentCount: manifest.segments.filter((segment) => segment.dirty)
+      .length,
   });
 
   const emitSegmentProgress = (progress: RenderSegmentProgress) => {
@@ -1340,11 +1629,13 @@ async function renderProjectSequencePreview(
       if (!segment) {
         break;
       }
+      throwIfSequencePreviewJobCancelled(projectId, plan.requestSignature);
 
       const request: RenderSegmentRequest = {
         projectId,
         requestSignature: plan.requestSignature,
         playbackQuality: plan.request.playbackQuality,
+        backgroundColor: plan.request.backgroundColor,
         segmentId: segment.id,
         segmentIndex: segment.index,
         startTime: segment.startTime,
@@ -1363,9 +1654,39 @@ async function renderProjectSequencePreview(
         totalSegments: manifest.segments.length,
         startTime: segment.startTime,
         endTime: segment.endTime,
+        blankTimeline: !hasRenderableClips,
       });
-      const buffer = await renderSegmentInHeadlessRenderer(request);
-      const filePath = writeSegment(projectId, segment, buffer);
+      let filePath: string | null = null;
+      if (hasRenderableClips) {
+        const renderedBuffer = await renderSegmentInHeadlessRenderer(request);
+        throwIfSequencePreviewJobCancelled(projectId, plan.requestSignature);
+        filePath = writeSegment(projectId, segment, renderedBuffer);
+      } else {
+        filePath = await renderBlankSegment(projectId, segment, {
+          duration: segment.endTime - segment.startTime,
+          outputWidth: manifest.outputWidth,
+          outputHeight: manifest.outputHeight,
+          fps: manifest.fps,
+          backgroundColor: plan.request.backgroundColor,
+        });
+        throwIfSequencePreviewJobCancelled(projectId, plan.requestSignature);
+      }
+      if (!hasRenderableClips) {
+        const totalFrames = Math.max(
+          1,
+          Math.ceil((segment.endTime - segment.startTime) * manifest.fps),
+        );
+        emitSegmentProgress({
+          segmentId: segment.id,
+          segmentIndex: segment.index,
+          frameIndex: totalFrames,
+          totalFrames,
+          percent: 100,
+        });
+      }
+      if (!filePath) {
+        throw new Error("Sequence preview segment render did not produce a file");
+      }
       manifest = markRendered(manifest, segment.id, filePath);
       saveSegmentManifest(projectId, manifest);
       logSequencePreviewDebug("segment rendered", {
@@ -1376,16 +1697,14 @@ async function renderProjectSequencePreview(
         totalSegments: manifest.segments.length,
         filePath,
       });
-      deleteSegments(
-        projectId,
-        buildConcatList(manifest),
-      );
+      deleteSegments(projectId, buildConcatList(manifest));
     }
   } finally {
     setHeadlessRendererProgressListener(null);
   }
 
   const segmentPaths = buildConcatList(manifest);
+  throwIfSequencePreviewJobCancelled(projectId, plan.requestSignature);
   logSequencePreviewDebug("concatenating segments", {
     projectId,
     requestSignature: plan.requestSignature,
@@ -1440,9 +1759,29 @@ async function runProjectSequencePreviewJob(
       rmSync(plan.outputPath, { force: true });
     }
   } catch (error) {
+    if (error instanceof SequencePreviewJobCancelledError) {
+      const elapsed = ((performance.now() - jobStart) / 1000).toFixed(2);
+      logSequencePreviewDebug("job cancelled", {
+        projectId,
+        requestSignature: plan.requestSignature,
+        durationSeconds: elapsed,
+      });
+      clearSequencePreviewProgressLog(projectId, plan.requestSignature);
+      try {
+        if (existsSync(plan.outputPath)) {
+          rmSync(plan.outputPath, { force: true });
+        }
+      } catch {
+        /* ignore cleanup failure */
+      }
+      return;
+    }
+
     const elapsed = ((performance.now() - jobStart) / 1000).toFixed(2);
     const message =
-      error instanceof Error ? error.message : "Failed to generate sequence preview";
+      error instanceof Error
+        ? error.message
+        : "Failed to generate sequence preview";
     logSequencePreviewDebug("job errored", {
       projectId,
       requestSignature: plan.requestSignature,
@@ -1464,7 +1803,9 @@ async function runProjectSequencePreviewJob(
   }
 }
 
-function startProjectSequencePreviewJob(projectId: string): ComposerSequencePreview {
+function startProjectSequencePreviewJob(
+  projectId: string,
+): ComposerSequencePreview {
   const current = getProjectSequencePreview(projectId);
   const processing = markProjectSequencePreviewProcessing(projectId, current);
   const plan: SequencePreviewRenderPlan = {
@@ -1477,7 +1818,10 @@ function startProjectSequencePreviewJob(projectId: string): ComposerSequencePrev
   const jobState = getOrCreateJobState(projectId);
   clearScheduledSequencePreviewRefresh(projectId);
   jobState.running = true;
+  jobState.runningRequestSignature = processing.requestSignature;
+  jobState.cancelRequested = false;
   jobState.rerunRequested = false;
+  jobState.rerunDebounceMs = null;
   logSequencePreviewDebug("starting job", {
     projectId,
     requestSignature: processing.requestSignature,
@@ -1495,6 +1839,8 @@ function startProjectSequencePreviewJob(projectId: string): ComposerSequencePrev
     .finally(() => {
       const latestState = getOrCreateJobState(projectId);
       latestState.running = false;
+      latestState.runningRequestSignature = null;
+      latestState.cancelRequested = false;
       if (!trackedSequencePreviewProjects.has(projectId)) {
         activeSequencePreviewJobs.delete(projectId);
         return;
@@ -1504,16 +1850,23 @@ function startProjectSequencePreviewJob(projectId: string): ComposerSequencePrev
         (() => {
           try {
             const latestPreview = getProjectSequencePreview(projectId);
-            return latestPreview.status === "missing" || latestPreview.status === "stale";
+            return shouldRefreshProjectSequencePreview(projectId, latestPreview);
           } catch {
             return false;
           }
         })();
+      const rerunDebounceMs = latestState.rerunDebounceMs;
       latestState.rerunRequested = false;
+      latestState.rerunDebounceMs = null;
 
       if (needsRerun) {
         try {
-          scheduleProjectSequencePreviewRefresh(projectId);
+          scheduleProjectSequencePreviewRefresh(
+            projectId,
+            rerunDebounceMs == null
+              ? undefined
+              : { debounceMs: rerunDebounceMs },
+          );
         } catch (error) {
           console.error(
             `[Composer] Failed to restart sequence preview job for project ${projectId}:`,
@@ -1535,29 +1888,32 @@ export function scheduleProjectSequencePreviewRefresh(
   trackProjectSequencePreview(projectId);
   const current = getProjectSequencePreview(projectId);
   const needsWork = shouldRefreshProjectSequencePreview(projectId, current);
+  const requestedDebounceMs = Math.max(
+    0,
+    options.debounceMs ?? SEQUENCE_PREVIEW_EDIT_DEBOUNCE_MS,
+  );
   logSequencePreviewDebug("schedule refresh", {
     projectId,
     status: current.status,
     requestSignature: current.requestSignature,
     needsWork,
-    debounceMs: options.debounceMs ?? SEQUENCE_PREVIEW_EDIT_DEBOUNCE_MS,
+    debounceMs: requestedDebounceMs,
   });
 
   if (!needsWork) {
     clearScheduledSequencePreviewRefresh(projectId);
+    requestSequencePreviewJobCancellation(projectId, current.requestSignature);
     return current;
   }
 
   const jobState = getOrCreateJobState(projectId);
   if (jobState.running) {
     jobState.rerunRequested = true;
-    return current;
+    jobState.rerunDebounceMs = requestedDebounceMs;
+    return markProjectSequencePreviewQueuedWhileRunning(projectId, current);
   }
 
-  const debounceMs =
-    current.status === "processing"
-      ? 0
-      : Math.max(0, options.debounceMs ?? SEQUENCE_PREVIEW_EDIT_DEBOUNCE_MS);
+  const debounceMs = current.status === "processing" ? 0 : requestedDebounceMs;
 
   if (debounceMs === 0) {
     clearScheduledSequencePreviewRefresh(projectId);
@@ -1575,6 +1931,7 @@ export function scheduleProjectSequencePreviewRefresh(
       }
       if (jobState.running) {
         jobState.rerunRequested = true;
+        jobState.rerunDebounceMs = requestedDebounceMs;
         return;
       }
       startProjectSequencePreviewJob(projectId);
@@ -1596,9 +1953,14 @@ export function ensureProjectSequencePreview(
   return scheduleProjectSequencePreviewRefresh(projectId, { debounceMs: 0 });
 }
 
-export function buildDirtyRangeForClip(clip: Pick<Clip, "startTime" | "duration">): DirtyRange {
+export function buildDirtyRangeForClip(
+  clip: Pick<Clip, "startTime" | "duration">,
+): DirtyRange {
   return {
     startTime: Math.max(0, clip.startTime),
-    endTime: Math.max(clip.startTime, clip.startTime + Math.max(0.04, clip.duration)),
+    endTime: Math.max(
+      clip.startTime,
+      clip.startTime + Math.max(0.04, clip.duration),
+    ),
   };
 }
