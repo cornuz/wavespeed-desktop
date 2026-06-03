@@ -1,0 +1,19 @@
+FFmpeg License Information
+==========================
+
+WaveSpeed Desktop bundles FFmpeg binaries for video processing in the Composer feature.
+
+FFmpeg is licensed under the GNU Lesser General Public License (LGPL) version 2.1 or later.
+
+Source: https://ffmpeg.org
+License: LGPL 2.1+ (https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html)
+Distribution: https://www.gyan.dev/ffmpeg/builds/
+
+The FFmpeg binaries included with WaveSpeed Desktop are from the "essentials" build,
+which contains only the essential codecs and components needed for operation.
+
+FFmpeg is dynamically linked and can be replaced by the user if desired.
+The source code for FFmpeg is available at: https://github.com/FFmpeg/FFmpeg
+
+For the full text of the LGPL 2.1 license, visit:
+https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html

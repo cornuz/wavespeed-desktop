@@ -146,6 +146,12 @@ Or browse all releases on the [Releases](https://github.com/WaveSpeedAI/wavespee
 
 - Node.js 20+
 - npm
+- **FFmpeg 8.1.1 essentials build** (required for Composer feature)
+  - Download from: https://www.gyan.dev/ffmpeg/builds/
+  - File: `ffmpeg-8.1.1-essentials_build.7z`
+  - Extract `ffmpeg.exe` and `ffprobe.exe` to `wavespeed-desktop/bin/`
+  - The `bin/` directory is gitignored (binaries not tracked)
+  - In production builds, FFmpeg is bundled automatically via `extraResources` in package.json
 
 ### Setup
 
@@ -159,6 +165,11 @@ npm install
 
 # Install pre-commit hooks (requires pre-commit: pip install pre-commit)
 pre-commit install
+
+# Download FFmpeg (for Composer development)
+# 1. Visit https://www.gyan.dev/ffmpeg/builds/
+# 2. Download ffmpeg-8.1.1-essentials_build.7z
+# 3. Extract ffmpeg.exe and ffprobe.exe to wavespeed-desktop/bin/
 
 # Start development server
 npm run dev
@@ -317,6 +328,20 @@ This turns any workflow into a callable REST endpoint, making it easy to integra
 3. Commit your changes (`git commit -m 'Add amazing feature'`)
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
+
+## Credits
+
+### FFmpeg
+
+WaveSpeed Desktop bundles FFmpeg for video processing in the Composer feature.
+
+- **Project**: FFmpeg (https://ffmpeg.org)
+- **License**: LGPL 2.1+ (https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html)
+- **Distribution**: Essentials build from https://www.gyan.dev/ffmpeg/builds/
+- **Version**: 8.1.1
+- **Usage**: Asset transcoding, blank segment generation, and video concatenation
+
+For the full FFmpeg license, see [resources/licenses/ffmpeg-license.txt](resources/licenses/ffmpeg-license.txt).
 
 ## License
 

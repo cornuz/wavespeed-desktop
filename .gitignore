@@ -48,6 +48,10 @@ Thumbs.db
 desktop.ini
 
 # Composer temporary files
+
+# FFmpeg bundled binaries (download separately, not tracked in git)
+bin/ffmpeg.exe
+bin/ffprobe.exe
 .composer-headless-*.html
 
 # Environment and secrets

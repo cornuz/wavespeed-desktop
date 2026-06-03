@@ -15,6 +15,7 @@ import type {
   SegmentManifest,
 } from "./sequence-preview-contract";
 import { loadRegistry } from "./db/project-registry";
+import { getFfmpegBinaryPath } from "./ffmpeg";
 
 const SEGMENT_CACHE_SUBDIR = "seqseg";
 const SEGMENT_MANIFEST_FILE = "manifest.json";
@@ -300,7 +301,7 @@ export async function renderBlankSegment(
   await new Promise<void>((resolve, reject) => {
     let stderr = "";
     const proc = spawn(
-      "ffmpeg",
+      getFfmpegBinaryPath(),
       [
         "-f",
         "lavfi",
@@ -418,7 +419,7 @@ export async function concatSegments(
     await new Promise<void>((resolve, reject) => {
       let stderr = "";
       const proc = spawn(
-        "ffmpeg",
+        getFfmpegBinaryPath(),
         [
           "-f",
           "concat",

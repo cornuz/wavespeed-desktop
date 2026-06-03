@@ -122,6 +122,14 @@
         "filter": [
           "**/*"
         ]
+      },
+      {
+        "from": "bin",
+        "to": "bin",
+        "filter": [
+          "ffmpeg.exe",
+          "ffprobe.exe"
+        ]
       }
     ],
     "files": [

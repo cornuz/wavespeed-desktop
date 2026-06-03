@@ -7,6 +7,7 @@ import type { ChildProcess } from "child_process";
 import { spawnSync } from "child_process";
 import { existsSync, statSync } from "fs";
 import type { ComposerPreviewProxyTier } from "../../src/composer/types/project";
+import { getFfmpegBinaryPath, getFfprobeBinaryPath } from "./ffmpeg";
 
 interface VideoStreamInfo {
   codec: string;
@@ -143,7 +144,7 @@ function escapeFfmpegFilterPath(filePath: string): string {
  */
 export async function probeVideoFile(filePath: string): Promise<ProbeResult | null> {
   return new Promise<ProbeResult | null>((resolve) => {
-    const proc = spawn("ffprobe", [
+    const proc = spawn(getFfprobeBinaryPath(), [
       "-v",
       "quiet",
       "-of",
@@ -445,7 +446,7 @@ export async function transcodeVideoToSafeFormat(
 
         ffmpegArgs.push("-y", outputPath);
 
-        const proc = spawn("ffmpeg", ffmpegArgs, {
+        const proc = spawn(getFfmpegBinaryPath(), ffmpegArgs, {
           windowsHide: true,
         });
 
@@ -555,7 +556,7 @@ export async function transcodeVideoToPreviewProxy(
 
         ffmpegArgs.push("-y", outputPath);
 
-        const proc = spawn("ffmpeg", ffmpegArgs, {
+        const proc = spawn(getFfmpegBinaryPath(), ffmpegArgs, {
           windowsHide: true,
         });
 
@@ -649,7 +650,7 @@ export async function transcodeVideoToLutProxy(
 
         ffmpegArgs.push("-y", outputPath);
 
-        const proc = spawn("ffmpeg", ffmpegArgs, {
+        const proc = spawn(getFfmpegBinaryPath(), ffmpegArgs, {
           windowsHide: true,
         });
 
