@@ -102,6 +102,8 @@ const electronAPI = {
     ipcRenderer.invoke("save-file-silent", url, dir, fileName),
   openExternal: (url: string): Promise<void> =>
     ipcRenderer.invoke("open-external", url),
+  fetchOfficialModelsHtml: (modelId: string): Promise<string> =>
+    ipcRenderer.invoke("fetch-official-models-html", modelId),
 
   // Title bar theme
   updateTitlebarTheme: (isDark: boolean): Promise<void> =>
@@ -381,6 +383,29 @@ const electronAPI = {
     const handler = (_: unknown, asset: unknown) => callback(asset);
     ipcRenderer.on("assets:new-asset", handler);
     return () => ipcRenderer.removeListener("assets:new-asset", handler);
+  },
+
+  // Prediction inputs listener (workflow executor pushes node params for Customize)
+  onSavePredictionInputs: (
+    callback: (data: {
+      predictionId: string;
+      modelId: string;
+      modelName: string;
+      inputs: Record<string, unknown>;
+    }) => void,
+  ): (() => void) => {
+    const handler = (_: unknown, data: unknown) =>
+      callback(
+        data as {
+          predictionId: string;
+          modelId: string;
+          modelName: string;
+          inputs: Record<string, unknown>;
+        },
+      );
+    ipcRenderer.on("assets:save-prediction-inputs", handler);
+    return () =>
+      ipcRenderer.removeListener("assets:save-prediction-inputs", handler);
   },
 };
 

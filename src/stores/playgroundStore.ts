@@ -11,6 +11,67 @@ import type { BatchConfig, BatchState, BatchResult } from "@/types/batch";
 import { DEFAULT_BATCH_CONFIG } from "@/types/batch";
 import { persistentStorage } from "@/lib/storage";
 import { isImageUrl, isVideoUrl } from "@/lib/mediaUtils";
+import { useAssetsStore, detectAssetType } from "@/stores/assetsStore";
+
+/* ── Store-level auto-save to My Assets ───────────────────────────────── */
+
+/**
+ * Track prediction IDs that are currently being auto-saved (or already saved)
+ * from the store layer. Shared between autoSaveToAssets and OutputDisplay
+ * to prevent duplicate saves when both fire concurrently.
+ */
+export const storeSavedPredictionIds = new Set<string>();
+
+/**
+ * Auto-save prediction outputs to My Assets from the store layer.
+ * This runs immediately when a prediction completes, regardless of which
+ * tab is currently active — fixing the bug where switching tabs during
+ * generation caused the OutputDisplay useEffect to miss the save.
+ * Fire-and-forget; errors are logged but never thrown.
+ */
+function autoSaveToAssets(
+  outputs: (string | Record<string, unknown>)[],
+  modelId: string,
+  predictionId: string | undefined,
+): void {
+  if (!predictionId) return;
+  if (storeSavedPredictionIds.has(predictionId)) return;
+
+  const { settings, saveAsset, hasAssetForPrediction } =
+    useAssetsStore.getState();
+  if (!settings.autoSaveAssets) return;
+  if (hasAssetForPrediction(predictionId)) return;
+
+  // Mark immediately to prevent concurrent duplicate from OutputDisplay
+  storeSavedPredictionIds.add(predictionId);
+
+  const unsaved: { output: string; index: number }[] = [];
+  for (let i = 0; i < outputs.length; i++) {
+    const output = outputs[i];
+    if (typeof output !== "string") continue;
+    if (output.startsWith("local-asset://")) continue;
+    const assetType = detectAssetType(output);
+    if (!assetType) continue;
+    unsaved.push({ output, index: i });
+  }
+  if (unsaved.length === 0) return;
+
+  // Fire-and-forget — save each output
+  (async () => {
+    for (const { output, index } of unsaved) {
+      try {
+        await saveAsset(output, detectAssetType(output)!, {
+          modelId,
+          predictionId,
+          originalUrl: output,
+          resultIndex: index,
+        });
+      } catch (err) {
+        console.error("[playgroundStore] auto-save asset failed:", err);
+      }
+    }
+  })();
+}
 
 /* ── Playground session persistence ───────────────────────────────────── */
 
@@ -177,7 +238,7 @@ interface PlaygroundState {
 
   // Actions on active tab
   setSelectedModel: (model: Model | null) => void;
-  setFormValue: (key: string, value: unknown) => void;
+  setFormValue: (key: string, value: unknown, tabId?: string) => void;
   setFormValues: (values: Record<string, unknown>) => void;
   setFormFields: (fields: FormFieldConfig[]) => void;
   validateForm: () => boolean;
@@ -341,18 +402,21 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
     }));
   },
 
-  setFormValue: (key: string, value: unknown) => {
-    set((state) => ({
-      tabs: state.tabs.map((tab) =>
-        tab.id === state.activeTabId
-          ? {
-              ...tab,
-              formValues: { ...tab.formValues, [key]: value },
-              validationErrors: { ...tab.validationErrors, [key]: "" },
-            }
-          : tab,
-      ),
-    }));
+  setFormValue: (key: string, value: unknown, tabId?: string) => {
+    set((state) => {
+      const targetTabId = tabId ?? state.activeTabId;
+      return {
+        tabs: state.tabs.map((tab) =>
+          tab.id === targetTabId
+            ? {
+                ...tab,
+                formValues: { ...tab.formValues, [key]: value },
+                validationErrors: { ...tab.validationErrors, [key]: "" },
+              }
+            : tab,
+        ),
+      };
+    });
   },
 
   setFormValues: (values: Record<string, unknown>) => {
@@ -576,6 +640,9 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
             : tab,
         ),
       }));
+
+      // Auto-save outputs to My Assets from store layer (tab-switch safe)
+      autoSaveToAssets(outputs, selectedModel.model_id, result.id);
     } catch (error) {
       // Don't show error for user-initiated abort
       const isAbort =
@@ -842,6 +909,9 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
               : tab,
           ),
         }));
+
+        // Auto-save outputs to My Assets from store layer (tab-switch safe)
+        autoSaveToAssets(batchOutputs, selectedModel.model_id, result.id);
       } catch (error) {
         // Skip state updates for aborted requests
         const isAbort =

@@ -155,7 +155,7 @@ export function WelcomePage() {
         "bg-gradient-to-br from-blue-500/40 via-cyan-500/20 to-transparent",
       shapeGradient: "from-blue-500/40 to-cyan-500/30",
       href: "/models",
-      badge: "500+",
+      badge: "1000+",
     },
     {
       icon: (
@@ -280,7 +280,7 @@ export function WelcomePage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
             {features.map((feature, index) => (
               <div
-                key={`${feature.href}-${feature.title}`}
+                key={`${feature.href}-${index}`}
                 className="animate-in fade-in slide-in-from-bottom-2 fill-mode-both"
                 style={{ animationDelay: `${index * 60}ms` }}
               >

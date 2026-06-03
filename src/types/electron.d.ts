@@ -132,6 +132,7 @@ export interface ElectronAPI {
     fileName: string,
   ) => Promise<DownloadResult>;
   openExternal: (url: string) => Promise<void>;
+  fetchOfficialModelsHtml?: (modelId: string) => Promise<string>;
 
   // Title bar theme
   updateTitlebarTheme: (isDark: boolean) => Promise<void>;
@@ -296,6 +297,16 @@ export interface ElectronAPI {
 
   // Assets event listener (workflow executor pushes new assets)
   onAssetsNewAsset: (callback: (asset: unknown) => void) => () => void;
+
+  // Prediction inputs listener (workflow executor pushes node params for Customize)
+  onSavePredictionInputs: (
+    callback: (data: {
+      predictionId: string;
+      modelId: string;
+      modelName: string;
+      inputs: Record<string, unknown>;
+    }) => void,
+  ) => () => void;
 }
 
 export interface WorkflowAPI {

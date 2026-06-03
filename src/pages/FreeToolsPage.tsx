@@ -22,11 +22,13 @@ import {
   Combine,
   Sparkles,
   ArrowLeftRight,
+  Palette,
 } from "lucide-react";
 
 // Import tool demo images
 import videoEnhancerImg from "../../build/images/VideoEnhancer.jpeg";
 import imageEnhancerImg from "../../build/images/ImageEnhancer.jpeg";
+import imageColorizerImg from "../../build/images/ImageColorizer.png";
 import faceEnhancerImg from "../../build/images/FaceEnhancer.jpeg";
 import faceSwapperImg from "../../build/images/FaceSwapper.jpeg";
 import backgroundRemoverImg from "../../build/images/BackgroundRemover.jpeg";
@@ -60,6 +62,18 @@ export function FreeToolsPage() {
       route: "/free-tools/image-enhancer",
       gradient: "from-cyan-500/20 via-blue-500/10 to-transparent",
       image: imageEnhancerImg,
+    },
+    {
+      id: "image-colorizer",
+      icon: Palette,
+      titleKey: "freeTools.imageColorizer.title",
+      descriptionKey: "freeTools.imageColorizer.description",
+      route: "/free-tools/image-colorizer",
+      gradient: "from-sky-500/20 via-amber-500/10 to-transparent",
+      image: imageColorizerImg,
+      fallbackTitle: "Image Colorizer",
+      fallbackDescription:
+        "Add color to black-and-white photos locally for free",
     },
     {
       id: "face-enhancer",
@@ -193,7 +207,10 @@ export function FreeToolsPage() {
                   {tool.image ? (
                     <img
                       src={tool.image}
-                      alt={t(tool.titleKey)}
+                      alt={t(
+                        tool.titleKey,
+                        tool.fallbackTitle ?? tool.titleKey,
+                      )}
                       className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                     />
                   ) : (
@@ -208,12 +225,15 @@ export function FreeToolsPage() {
                     <tool.icon className="h-4 w-4 text-primary" />
                   </div>
                   <CardTitle className="text-base">
-                    {t(tool.titleKey)}
+                    {t(tool.titleKey, tool.fallbackTitle ?? tool.titleKey)}
                   </CardTitle>
                 </div>
                 <CardDescription className="mt-2 text-sm">
                   <span className="line-clamp-2 leading-relaxed">
-                    {t(tool.descriptionKey)}
+                    {t(
+                      tool.descriptionKey,
+                      tool.fallbackDescription ?? tool.descriptionKey,
+                    )}
                   </span>
                 </CardDescription>
               </CardHeader>
