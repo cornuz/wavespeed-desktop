@@ -333,7 +333,7 @@ async function processImportedVideoAsset(
         assetPath,
         workingPath,
         {
-          includeAudio: !safety.hasUnsupportedAudio,
+          includeAudio: safety.hasAudio,
         },
         ({ progress }) => {
           const updated = loadAssetMetadata(assetsDir);

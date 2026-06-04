@@ -495,7 +495,7 @@ export function PlayerPanel() {
       }
     >
   >({});
-  const playbackQuality = project.playbackQuality ?? "med";
+  const playbackQuality = project.playbackQuality ?? "full";
   const projectBackgroundColor = normalizeProjectBackgroundColor(project.backgroundColor);
 
   const handlePlaybackQualityChange = useCallback(
@@ -589,7 +589,7 @@ export function PlayerPanel() {
   );
   const activeAudioTrackClips = useMemo(
     () =>
-      !previewAsset && !isSequencePlaybackActive
+      !previewAsset
         ? getActiveAudioTrackClipsAtTime(clips, tracks, playhead)
         : [],
     [clips, isSequencePlaybackActive, playhead, previewAsset, tracks],
@@ -1225,7 +1225,7 @@ export function PlayerPanel() {
         : (syncMediaElementTime(element, layer.clipLocalTime, syncThreshold),
           "synced" as const);
 
-      if (!isPlaying || previewAsset || isSequencePlaybackActive) {
+      if (!isPlaying || previewAsset) {
         element.pause();
         return;
       }
@@ -1302,7 +1302,7 @@ export function PlayerPanel() {
               <img
                 src={layer.canonicalUrl}
                 alt={layer.clip.sourcePath}
-                className="h-full w-full object-fill"
+                className="h-full w-full object-contain"
                 draggable={false}
                 style={{
                   filter: layer.adjustmentPreview.filter,
@@ -1315,7 +1315,7 @@ export function PlayerPanel() {
               <video
                 data-player-clip-id={layer.clip.id}
                 src={layer.canonicalUrl}
-                className="h-full w-full object-fill"
+                className="h-full w-full object-contain"
                 playsInline
                 muted
                 preload="auto"

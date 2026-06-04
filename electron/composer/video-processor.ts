@@ -388,7 +388,7 @@ export async function checkVideoSafety(filePath: string): Promise<
  * Transcode video to H.264/MP4 format safe for editing.
  * Copies audio as-is (even if unsupported codec), will be marked as unsupported.
  * Returns path to transcoded file or null on failure.
- * 
+ *
  * Callback reports progress: { phase: "transcoding", progress: 0-100 }
  */
 export async function transcodeVideoToSafeFormat(
