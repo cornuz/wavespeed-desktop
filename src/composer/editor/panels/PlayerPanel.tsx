@@ -1939,7 +1939,6 @@ export function PlayerPanel() {
                   src={sequencePreviewUrl}
                   className="h-full w-full object-contain"
                   playsInline
-                  muted
                   preload="auto"
                 />
               ) : activeVisualRenderLayers.length > 0 ? (
