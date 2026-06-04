@@ -415,6 +415,24 @@ export function registerProjectIpc(): void {
     },
   );
 
+  // ── FFmpeg installer download ───────────────────────────────────────────────
+  ipcMain.handle(
+    "composer:ffmpeg:download-installer",
+    async (): Promise<string> => {
+      const { downloadFFmpegInstaller } = await import("../ffmpeg");
+      return downloadFFmpegInstaller();
+    },
+  );
+
+  // ── FFmpeg installer launch ─────────────────────────────────────────────────
+  ipcMain.handle(
+    "composer:ffmpeg:launch-installer",
+    async (_event, installerPath: string): Promise<void> => {
+      const { launchFFmpegInstaller } = await import("../ffmpeg");
+      return launchFFmpegInstaller(installerPath);
+    },
+  );
+
   // ── List ──────────────────────────────────────────────────────────────────
   ipcMain.handle(
     "composer:project-list",

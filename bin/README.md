@@ -1,24 +1,65 @@
-# FFmpeg Binaries for Development
+# FFmpeg Installation for Composer
 
-This directory should contain the FFmpeg binaries needed for Composer development:
+Composer requires FFmpeg to be installed on your system.
 
-- `ffmpeg.exe`
-- `ffprobe.exe`
+## Installation Instructions
 
-## Download Instructions
+### Windows
 
-1. Visit https://www.gyan.dev/ffmpeg/builds/
-2. Download `ffmpeg-8.1.1-essentials_build.7z` (~80 MB)
-3. Extract the archive
-4. Copy `ffmpeg.exe` and `ffprobe.exe` from `ffmpeg-8.1.1-essentials_build/bin/` to this directory
+**Option 1: Winget (Recommended)**
+```powershell
+winget install Gyan.FFmpeg
+```
 
-## Notes
+**Option 2: Manual Installation**
 
-- These binaries are **not tracked in git** (listed in `.gitignore`)
-- In production builds, FFmpeg is automatically bundled via `extraResources` in `package.json`
-- The essentials build contains H.264, AAC, and basic filters — sufficient for Composer's needs
-- Full build (~230 MB) is only needed for VP9/HEVC/AV1 export or hardware encoding
+1. Download FFmpeg essentials from: https://www.gyan.dev/ffmpeg/builds/
+2. Extract to a permanent location (e.g., `C:\ffmpeg`)
+3. Add `C:\ffmpeg\bin` to your system PATH:
+   - Search for "Environment Variables" in Windows
+   - Edit "Path" under System variables
+   - Add new entry: `C:\ffmpeg\bin`
+   - Restart your terminal/IDE
+
+**Option 3: Chocolatey**
+```powershell
+choco install ffmpeg
+```
+
+### macOS
+
+```bash
+brew install ffmpeg
+```
+
+### Linux (Ubuntu/Debian)
+
+```bash
+sudo apt update
+sudo apt install ffmpeg
+```
+
+## Verify Installation
+
+Run these commands to verify FFmpeg is installed:
+
+```bash
+ffmpeg -version
+ffprobe -version
+```
+
+Both should output version information.
+
+## Why System FFmpeg?
+
+This is the standard approach used by professional open source video editors (Kdenlive, Shotcut, OpenShot):
+
+- ✅ No antivirus/security issues
+- ✅ Always up-to-date with system package manager
+- ✅ No GitHub repository bloat
+- ✅ Single installation for all video editing tools
+- ✅ Professional architecture
 
 ## License
 
-FFmpeg is licensed under LGPL 2.1+. See `resources/licenses/ffmpeg-license.txt` for details.
+FFmpeg is licensed under LGPL 2.1+.

@@ -174,6 +174,7 @@ export function ComposerPage() {
   const [showNewDialog, setShowNewDialog] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
   const [creating, setCreating] = useState(false);
+  const newProjectInputRef = useRef<HTMLInputElement>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<ProjectSortOption>("newest");
   const [showPreviews, setShowPreviews] = useState(true);
@@ -182,6 +183,7 @@ export function ComposerPage() {
   const [ffmpegBlockedReason, setFfmpegBlockedReason] = useState<string | null>(
     null,
   );
+  const [installingFfmpeg, setInstallingFfmpeg] = useState(false);
 
   const runFfmpegCheck = useCallback(
     async (loadProjects: boolean) => {
@@ -216,12 +218,57 @@ export function ComposerPage() {
   }, [location.pathname, runFfmpegCheck]);
 
   async function handleInstallFfmpeg() {
-    if (window.electronAPI?.openExternal) {
-      await window.electronAPI.openExternal(WINDOWS_FFMPEG_INSTALL_URL);
-      return;
-    }
+    setInstallingFfmpeg(true);
 
-    window.open(WINDOWS_FFMPEG_INSTALL_URL, "_blank", "noopener,noreferrer");
+    try {
+      // Download the installer (~29 MB)
+      const installerPath = await composerProjectIpc.downloadFfmpegInstaller();
+
+      // Launch the installer GUI (user completes installation)
+      await composerProjectIpc.launchFfmpegInstaller(installerPath);
+
+      // Start polling for FFmpeg availability
+      // Check immediately first, then every 2 seconds
+      const checkAvailability = async () => {
+        const status = await composerProjectIpc.checkFfmpeg();
+        if (status.available) {
+          if (pollInterval) clearInterval(pollInterval);
+          if (pollTimeout) clearTimeout(pollTimeout);
+          await runFfmpegCheck(true);
+          setInstallingFfmpeg(false);
+          return true;
+        }
+        return false;
+      };
+
+      // Check immediately
+      const immediate = await checkAvailability();
+      if (immediate) return;
+
+      // Then poll every 2 seconds
+      const pollInterval = setInterval(checkAvailability, 2000);
+
+      // Stop polling after 2 minutes (installation should be quick)
+      const pollTimeout = setTimeout(() => {
+        clearInterval(pollInterval);
+        setInstallingFfmpeg(false);
+        // Show message suggesting restart
+        alert(
+          "FFmpeg installation completed, but the app may need to restart to detect it.\n\n" +
+          "Please restart Wavespeed Desktop, then FFmpeg should be available."
+        );
+      }, 120000);
+    } catch (error) {
+      console.error("Failed to install FFmpeg:", error);
+      setInstallingFfmpeg(false);
+
+      // Fallback: open manual installation page
+      if (window.electronAPI?.openExternal) {
+        await window.electronAPI.openExternal(WINDOWS_FFMPEG_INSTALL_URL);
+        return;
+      }
+      window.open(WINDOWS_FFMPEG_INSTALL_URL, "_blank", "noopener,noreferrer");
+    }
   }
 
   async function handleCreate() {
@@ -339,12 +386,17 @@ export function ComposerPage() {
           <CardHeader className="text-center">
             <AlertTriangle className="mx-auto h-12 w-12 text-amber-500" />
             <CardTitle>{FFMPEG_REQUIRED_MESSAGE}</CardTitle>
-            <CardDescription>{ffmpegBlockedReason}</CardDescription>
+            <CardDescription>
+              {ffmpegBlockedReason}
+              <br />
+              <br />
+              After installing, click <strong>Recheck</strong>. If it still doesn't detect, restart the app.
+            </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-3 sm:flex-row sm:justify-center">
             <Button
               onClick={() => void runFfmpegCheck(true)}
-              disabled={checkingFfmpeg}
+              disabled={checkingFfmpeg || installingFfmpeg}
             >
               {checkingFfmpeg ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -354,9 +406,19 @@ export function ComposerPage() {
             <Button
               variant="outline"
               onClick={() => void handleInstallFfmpeg()}
+              disabled={installingFfmpeg}
             >
-              <ExternalLink className="mr-2 h-4 w-4" />
-              Install FFmpeg for Windows
+              {installingFfmpeg ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Installing FFmpeg...
+                </>
+              ) : (
+                <>
+                  <ExternalLink className="mr-2 h-4 w-4" />
+                  Install FFmpeg for Windows
+                </>
+              )}
             </Button>
           </CardContent>
         </Card>
@@ -616,17 +678,25 @@ export function ComposerPage() {
       </div>
 
       <Dialog open={showNewDialog} onOpenChange={setShowNewDialog}>
-        <DialogContent>
+        <DialogContent
+          onOpenAutoFocus={(e) => {
+            e.preventDefault();
+            // Focus input after dialog animation completes (200ms)
+            setTimeout(() => {
+              newProjectInputRef.current?.focus();
+            }, 250);
+          }}
+        >
           <DialogHeader>
             <DialogTitle>New Composer project</DialogTitle>
           </DialogHeader>
           <div className="py-2">
             <Input
+              ref={newProjectInputRef}
               placeholder="Project name"
               value={newProjectName}
               onChange={(e) => setNewProjectName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && void handleCreate()}
-              autoFocus
             />
           </div>
           <DialogFooter>

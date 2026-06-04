@@ -79,6 +79,12 @@ export const composerProjectIpc = {
   checkFfmpeg: (): Promise<ComposerFfmpegStatus> =>
     invoke("composer:ffmpeg-check", undefined as void),
 
+  downloadFfmpegInstaller: (): Promise<string> =>
+    invoke("composer:ffmpeg:download-installer", undefined as void),
+
+  launchFfmpegInstaller: (installerPath: string): Promise<void> =>
+    invoke("composer:ffmpeg:launch-installer", installerPath),
+
   list: (): Promise<ComposerProjectSummary[]> =>
     invoke("composer:project-list", undefined as void),
 
