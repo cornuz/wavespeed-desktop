@@ -2,6 +2,7 @@ import { spawn } from "child_process";
 import { createHash } from "crypto";
 import { BrowserWindow } from "electron";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from "fs";
+import { readFileSync as readFileSyncFull } from "fs";
 import { extname, join, normalize, resolve } from "path";
 import stringify from "json-stable-stringify";
 import { getCanvasBlendMode } from "../../src/composer/shared/blend-modes";
@@ -32,7 +33,7 @@ import {
   getStoredSequencePreview,
   saveStoredSequencePreview,
 } from "./db/sequence-preview.repo";
-import { ensureComposerFfmpegToolsAvailable } from "./ffmpeg";
+import { ensureComposerFfmpegToolsAvailable, getFfprobeBinaryPath } from "./ffmpeg";
 import {
   createHeadlessRenderer,
   renderSegmentInHeadlessRenderer,
@@ -1078,11 +1079,10 @@ function markProjectSequencePreviewErrorForSignature(
 
 function runFfprobe(filePath: string): Promise<MediaProbeResult | null> {
   return new Promise<MediaProbeResult | null>((resolveResult) => {
-    const proc = spawn(
-      "ffprobe",
-      ["-v", "quiet", "-of", "json", "-show_format", "-show_streams", filePath],
-      { windowsHide: true },
-    );
+      const ffprobeExe = getFfprobeBinaryPath();
+      const ffprobeArgs = ["-v", "quiet", "-of", "json", "-show_format", "-show_streams", filePath];
+      console.info(`[Composer Spawn] ffprobe exec=${ffprobeExe} args=${JSON.stringify(ffprobeArgs)}`);
+      const proc = spawn(ffprobeExe, ffprobeArgs, { windowsHide: true });
 
     let stdout = "";
     let settled = false;
@@ -1189,14 +1189,32 @@ function computeRenderedVideoPlacement(
   projectWidth: number,
   projectHeight: number,
   clip: Clip,
+  sourcePath?: string,
 ): { width: number; height: number; x: number; y: number } {
-  const sourceWidth =
-    probe?.width && probe.width > 0 ? probe.width : projectWidth;
-  const sourceHeight =
-    probe?.height && probe.height > 0 ? probe.height : projectHeight;
+  let sourceWidth = probe?.width && probe.width > 0 ? probe.width : null;
+  let sourceHeight = probe?.height && probe.height > 0 ? probe.height : null;
+
+  // If probe lacks dimensions for image inputs, try to read basic image headers (PNG/JPEG)
+  if ((sourceWidth == null || sourceHeight == null) && typeof sourcePath === "string") {
+    try {
+      const ext = String(sourcePath).toLowerCase();
+      if (IMAGE_EXTS.has(extname(sourcePath).toLowerCase())) {
+        const dims = parseRasterImageDimensions(sourcePath);
+        if (dims) {
+          sourceWidth = sourceWidth ?? dims.width;
+          sourceHeight = sourceHeight ?? dims.height;
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const finalSourceWidth = sourceWidth && sourceWidth > 0 ? sourceWidth : projectWidth;
+  const finalSourceHeight = sourceHeight && sourceHeight > 0 ? sourceHeight : projectHeight;
   return universalRectToScreen(
     getUniversalClipRect(
-      { width: sourceWidth, height: sourceHeight },
+      { width: finalSourceWidth, height: finalSourceHeight },
       clip.transformOffsetX,
       clip.transformOffsetY,
       clip.transformScale,
@@ -1205,6 +1223,61 @@ function computeRenderedVideoPlacement(
     outputHeight / 2,
     outputWidth / projectWidth,
   );
+}
+
+function parseRasterImageDimensions(filePath: string): { width: number; height: number } | null {
+  try {
+    const buffer = readFileSyncFull(filePath);
+    if (buffer.length >= 24 && buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47) {
+      // PNG signature + IHDR
+      if (buffer.length >= 24) {
+        const width = buffer.readUInt32BE(16);
+        const height = buffer.readUInt32BE(20);
+        if (Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0) {
+          return { width, height };
+        }
+      }
+    }
+
+    // JPEG: scan for SOFn marker
+    if (buffer.length > 2 && buffer[0] === 0xff && buffer[1] === 0xd8) {
+      let pos = 2;
+      while (pos + 9 < buffer.length) {
+        if (buffer[pos] !== 0xff) {
+          pos += 1;
+          continue;
+        }
+        const marker = buffer[pos + 1];
+        // Skip markers without length
+        if (marker === 0xd8 || marker === 0xd9) {
+          pos += 2;
+          continue;
+        }
+        const segLen = buffer.readUInt16BE(pos + 2);
+        // SOF markers range, excluding some
+        if (
+          (marker >= 0xc0 && marker <= 0xcf) &&
+          marker !== 0xc4 &&
+          marker !== 0xc8 &&
+          marker !== 0xcc
+        ) {
+          const dataStart = pos + 4;
+          if (dataStart + 5 < buffer.length) {
+            const height = buffer.readUInt16BE(dataStart + 1);
+            const width = buffer.readUInt16BE(dataStart + 3);
+            if (width > 0 && height > 0) {
+              return { width, height };
+            }
+          }
+        }
+        pos += 2 + segLen;
+      }
+    }
+  } catch {
+    // ignore parse errors
+  }
+
+  return null;
 }
 
 function parseSvgDimensions(
@@ -1418,6 +1491,25 @@ async function buildHeadlessRenderClips(
           clip,
         )
       : null;
+
+    try {
+      console.info('[Composer Preview] clip placement', {
+        projectId,
+        clipId: clip.id,
+        hasVisual,
+        hasAudio,
+        transformScale: clip.transformScale,
+        transformOffsetX: clip.transformOffsetX,
+        transformOffsetY: clip.transformOffsetY,
+        placement,
+        outputWidth: outputDimensions.width,
+        outputHeight: outputDimensions.height,
+        projectWidth: plan.request.projectWidth,
+        projectHeight: plan.request.projectHeight,
+      });
+    } catch {
+      /* ignore logging errors */
+    }
 
     clips.push({
       id: clip.id,

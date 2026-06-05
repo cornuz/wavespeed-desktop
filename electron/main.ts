@@ -304,6 +304,33 @@ console.warn = log.warn.bind(log);
 console.error = log.error.bind(log);
 console.debug = log.debug.bind(log);
 
+// Ensure discovered FFmpeg binary directory is available on PATH so that
+// any library or code that still spawns the literal 'ffmpeg' can resolve it.
+try {
+  // Use require() to avoid static import cycles with the composer module.
+  // The ffmpeg helper exports `getFfmpegBinaryPath()`.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const ffmpegHelper = require("./composer/ffmpeg");
+  if (ffmpegHelper && typeof ffmpegHelper.getFfmpegBinaryPath === "function") {
+    try {
+      const ffmpegExe = ffmpegHelper.getFfmpegBinaryPath();
+      if (typeof ffmpegExe === "string" && ffmpegExe && ffmpegExe !== "ffmpeg") {
+        const pathModule = require("path");
+        const ffmpegDir = pathModule.dirname(ffmpegExe);
+        const currentPath = process.env.PATH || process.env.Path || "";
+        if (ffmpegDir && !currentPath.includes(ffmpegDir)) {
+          process.env.PATH = ffmpegDir + pathModule.delimiter + currentPath;
+          console.info(`[FFmpeg PATH] Prepending ${ffmpegDir} to PATH`);
+        }
+      }
+    } catch (e) {
+      console.info("[FFmpeg PATH] discovery error:", e && e.message ? e.message : e);
+    }
+  }
+} catch (err) {
+  // Best-effort only; continue if we cannot require the helper.
+}
+
 // Settings storage
 const userDataPath = app.getPath("userData");
 const settingsPath = join(userDataPath, "settings.json");

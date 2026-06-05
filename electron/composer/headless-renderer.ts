@@ -561,10 +561,23 @@ function buildHeadlessRendererHtml(): string {
             }
           })());
         }
-
         try {
           return await audioCache.get(sourcePath);
-        } catch {
+        } catch (error) {
+          try {
+            console.warn('[Composer Preview][renderer] loadAudioBuffer:error', {
+              sourcePath,
+              errorMessage: error instanceof Error ? error.message : String(error),
+            });
+          } catch {
+            /* ignore logging failure */
+          }
+          // remove the cached failing entry so future attempts may retry
+          try {
+            audioCache.delete(sourcePath);
+          } catch {
+            /* ignore */
+          }
           return null;
         }
       }
@@ -806,6 +819,16 @@ function buildHeadlessRendererHtml(): string {
           return null;
         }
 
+        try {
+          console.info('[Composer Preview][renderer] renderAudioBuffer:start', {
+            projectId: request.projectId,
+            segmentDuration,
+            audioClipCount: audioClips.length,
+          });
+        } catch {
+          /* ignore logging failure */
+        }
+
         const sampleRate = 48000;
         const frameCount = Math.max(1, Math.ceil(segmentDuration * sampleRate));
         const offline = new OfflineAudioContext({
@@ -829,6 +852,14 @@ function buildHeadlessRendererHtml(): string {
 
           const decoded = await loadAudioBuffer(clip.sourcePath);
           if (!decoded) {
+            try {
+              console.warn('[Composer Preview][renderer] missingAudioBuffer', {
+                clipId: clip.id,
+                sourcePath: clip.sourcePath,
+              });
+            } catch {
+              /* ignore */
+            }
             continue;
           }
 

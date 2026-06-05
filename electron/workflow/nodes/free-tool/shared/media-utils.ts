@@ -2,6 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { net } from "electron";
 import { spawn } from "child_process";
+import { getFfmpegBinaryPath } from "../../../../composer/ffmpeg";
 import { getFileStorageInstance } from "../../../utils/file-storage";
 
 type DownloadedInput = {
@@ -119,7 +120,10 @@ export async function ensureFfmpegAvailable(): Promise<void> {
 
   ffmpegChecked = true;
   hasFfmpegBinary = await new Promise<boolean>((resolve) => {
-    const proc = spawn("ffmpeg", ["-version"]);
+    const ffmpegExe = getFfmpegBinaryPath();
+    const ffmpegArgs = ["-version"];
+    console.info(`[Composer Spawn] ffmpeg check exec=${ffmpegExe} args=${JSON.stringify(ffmpegArgs)}`);
+    const proc = spawn(ffmpegExe, ffmpegArgs);
     proc.on("error", () => resolve(false));
     proc.on("exit", (code) => resolve(code === 0));
   });
@@ -132,7 +136,9 @@ export async function ensureFfmpegAvailable(): Promise<void> {
 export async function runFfmpeg(args: string[]): Promise<void> {
   await ensureFfmpegAvailable();
   await new Promise<void>((resolve, reject) => {
-    const proc = spawn("ffmpeg", args);
+    const ffmpegExe = getFfmpegBinaryPath();
+    console.info(`[Composer Spawn] ffmpeg exec=${ffmpegExe} args=${JSON.stringify(args)}`);
+    const proc = spawn(ffmpegExe, args);
     let stderr = "";
     proc.stderr.on("data", (chunk: Buffer) => {
       stderr += chunk.toString("utf-8");

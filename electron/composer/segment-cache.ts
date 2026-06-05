@@ -300,27 +300,26 @@ export async function renderBlankSegment(
 
   await new Promise<void>((resolve, reject) => {
     let stderr = "";
-    const proc = spawn(
-      getFfmpegBinaryPath(),
-      [
-        "-f",
-        "lavfi",
-        "-i",
-        `color=c=${color}:s=${options.outputWidth}x${options.outputHeight}:r=${options.fps}:d=${duration.toFixed(3)}`,
-        "-an",
-        "-c:v",
-        "libx264",
-        "-preset",
-        "ultrafast",
-        "-pix_fmt",
-        "yuv420p",
-        "-movflags",
-        "+faststart",
-        "-y",
-        filePath,
-      ],
-      { windowsHide: true },
-    );
+    const ffmpegExe = getFfmpegBinaryPath();
+    const ffmpegArgs = [
+      "-f",
+      "lavfi",
+      "-i",
+      `color=c=${color}:s=${options.outputWidth}x${options.outputHeight}:r=${options.fps}:d=${duration.toFixed(3)}`,
+      "-an",
+      "-c:v",
+      "libx264",
+      "-preset",
+      "ultrafast",
+      "-pix_fmt",
+      "yuv420p",
+      "-movflags",
+      "+faststart",
+      "-y",
+      filePath,
+    ];
+    console.info(`[Composer Spawn] ffmpeg exec=${ffmpegExe} args=${JSON.stringify(ffmpegArgs)}`);
+    const proc = spawn(ffmpegExe, ffmpegArgs, { windowsHide: true });
 
     proc.stderr.on("data", (chunk) => {
       stderr += chunk.toString();
@@ -418,24 +417,23 @@ export async function concatSegments(
   try {
     await new Promise<void>((resolve, reject) => {
       let stderr = "";
-      const proc = spawn(
-        getFfmpegBinaryPath(),
-        [
-          "-f",
-          "concat",
-          "-safe",
-          "0",
-          "-i",
-          listPath,
-          "-c",
-          "copy",
-          "-movflags",
-          "+faststart",
-          "-y",
-          outputPath,
-        ],
-        { windowsHide: true },
-      );
+      const ffmpegExe = getFfmpegBinaryPath();
+      const ffmpegArgs = [
+        "-f",
+        "concat",
+        "-safe",
+        "0",
+        "-i",
+        listPath,
+        "-c",
+        "copy",
+        "-movflags",
+        "+faststart",
+        "-y",
+        outputPath,
+      ];
+      console.info(`[Composer Spawn] ffmpeg exec=${ffmpegExe} args=${JSON.stringify(ffmpegArgs)}`);
+      const proc = spawn(ffmpegExe, ffmpegArgs, { windowsHide: true });
 
       proc.stderr.on("data", (chunk) => {
         stderr += chunk.toString();

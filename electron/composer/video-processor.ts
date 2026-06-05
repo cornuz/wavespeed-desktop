@@ -144,7 +144,17 @@ function escapeFfmpegFilterPath(filePath: string): string {
  */
 export async function probeVideoFile(filePath: string): Promise<ProbeResult | null> {
   return new Promise<ProbeResult | null>((resolve) => {
-    const proc = spawn(getFfprobeBinaryPath(), [
+    const ffprobeExe = getFfprobeBinaryPath();
+    console.info(`[Composer Spawn] ffprobe exec=${ffprobeExe} args=${JSON.stringify([
+      "-v",
+      "quiet",
+      "-of",
+      "json",
+      "-show_format",
+      "-show_streams",
+      filePath,
+    ])}`);
+    const proc = spawn(ffprobeExe, [
       "-v",
       "quiet",
       "-of",
@@ -242,8 +252,18 @@ export async function probeVideoFile(filePath: string): Promise<ProbeResult | nu
 
 export function probeVideoFileSync(filePath: string): ProbeResult | null {
   try {
+    const ffprobeExeSync = getFfprobeBinaryPath();
+    console.info(`[Composer Spawn] ffprobe sync exec=${ffprobeExeSync} args=${JSON.stringify([
+      "-v",
+      "quiet",
+      "-of",
+      "json",
+      "-show_format",
+      "-show_streams",
+      filePath,
+    ])}`);
     const result = spawnSync(
-      "ffprobe",
+      ffprobeExeSync,
       ["-v", "quiet", "-of", "json", "-show_format", "-show_streams", filePath],
       { encoding: "utf-8", windowsHide: true },
     );
@@ -446,7 +466,9 @@ export async function transcodeVideoToSafeFormat(
 
         ffmpegArgs.push("-y", outputPath);
 
-        const proc = spawn(getFfmpegBinaryPath(), ffmpegArgs, {
+        const ffmpegExe = getFfmpegBinaryPath();
+        console.info(`[Composer Spawn] ffmpeg exec=${ffmpegExe} args=${JSON.stringify(ffmpegArgs)}`);
+        const proc = spawn(ffmpegExe, ffmpegArgs, {
           windowsHide: true,
         });
 
@@ -556,7 +578,9 @@ export async function transcodeVideoToPreviewProxy(
 
         ffmpegArgs.push("-y", outputPath);
 
-        const proc = spawn(getFfmpegBinaryPath(), ffmpegArgs, {
+        const ffmpegExe = getFfmpegBinaryPath();
+        console.info(`[Composer Spawn] ffmpeg exec=${ffmpegExe} args=${JSON.stringify(ffmpegArgs)}`);
+        const proc = spawn(ffmpegExe, ffmpegArgs, {
           windowsHide: true,
         });
 
@@ -650,7 +674,9 @@ export async function transcodeVideoToLutProxy(
 
         ffmpegArgs.push("-y", outputPath);
 
-        const proc = spawn(getFfmpegBinaryPath(), ffmpegArgs, {
+        const ffmpegExe = getFfmpegBinaryPath();
+        console.info(`[Composer Spawn] ffmpeg exec=${ffmpegExe} args=${JSON.stringify(ffmpegArgs)}`);
+        const proc = spawn(ffmpegExe, ffmpegArgs, {
           windowsHide: true,
         });
 

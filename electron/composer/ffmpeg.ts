@@ -1,6 +1,6 @@
 import { spawn } from "child_process";
 import { app, net, shell } from "electron";
-import { createWriteStream, promises as fs } from "fs";
+import { createWriteStream, promises as fs, existsSync, readdirSync } from "fs";
 import { join } from "path";
 import type { ComposerFfmpegStatus } from "../../src/composer/types/ipc";
 
@@ -18,11 +18,56 @@ const KNOWN_FFMPEG_PATHS = [
 let cachedFfmpegPath = "ffmpeg";
 let cachedFfprobePath = "ffprobe";
 
+function findLocalBinarySync(binaryName: string): string | null {
+  try {
+    const ffmpegBase = join(process.env.LOCALAPPDATA || "", "ffmpeg");
+    if (existsSync(ffmpegBase)) {
+      const entries = readdirSync(ffmpegBase, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        if (!entry.name.startsWith("ffmpeg-")) continue;
+        const candidate = join(ffmpegBase, entry.name, "bin", binaryName);
+        if (existsSync(candidate)) {
+          console.info(`[FFmpeg Debug] findLocalBinarySync: found candidate ${candidate}`);
+          return candidate;
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+  // Also check for a repo-local bundled binary under ./bin/ (dev convenience)
+  try {
+    const cwdCandidate = join(process.cwd() || "", "bin", binaryName);
+    if (existsSync(cwdCandidate)) {
+      console.info(`[FFmpeg Debug] findLocalBinarySync: found repo-local candidate ${cwdCandidate}`);
+      return cwdCandidate;
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
 /**
  * Get path to ffmpeg binary.
  * Returns cached path from last successful check, or "ffmpeg" if on PATH.
  */
 export function getFfmpegBinaryPath(): string {
+  // Always prefer an on-disk local binary when available to avoid
+  // cross-chunk cached state issues from dynamic/static imports.
+  try {
+    const local = findLocalBinarySync("ffmpeg.exe");
+    if (local) {
+      cachedFfmpegPath = local;
+      console.info(`[FFmpeg Debug] getFfmpegBinaryPath() returning discovered local ${local}`);
+      return local;
+    }
+  } catch (e) {
+    // ignore
+  }
+
+  console.info(`[FFmpeg Debug] getFfmpegBinaryPath() returning cached/fallback '${cachedFfmpegPath}'`);
   return cachedFfmpegPath;
 }
 
@@ -31,11 +76,24 @@ export function getFfmpegBinaryPath(): string {
  * Returns cached path from last successful check, or "ffprobe" if on PATH.
  */
 export function getFfprobeBinaryPath(): string {
+  try {
+    const local = findLocalBinarySync("ffprobe.exe");
+    if (local) {
+      cachedFfprobePath = local;
+      console.info(`[FFmpeg Debug] getFfprobeBinaryPath() returning discovered local ${local}`);
+      return local;
+    }
+  } catch (e) {
+    // ignore
+  }
+
+  console.info(`[FFmpeg Debug] getFfprobeBinaryPath() returning cached/fallback '${cachedFfprobePath}'`);
   return cachedFfprobePath;
 }
 
 async function checkBinaryAtPath(binaryPath: string): Promise<boolean> {
   return new Promise<boolean>((resolve) => {
+    console.info(`[FFmpeg Debug] checkBinaryAtPath(${binaryPath})`);
     const proc = spawn(binaryPath, ["-version"], {
       stdio: "ignore",
       windowsHide: true,
@@ -48,7 +106,10 @@ async function checkBinaryAtPath(binaryPath: string): Promise<boolean> {
       resolve(available);
     };
 
-    proc.once("error", () => finish(false));
+    proc.once("error", (err: any) => {
+      console.info(`[FFmpeg Debug] checkBinaryAtPath error for ${binaryPath}: ${err && err.code}`);
+      finish(false);
+    });
     proc.once("exit", (code) => finish(code === 0));
   });
 }

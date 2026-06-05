@@ -1940,6 +1940,30 @@ export function PlayerPanel() {
                   className="h-full w-full object-contain"
                   playsInline
                   preload="auto"
+                  onPlay={(e) => {
+                    try {
+                      const el = e.currentTarget as HTMLVideoElement;
+                      console.info("[Player] sequence preview play", {
+                        src: el.currentSrc,
+                        currentTime: el.currentTime,
+                        muted: el.muted,
+                        volume: el.volume,
+                      });
+                    } catch {
+                      /* ignore */
+                    }
+                  }}
+                  onError={(e) => {
+                    try {
+                      const el = e.currentTarget as HTMLVideoElement;
+                      console.warn("[Player] sequence preview error", {
+                        src: el.currentSrc,
+                        error: el.error,
+                      });
+                    } catch {
+                      /* ignore */
+                    }
+                  }}
                 />
               ) : activeVisualRenderLayers.length > 0 ? (
                 <>

@@ -217,6 +217,40 @@ export function ComposerPage() {
     void runFfmpegCheck(true);
   }, [location.pathname, runFfmpegCheck]);
 
+  useEffect(() => {
+    if (!showNewDialog) return;
+    const el = newProjectInputRef.current;
+    try {
+      console.info('[ComposerPage] NewProject dialog opened', {
+        hasInput: !!el,
+        currentValue: el?.value,
+        disabled: !!el?.disabled,
+        readOnly: !!el?.readOnly,
+        tabIndex: el?.tabIndex,
+      });
+    } catch {
+      /* ignore */
+    }
+
+    if (!el) return;
+    const onFocus = () => console.info('[ComposerPage] newProjectInput focus');
+    const onBlur = () => console.info('[ComposerPage] newProjectInput blur');
+    const onKeyDown = (e: KeyboardEvent) =>
+      console.info('[ComposerPage] newProjectInput keydown', { key: e.key });
+    el.addEventListener('focus', onFocus);
+    el.addEventListener('blur', onBlur);
+    el.addEventListener('keydown', onKeyDown);
+    return () => {
+      try {
+        el.removeEventListener('focus', onFocus);
+        el.removeEventListener('blur', onBlur);
+        el.removeEventListener('keydown', onKeyDown);
+      } catch {
+        /* ignore */
+      }
+    };
+  }, [showNewDialog]);
+
   async function handleInstallFfmpeg() {
     setInstallingFfmpeg(true);
 
@@ -678,21 +712,14 @@ export function ComposerPage() {
       </div>
 
       <Dialog open={showNewDialog} onOpenChange={setShowNewDialog}>
-        <DialogContent
-          onOpenAutoFocus={(e) => {
-            e.preventDefault();
-            // Focus input after dialog animation completes (200ms)
-            setTimeout(() => {
-              newProjectInputRef.current?.focus();
-            }, 250);
-          }}
-        >
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>New Composer project</DialogTitle>
           </DialogHeader>
           <div className="py-2">
             <Input
               ref={newProjectInputRef}
+              autoFocus
               placeholder="Project name"
               value={newProjectName}
               onChange={(e) => setNewProjectName(e.target.value)}
