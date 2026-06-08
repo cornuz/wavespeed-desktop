@@ -116,6 +116,11 @@ export const composerProjectIpc = {
 
   save: (input: SaveProjectInput): Promise<void> =>
     invoke("composer:project-save", input),
+
+  export: (input: { projectId: string; fileName?: string | null; width?: number | null; height?: number | null; fps?: number | null; playbackQuality?: import("@/composer/types/project").ComposerPlaybackQuality | null }): Promise<string> =>
+    invoke("composer:project-export", input),
+  cancelExport: (projectId: string): Promise<void> =>
+    invoke("composer:project-export-cancel", { projectId }),
 };
 
 export const composerSequencePreviewIpc = {
@@ -136,6 +141,16 @@ export const composerSequencePreviewIpc = {
     api.on("composer:sequence-preview-progress", callback);
     return () => api.removeListener("composer:sequence-preview-progress", callback);
   },
+};
+
+export const composerExportIpc = {
+  onProgress: (callback: (payload: unknown) => void): (() => void) => {
+    const api = getApi();
+    if (!api) return () => undefined;
+    api.on("composer:export-progress", callback);
+    return () => api.removeListener("composer:export-progress", callback);
+  },
+  cancel: (projectId: string): Promise<void> => invoke("composer:project-export-cancel", { projectId }),
 };
 
 // ─── Track IPC ────────────────────────────────────────────────────────────────

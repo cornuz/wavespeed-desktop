@@ -41,7 +41,11 @@ import {
   getProjectSequencePreview,
   invalidateProjectSequencePreview,
   scheduleProjectSequencePreviewRefresh,
+  renderSequencePreviewForRequest,
+  computeProjectTimelineSignature,
+  SEQUENCE_PREVIEW_REQUEST_VERSION,
 } from "../sequence-preview";
+import { renderProjectExport, cancelProjectExportJob } from "../export";
 import {
   createHeadlessRenderer,
   destroyHeadlessRenderer,
@@ -644,6 +648,70 @@ export function registerProjectIpc(): void {
       return scheduleProjectSequencePreviewRefresh(input.projectId);
     },
   );
+
+  // ── Export (copy latest ready sequence preview to project exports) ──────
+  ipcMain.handle(
+    "composer:project-export",
+    async (
+      _event,
+      input: {
+        projectId: string;
+        fileName?: string | null;
+        width?: number | null;
+        height?: number | null;
+        fps?: number | null;
+        playbackQuality?: ComposerPlaybackQuality | null;
+      },
+    ): Promise<string> => {
+      const projectId = input.projectId;
+      if (!projectId) throw new Error("projectId is required");
+
+      await ensureComposerFfmpegAvailable();
+
+      const registry = loadRegistry();
+      const summary = registry.projects.find((p) => p.id === projectId);
+      if (!summary) throw new Error(`Project ${projectId} not found in registry`);
+
+      const exportDir = join(summary.path, "exports");
+      if (!existsSync(exportDir)) mkdirSync(exportDir, { recursive: true });
+
+      let fileName = (input.fileName || "").trim();
+      if (!fileName) {
+        const safeName = summary.name.replace(/[^a-z0-9-_\.]/gi, "_");
+        fileName = `${safeName}_export_${Date.now()}.mp4`;
+      }
+      if (!fileName.toLowerCase().endsWith(".mp4")) fileName += ".mp4";
+      // Build a render request from current project meta and any overrides,
+      // then run the dedicated export pipeline which is fully decoupled from
+      // the preview/cache lifecycle.
+      const meta = readProjectMeta(projectId);
+      const request = {
+        version: SEQUENCE_PREVIEW_REQUEST_VERSION,
+        timelineSignature: computeProjectTimelineSignature(
+          projectId,
+          input.playbackQuality ?? meta.playbackQuality,
+        ),
+        duration: meta.duration,
+        fps: input.fps ?? meta.fps,
+        projectWidth: input.width ?? meta.width,
+        projectHeight: input.height ?? meta.height,
+        playbackQuality: input.playbackQuality ?? meta.playbackQuality,
+        backgroundColor: meta.backgroundColor,
+      };
+
+      const destPath = join(exportDir, fileName);
+      const generatedPath = await renderProjectExport(projectId, request, destPath);
+      const now = new Date().toISOString();
+      updateProjectTimestamps(projectId, { updatedAt: now });
+      return generatedPath;
+    },
+  );
+
+  // ── Export cancel ───────────────────────────────────────────────────────
+  ipcMain.handle("composer:project-export-cancel", async (_event, input: { projectId: string }) => {
+    if (!input || !input.projectId) return;
+    cancelProjectExportJob(input.projectId);
+  });
 
   // ── Rename ────────────────────────────────────────────────────────────────
   ipcMain.handle(

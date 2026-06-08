@@ -13,12 +13,15 @@ import { useEffect, useState } from "react";
 import { LayoutPanelTop, PanelLeftOpen, PanelRightOpen, LayoutPanelLeft, X, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import ExportDialog from "./components/ExportDialog";
 import { Separator } from "@/components/ui/separator";
 import type { ComposerProject, LayoutPreset } from "@/composer/types/project";
 import { useComposerProjectStore } from "@/composer/stores/project.store";
 import { ComposerRuntimeProvider } from "./context/ComposerRuntimeContext";
 import { useEditorLayout } from "./layout/useEditorLayout";
 import { EditorLayout } from "./layout/EditorLayout";
+import { composerProjectIpc } from "@/composer/ipc/ipc-client";
+import { toast } from "@/hooks/useToast";
 
 // ─── Preset icon map ──────────────────────────────────────────────────────────
 
@@ -51,6 +54,8 @@ interface ComposerHeaderProps {
 function ComposerHeader({ project, activePreset, onPresetChange, onRename, onClose }: ComposerHeaderProps) {
   const [isEditingName, setIsEditingName] = useState(false);
   const [draftName, setDraftName] = useState(project.name);
+  const [isExporting, setIsExporting] = useState(false);
+  const [isExportOpen, setIsExportOpen] = useState(false);
 
   useEffect(() => {
     setDraftName(project.name);
@@ -133,15 +138,17 @@ function ComposerHeader({ project, activePreset, onPresetChange, onRename, onClo
         <div className="flex-1" />
 
         {/* Export */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" disabled>
-              <Download className="h-3.5 w-3.5" />
-              Export
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom">Export MP4 — coming soon</TooltipContent>
-        </Tooltip>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 gap-1.5 text-xs"
+          disabled={isExporting}
+          onClick={() => setIsExportOpen(true)}
+        >
+          <Download className="h-3.5 w-3.5" />
+          {isExporting ? "Exporting..." : "Export"}
+        </Button>
+        <ExportDialog project={project} open={isExportOpen} onOpenChange={setIsExportOpen} />
 
         <Separator orientation="vertical" className="h-5 mx-1" />
 

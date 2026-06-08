@@ -19,7 +19,7 @@ let headlessTempHtmlPath: string | null = null;
 let requestCounter = 0;
 let ipcRegistered = false;
 const pendingSegmentResults = new Map<string, PendingSegmentResult>();
-let progressListener: ((progress: RenderSegmentProgress) => void) | null = null;
+const progressListeners = new Set<(progress: RenderSegmentProgress) => void>();
 
 function buildHeadlessRendererHtml(): string {
   return `<!doctype html>
@@ -1087,12 +1087,20 @@ function registerHeadlessRendererIpc(): void {
     pending.resolve(buffer);
   });
 
-  ipcMain.on(
-    "composer:segment-progress",
-    (_event, payload: RenderSegmentProgress) => {
-      progressListener?.(payload);
-    },
-  );
+  ipcMain.on("composer:segment-progress", (_event, payload: RenderSegmentProgress) => {
+    try {
+      for (const listener of progressListeners) {
+        try {
+          listener(payload);
+        } catch (err) {
+          // listener errors are isolated
+          console.warn('[Composer] headless progress listener error', err instanceof Error ? err.message : err);
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+  });
 }
 
 function rejectPendingSegments(error: Error): void {
@@ -1102,10 +1110,17 @@ function rejectPendingSegments(error: Error): void {
   }
 }
 
-export function setHeadlessRendererProgressListener(
-  listener: ((progress: RenderSegmentProgress) => void) | null,
+export function addHeadlessRendererProgressListener(
+  listener: (progress: RenderSegmentProgress) => void,
+): () => void {
+  progressListeners.add(listener);
+  return () => progressListeners.delete(listener);
+}
+
+export function removeHeadlessRendererProgressListener(
+  listener: (progress: RenderSegmentProgress) => void,
 ): void {
-  progressListener = listener;
+  progressListeners.delete(listener);
 }
 
 export async function createHeadlessRenderer(): Promise<BrowserWindow> {

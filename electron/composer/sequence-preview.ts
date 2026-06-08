@@ -1,7 +1,7 @@
 import { spawn } from "child_process";
 import { createHash } from "crypto";
 import { BrowserWindow } from "electron";
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync } from "fs";
 import { readFileSync as readFileSyncFull } from "fs";
 import { extname, join, normalize, resolve } from "path";
 import stringify from "json-stable-stringify";
@@ -37,7 +37,7 @@ import { ensureComposerFfmpegToolsAvailable, getFfprobeBinaryPath } from "./ffmp
 import {
   createHeadlessRenderer,
   renderSegmentInHeadlessRenderer,
-  setHeadlessRendererProgressListener,
+  addHeadlessRendererProgressListener,
 } from "./headless-renderer";
 import { listProjectLuts, resolveProjectLut } from "./lut-library";
 import {
@@ -1381,14 +1381,23 @@ function getOrderedClips(
     });
 }
 
-async function buildHeadlessRenderClips(
+export async function buildHeadlessRenderClips(
   projectId: string,
   plan: SequencePreviewRenderPlan,
+  options?: { explicitOutputWidth?: number; explicitOutputHeight?: number },
 ): Promise<HeadlessRenderClip[]> {
   const assetsMetadata = loadAssetMetadata(getProjectAssetsDir(projectId));
   const probeCache = new Map<string, Promise<MediaProbeResult | null>>();
   const lutCache = new Map<string, HeadlessRenderClip["lut"]>();
-  const outputDimensions = getSequencePreviewOutputDimensions(plan.request);
+  const outputDimensions =
+    options &&
+    typeof options.explicitOutputWidth === "number" &&
+    typeof options.explicitOutputHeight === "number"
+      ? {
+          width: normalizeEvenDimension(options.explicitOutputWidth),
+          height: normalizeEvenDimension(options.explicitOutputHeight),
+        }
+      : getSequencePreviewOutputDimensions(plan.request);
   const clips: HeadlessRenderClip[] = [];
 
   for (const { clip, track } of getOrderedClips(projectId)) {
@@ -1713,7 +1722,7 @@ async function renderProjectSequencePreview(
     }
   };
 
-  setHeadlessRendererProgressListener(emitSegmentProgress);
+  const removeHeadlessProgressListener = addHeadlessRendererProgressListener(emitSegmentProgress);
 
   try {
     while (true) {
@@ -1792,7 +1801,11 @@ async function renderProjectSequencePreview(
       deleteSegments(projectId, buildConcatList(manifest));
     }
   } finally {
-    setHeadlessRendererProgressListener(null);
+    try {
+      removeHeadlessProgressListener?.();
+    } catch {
+      /* ignore */
+    }
   }
 
   const segmentPaths = buildConcatList(manifest);
@@ -2055,4 +2068,147 @@ export function buildDirtyRangeForClip(
       clip.startTime + Math.max(0.04, clip.duration),
     ),
   };
+}
+
+/**
+ * Render a one-off sequence preview for the supplied request and return the
+ * resulting MP4 path. This exposes an escape hatch to request custom export
+ * dimensions/fps/playbackQuality from the renderer process.
+ */
+export async function renderSequencePreviewForRequest(
+  projectId: string,
+  request: ComposerSequencePreviewRequest,
+  outputPathOverride?: string | null,
+): Promise<string> {
+  const requestSignature = computeHash(request);
+  const plan: SequencePreviewRenderPlan = {
+    request,
+    requestSignature,
+    outputPath:
+      outputPathOverride ?? getProjectSequencePreviewFilePath(projectId, requestSignature),
+  };
+
+  // Persist a processing record so UIs see the active job and progress.
+  const now = new Date().toISOString();
+  saveStoredSequencePreview(projectId, {
+    status: "processing",
+    requestSignature: plan.requestSignature,
+    request: plan.request,
+    filePath: plan.outputPath,
+    playbackQuality: plan.request.playbackQuality,
+    invalidationReasons: [],
+    errorMessage: undefined,
+    createdAt: now,
+    updatedAt: now,
+    lastRequestedAt: now,
+    startedAt: now,
+    completedAt: undefined,
+    invalidatedAt: undefined,
+  });
+
+  // Ensure the project is tracked and execute the job in-process. Reuse the
+  // existing job lifecycle helpers so cancellation and rerun behavior remain
+  // consistent with scheduled jobs.
+  trackProjectSequencePreview(projectId);
+  const jobState = getOrCreateJobState(projectId);
+  clearScheduledSequencePreviewRefresh(projectId);
+  jobState.running = true;
+  jobState.runningRequestSignature = plan.requestSignature;
+  jobState.cancelRequested = false;
+  jobState.rerunRequested = false;
+  jobState.rerunDebounceMs = null;
+
+  try {
+    await runProjectSequencePreviewJob(projectId, plan);
+    // After the job completes, wait shortly for the output file to appear
+    // and become stable on disk. This avoids races on platforms where the
+    // filesystem may not immediately reflect the file after concat.
+    const waitForFileStable = (filePath: string, timeoutMs = 10000): Promise<void> =>
+      new Promise((resolve, reject) => {
+        const start = Date.now();
+        let lastSize = -1;
+        const interval = setInterval(() => {
+          try {
+            if (!existsSync(filePath)) {
+              if (Date.now() - start > timeoutMs) {
+                clearInterval(interval);
+                reject(new Error(`Timed out waiting for generated file: ${filePath}`));
+              }
+              return;
+            }
+            const stat = statSync(filePath);
+            const size = stat.size;
+            if (size > 0 && size === lastSize) {
+              clearInterval(interval);
+              resolve();
+              return;
+            }
+            lastSize = size;
+            if (Date.now() - start > timeoutMs) {
+              clearInterval(interval);
+              reject(new Error(`Timed out waiting for generated file stability: ${filePath}`));
+            }
+          } catch (err) {
+            clearInterval(interval);
+            reject(err);
+          }
+        }, 200);
+      });
+
+    try {
+      await waitForFileStable(plan.outputPath, 10000);
+      // If file is present and stable, return it directly.
+      return plan.outputPath;
+    } catch (err) {
+      // Fallback: consult stored preview record for clarity/error message.
+      const finalPreview = getProjectSequencePreview(projectId);
+      const msg = finalPreview.errorMessage
+        ? finalPreview.errorMessage
+        : `Preview not ready after job completion (status=${finalPreview.status})`;
+      throw new Error(`Generated preview not available: ${msg}`);
+    }
+  } finally {
+    const latestState = getOrCreateJobState(projectId);
+    latestState.running = false;
+    latestState.runningRequestSignature = null;
+    latestState.cancelRequested = false;
+    if (!trackedSequencePreviewProjects.has(projectId)) {
+      activeSequencePreviewJobs.delete(projectId);
+      return;
+    }
+    const needsRerun =
+      latestState.rerunRequested ||
+      (() => {
+        try {
+          const latestPreview = getProjectSequencePreview(projectId);
+          return shouldRefreshProjectSequencePreview(projectId, latestPreview);
+        } catch {
+          return false;
+        }
+      })();
+    const rerunDebounceMs = latestState.rerunDebounceMs;
+    latestState.rerunRequested = false;
+    latestState.rerunDebounceMs = null;
+
+    if (needsRerun) {
+      try {
+        scheduleProjectSequencePreviewRefresh(
+          projectId,
+          rerunDebounceMs == null ? undefined : { debounceMs: rerunDebounceMs },
+        );
+      } catch (error) {
+        console.error(
+          `[Composer] Failed to restart sequence preview job for project ${projectId}:`,
+          error,
+        );
+      }
+    }
+  }
+}
+
+export function cancelProjectSequencePreviewJob(
+  projectId: string,
+  keepRequestSignature: string | null = null,
+): void {
+  requestSequencePreviewJobCancellation(projectId, keepRequestSignature ?? "");
 }

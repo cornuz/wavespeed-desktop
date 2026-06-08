@@ -15,11 +15,25 @@ import type {
   SegmentManifest,
 } from "./sequence-preview-contract";
 import { loadRegistry } from "./db/project-registry";
-import { getFfmpegBinaryPath } from "./ffmpeg";
+import { getFfmpegBinaryPath, getFfprobeBinaryPath } from "./ffmpeg";
 
 const SEGMENT_CACHE_SUBDIR = "seqseg";
 const SEGMENT_MANIFEST_FILE = "manifest.json";
 const SEGMENT_DURATION_SECONDS = 5;
+
+export interface RenderOptions {
+  codec?: "libx264" | "libx265" | string;
+  profile?: string;
+  maxBitrate?: number; // in bits per second
+  bufsize?: number; // in bits
+  pixFmt?: string;
+  gopSize?: number; // frames
+  audio?: {
+    codec?: string;
+    bitrate?: number; // bps
+    sampleRate?: number; // Hz
+  } | null;
+}
 
 interface BlankSegmentOptions {
   duration: number;
@@ -383,6 +397,7 @@ function escapeConcatPath(filePath: string): string {
 export async function concatSegments(
   segmentPaths: string[],
   outputPath: string,
+  options?: { targetWidth?: number; targetHeight?: number; renderOptions?: RenderOptions },
 ): Promise<void> {
   if (segmentPaths.length === 0) {
     throw new Error(
@@ -398,40 +413,192 @@ export async function concatSegments(
     return;
   }
 
+  const outputDir = getSegmentCacheDirFromOutput(outputPath);
+
+  // Helper: probe video size (width x height) using ffprobe
+  async function probeVideoSize(filePath: string): Promise<{ width: number; height: number } | null> {
+    return new Promise((resolve) => {
+      try {
+        const ffprobeExe = getFfprobeBinaryPath();
+        const args = [
+          "-v",
+          "error",
+          "-select_streams",
+          "v:0",
+          "-show_entries",
+          "stream=width,height",
+          "-of",
+          "csv=p=0:s=x",
+          filePath,
+        ];
+        const proc = spawn(ffprobeExe, args, { windowsHide: true });
+        let out = "";
+        proc.stdout.on("data", (chunk) => (out += String(chunk)));
+        proc.once("error", () => resolve(null));
+        proc.once("exit", (code) => {
+          if (code !== 0) return resolve(null);
+          const parts = out.trim().split("x");
+          if (parts.length === 2) {
+            const w = Number(parts[0]) || 0;
+            const h = Number(parts[1]) || 0;
+            if (w > 0 && h > 0) return resolve({ width: w, height: h });
+          }
+          return resolve(null);
+        });
+      } catch {
+        return resolve(null);
+      }
+    });
+  }
+
+  // Helper: re-encode a segment to target size with letterbox/pad to preserve aspect
+  async function reencodeToSize(
+    input: string,
+    target: string,
+    width: number,
+    height: number,
+    renderOptions?: RenderOptions,
+    sourceFps?: number,
+  ): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const vf = `scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,setsar=1`;
+      const ffmpegExe = getFfmpegBinaryPath();
+      const ro = renderOptions ?? {};
+      const videoCodec = ro.codec ?? "libx264";
+      const profile = ro.profile ?? "high";
+      const pixFmt = ro.pixFmt ?? "yuv420p";
+      const maxBitrate = ro.maxBitrate ?? 50000000;
+      const bufsize = ro.bufsize ?? Math.max(maxBitrate * 2, 100000000);
+      const gop = ro.gopSize ?? Math.max(1, Math.round(sourceFps ?? 30));
+
+      const bStr = maxBitrate >= 1000000 ? `${Math.round(maxBitrate / 1000000)}M` : String(maxBitrate);
+      const bufStr = bufsize >= 1000000 ? `${Math.round(bufsize / 1000000)}M` : String(bufsize);
+
+      const args: string[] = ["-i", input, "-vf", vf];
+
+      // Map video codec/settings
+      args.push("-c:v", videoCodec);
+      if (videoCodec.includes("x264") || videoCodec === "libx264") {
+        args.push("-profile:v", profile);
+      }
+      args.push("-b:v", bStr, "-maxrate", bStr, "-bufsize", bufStr);
+      args.push("-pix_fmt", pixFmt);
+      args.push("-g", String(gop));
+
+      // Audio settings
+      const audio = ro.audio ?? { codec: "aac", bitrate: 320000, sampleRate: 48000 };
+      if (audio) {
+        args.push("-c:a", audio.codec ?? "aac");
+        if (audio.bitrate) args.push("-b:a", audio.bitrate >= 1000000 ? `${Math.round((audio.bitrate || 0) / 1000000)}M` : String(audio.bitrate));
+        if (audio.sampleRate) args.push("-ar", String(audio.sampleRate));
+      } else {
+        args.push("-an");
+      }
+
+      args.push("-movflags", "+faststart", "-y", target);
+      console.info(`[Composer Spawn] ffmpeg reencode exec=${ffmpegExe} args=${JSON.stringify(args)}`);
+      const proc = spawn(ffmpegExe, args, { windowsHide: true });
+      let stderr = "";
+      proc.stderr.on("data", (chunk) => {
+        stderr += chunk.toString();
+      });
+      proc.once("error", (err) => reject(err));
+      proc.once("exit", (code) => {
+        if (code === 0) return resolve();
+        reject(new Error(stderr || `FFmpeg exited with code ${code}`));
+      });
+    });
+  }
+
+  // Probe all segment sizes
+  const probed = await Promise.all(segmentPaths.map((p) => probeVideoSize(p)));
+  const sizes = probed.map((r) => (r ? `${r.width}x${r.height}` : "unknown"));
+
+  // Determine target size
+  let targetW: number | undefined = options?.targetWidth;
+  let targetH: number | undefined = options?.targetHeight;
+  const renderOptions = options?.renderOptions;
+  if (typeof targetW !== "number" || typeof targetH !== "number") {
+    // pick first successfully probed size
+    for (const p of probed) {
+      if (p) {
+        targetW = p.width;
+        targetH = p.height;
+        break;
+      }
+    }
+  }
+
+  // If any size mismatches target or unknowns present, re-encode each segment to target
+  const needReencode = probed.some((p) => !p || p.width !== targetW || p.height !== targetH) || false;
+
+  let workingPaths = segmentPaths.slice();
+  const reencodedPaths: string[] = [];
+
+  if (needReencode) {
+    if (!targetW || !targetH) {
+      throw new Error("Unable to determine target video size for concat");
+    }
+    try {
+      for (let i = 0; i < segmentPaths.length; i += 1) {
+        const src = segmentPaths[i];
+        const rePath = join(outputDir, `reencoded-${i.toString().padStart(4, "0")}-${basename(src)}`);
+        // try to probe fps from original; if unavailable, default to 30
+        const fpsProbe = await (async () => {
+          try {
+            const ffprobeExe = getFfprobeBinaryPath();
+            const args = ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=r_frame_rate", "-of", "default=nw=1:nk=1", src];
+            return await new Promise<number>((resolve) => {
+              const p = spawn(ffprobeExe, args, { windowsHide: true });
+              let out = "";
+              p.stdout.on("data", (c) => (out += String(c)));
+              p.once("exit", (code) => {
+                if (code !== 0) return resolve(30);
+                try {
+                  const frac = out.trim();
+                  if (!frac) return resolve(30);
+                  const [num, den] = frac.split("/").map((v) => Number(v));
+                  if (!den || !num) return resolve(30);
+                  return resolve(num / den);
+                } catch {
+                  return resolve(30);
+                }
+              });
+            });
+          } catch {
+            return 30;
+          }
+        })();
+
+        await reencodeToSize(src, rePath, targetW, targetH, renderOptions, Math.max(1, Math.round(fpsProbe || 30)));
+        reencodedPaths.push(rePath);
+      }
+      workingPaths = reencodedPaths.slice();
+    } catch (err) {
+      // cleanup any reencoded files on error
+      for (const f of reencodedPaths) {
+        try {
+          rmSync(f, { force: true });
+        } catch {
+          /* ignore */
+        }
+      }
+      throw err;
+    }
+  }
+
   const listPath = join(
-    getSegmentCacheDirFromOutput(outputPath),
-    `concat-${createHash("sha1")
-      .update(segmentPaths.join("|"))
-      .digest("hex")
-      .slice(0, 8)}.txt`,
+    outputDir,
+    `concat-${createHash("sha1").update(workingPaths.join("|")).digest("hex").slice(0, 8)}.txt`,
   );
 
-  writeFileSync(
-    listPath,
-    segmentPaths
-      .map((filePath) => `file '${escapeConcatPath(filePath)}'`)
-      .join("\n"),
-    "utf-8",
-  );
+  writeFileSync(listPath, workingPaths.map((filePath) => `file '${escapeConcatPath(filePath)}'`).join("\n"), "utf-8");
 
   try {
     await new Promise<void>((resolve, reject) => {
       let stderr = "";
       const ffmpegExe = getFfmpegBinaryPath();
-      const ffmpegArgs = [
-        "-f",
-        "concat",
-        "-safe",
-        "0",
-        "-i",
-        listPath,
-        "-c",
-        "copy",
-        "-movflags",
-        "+faststart",
-        "-y",
-        outputPath,
-      ];
+      const ffmpegArgs = ["-f", "concat", "-safe", "0", "-i", listPath, "-c", "copy", "-movflags", "+faststart", "-y", outputPath];
       console.info(`[Composer Spawn] ffmpeg exec=${ffmpegExe} args=${JSON.stringify(ffmpegArgs)}`);
       const proc = spawn(ffmpegExe, ffmpegArgs, { windowsHide: true });
 
@@ -450,6 +617,14 @@ export async function concatSegments(
     });
   } finally {
     rmSync(listPath, { force: true });
+    // cleanup reencoded files
+    for (const f of reencodedPaths) {
+      try {
+        rmSync(f, { force: true });
+      } catch {
+        /* ignore */
+      }
+    }
   }
 }
 

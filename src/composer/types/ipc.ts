@@ -80,6 +80,20 @@ export interface ComposerFfmpegStatus {
   blockedReason: string | null;
 }
 
+export interface ExportProjectInput {
+  projectId: string;
+  /** Optional file name (with or without .mp4). If omitted a timestamped name is used. */
+  fileName?: string | null;
+  /** Optional override for exported width */
+  width?: number | null;
+  /** Optional override for exported height */
+  height?: number | null;
+  /** Optional override for exported fps */
+  fps?: number | null;
+  /** Optional playback quality override (affects scaling) */
+  playbackQuality?: ComposerPlaybackQuality | null;
+}
+
 // ─── Track inputs ─────────────────────────────────────────────────────────────
 
 export interface AddTrackInput {
@@ -277,6 +291,10 @@ export type ComposerIpcChannels = {
   "composer:sequence-preview-invalidate": {
     args: InvalidateSequencePreviewInput;
     result: ComposerSequencePreview;
+  };
+  "composer:project-export": {
+    args: ExportProjectInput;
+    result: string;
   };
 
   // Track CRUD

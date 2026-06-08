@@ -2407,6 +2407,72 @@ app.whenReady().then(() => {
     console.error("[Composer] Failed to initialize:", err);
   });
 
+  // Dev-only: auto-create a minimal project and trigger a sequence-preview
+  // when `COMPOSER_AUTO_TEST_EXPORT=1` is set in the environment. This helps
+  // validate the headless renderer + ffmpeg concat pipeline without UI clicks.
+  try {
+    if (process.env.COMPOSER_AUTO_TEST_EXPORT === "1") {
+      (async () => {
+        try {
+          const { v4: uuidv4 } = require("uuid");
+          const pathModule = require("path");
+          const id = uuidv4();
+          const name = "Auto Export Test";
+          const now = new Date().toISOString();
+          const projectFolder = pathModule.join(
+            app.getPath("documents"),
+            "WaveSpeed",
+            "composer",
+            id,
+          );
+
+          for (const sub of ["", "assets", "exports", "cache", "autosave"]) {
+            const dir = sub ? pathModule.join(projectFolder, sub) : projectFolder;
+            if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+          }
+
+          const dbPath = pathModule.join(projectFolder, `${id}.composer`);
+          // Use require() to avoid static import cycles
+          const { openProjectDatabase } = require("./composer/db/connection");
+          const { createDefaultTracks } = require("./composer/db/tracks.repo");
+          const { addProjectToRegistry } = require("./composer/db/project-registry");
+          const { createHeadlessRenderer } = require("./composer/headless-renderer");
+          const { scheduleProjectSequencePreviewRefresh } = require("./composer/sequence-preview");
+
+          // Create DB + default tracks
+          await openProjectDatabase(id, dbPath, name);
+          createDefaultTracks(id);
+
+          // Register project in the registry
+          addProjectToRegistry({
+            id,
+            name,
+            path: projectFolder,
+            createdAt: now,
+            updatedAt: now,
+            lastOpenedAt: now,
+            favorite: false,
+            previewPath: null,
+            sizeOnDiskBytes: 0,
+          });
+
+          // Ensure headless renderer is ready then schedule a preview render
+          await createHeadlessRenderer();
+          scheduleProjectSequencePreviewRefresh(id, { debounceMs: 0 });
+
+          console.info("[Composer AutoTest] created project and scheduled sequence preview", {
+            id,
+            projectFolder,
+          });
+        } catch (err) {
+          console.error("[Composer AutoTest] failed:", err);
+        }
+      })();
+    }
+  } catch (err) {
+    console.warn("[Composer AutoTest] guard check failed:", err);
+  }
+
   // Setup auto-updater after window is created
   setupAutoUpdater();
 
