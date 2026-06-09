@@ -668,7 +668,7 @@ export function TimelinePanel() {
         try {
           const newTrimStart = snapTimeToFrame(baseClip.trimStart + delta, project.fps);
           const assetUrlForPeaks = baseClip.sourcePath ? getAssetUrl(baseClip.sourcePath) ?? baseClip.sourcePath : undefined;
-          const peakEntry = assetUrlForPeaks ? getCachedPeaks(assetUrlForPeaks) : undefined;
+          const peakEntry = assetUrlForPeaks ? getCachedPeaks(assetUrlForPeaks, project.id) : undefined;
           if (peakEntry && peakEntry.peaks.length > 0) {
             const { peaks, duration: assetDuration } = peakEntry;
             const targetBuckets = peaks.length;
@@ -982,6 +982,7 @@ export function TimelinePanel() {
             src={getAssetUrl(renderedClip.sourcePath) ?? renderedClip.sourcePath}
             width={Math.max(renderedClip.duration * zoom, 18)}
             height={44}
+            projectId={project.id}
           />
         ) : null}
         {hasDerivedVisual ? (

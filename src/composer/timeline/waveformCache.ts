@@ -2,21 +2,49 @@ type WaveformEntry = {
   peaks: number[];
   positions?: number[];
   duration: number;
+  bucketCount?: number;
 };
 
+// In-memory cache keyed by composite key: "<projectId>::<src>"
 const cache = new Map<string, WaveformEntry>();
 
-export function getCachedPeaks(src: string): WaveformEntry | undefined {
-  return cache.get(src);
+function makeCacheKey(src: string, projectId?: string | null) {
+  return `${projectId ?? "global"}::${src}`;
 }
 
-export async function ensurePeaks(src: string, bucketCount?: number): Promise<WaveformEntry> {
+export function getCachedPeaks(src: string, projectId?: string | null): WaveformEntry | undefined {
+  return cache.get(makeCacheKey(src, projectId));
+}
+
+export async function ensurePeaks(src: string, bucketCount?: number, projectId?: string | null): Promise<WaveformEntry> {
   if (!src) {
     throw new Error("No source provided");
   }
 
-  const existing = cache.get(src);
+  const key = makeCacheKey(src, projectId);
+  const existing = cache.get(key);
   if (existing) return existing;
+
+  // Try persistent store first (Electron preload exposes electronAPI.getState/setState)
+  const electronAPI = (window as any).electronAPI as {
+    getState?: (k: string) => Promise<unknown>;
+    setState?: (k: string, v: unknown) => Promise<boolean>;
+  } | null;
+
+  if (electronAPI && typeof electronAPI.getState === "function") {
+    try {
+      const persisted = await electronAPI.getState(`composer:waveform:${key}`);
+      if (persisted && typeof persisted === "object") {
+        const p = persisted as WaveformEntry;
+        if (Array.isArray(p.peaks) && typeof p.duration === "number") {
+          cache.set(key, p);
+          return p;
+        }
+      }
+    } catch {
+      // ignore persistent read errors and fall back to recompute
+    }
+  }
 
   // Fetch and decode audio on the main thread (AudioContext), then offload
   // peak computation to a worker for CPU-bound work.
@@ -79,8 +107,19 @@ export async function ensurePeaks(src: string, bucketCount?: number): Promise<Wa
   const result = await peaksPromise;
   const peaks = result.peaks;
   const positions = result.positions;
-  const entry: WaveformEntry = { peaks, positions, duration };
-  cache.set(src, entry);
+  const entry: WaveformEntry = { peaks, positions, duration, bucketCount: computedBucketCount };
+  cache.set(key, entry);
+
+  // Persist to disk if possible
+  if (electronAPI && typeof electronAPI.setState === "function") {
+    try {
+      // Be tolerant of failures (don't block UI)
+      void electronAPI.setState(`composer:waveform:${key}`, entry);
+    } catch {
+      // ignore
+    }
+  }
+
   try {
     await audioCtx.close();
   } catch {

@@ -6,9 +6,10 @@ interface Props {
   width: number;
   height?: number;
   className?: string;
+  projectId?: string | null;
 }
 
-export default function AudioWaveform({ src, width, height = 44 }: Props) {
+export default function AudioWaveform({ src, width, height = 44, projectId = null }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [peaks, setPeaks] = useState<number[] | null>(null);
 
@@ -18,7 +19,7 @@ export default function AudioWaveform({ src, width, height = 44 }: Props) {
       return;
     }
 
-    const cached = getCachedPeaks(src);
+    const cached = getCachedPeaks(src ?? "", projectId);
     let mounted = true;
 
     if (cached) {
@@ -31,7 +32,7 @@ export default function AudioWaveform({ src, width, height = 44 }: Props) {
     void (async () => {
       try {
         // Default bucketing: 0.1s per bucket (handled by ensurePeaks)
-        const entry = await ensurePeaks(src);
+        const entry = await ensurePeaks(src, undefined, projectId);
         if (!mounted) return;
         setPeaks(entry.peaks.slice(0));
       } catch (err) {
