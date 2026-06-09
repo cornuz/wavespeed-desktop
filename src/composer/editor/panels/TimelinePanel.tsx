@@ -41,6 +41,8 @@ import { toast } from "@/hooks/useToast";
 import { composerAssetIpc, composerClipIpc } from "@/composer/ipc/ipc-client";
 import type { Clip, ComposerAsset, Track } from "@/composer/types/project";
 import { useComposerRuntime } from "../context/ComposerRuntimeContext";
+import AudioWaveform from "../../timeline/AudioWaveform";
+import { getCachedPeaks } from "../../timeline/waveformCache";
 import {
   getInstanceGhostStyle,
   getInstanceGhostWidth,
@@ -222,6 +224,7 @@ export function TimelinePanel() {
     splitSelectedClip,
     deleteSelectedClip,
     undo,
+    getAssetUrl,
   } = useComposerRuntime();
   const [dragOverTrackId, setDragOverTrackId] = useState<string | null>(null);
   const [interaction, setInteraction] = useState<Interaction | null>(null);
@@ -660,6 +663,42 @@ export function TimelinePanel() {
           });
           return;
         }
+        // Peak-snapping for audio clips (poC): if we have a cached waveform,
+        // snap the left trim to the nearest strong peak within tolerance.
+        try {
+          const newTrimStart = snapTimeToFrame(baseClip.trimStart + delta, project.fps);
+          const assetUrlForPeaks = baseClip.sourcePath ? getAssetUrl(baseClip.sourcePath) ?? baseClip.sourcePath : undefined;
+          const peakEntry = assetUrlForPeaks ? getCachedPeaks(assetUrlForPeaks) : undefined;
+          if (peakEntry && peakEntry.peaks.length > 0) {
+            const { peaks, duration: assetDuration } = peakEntry;
+            const targetBuckets = peaks.length;
+            const nearestIndex = Math.min(targetBuckets - 1, Math.max(0, Math.round((newTrimStart / Math.max(0.0001, assetDuration)) * targetBuckets)));
+            // search neighbors for the highest nearby peak
+            let bestIndex = nearestIndex;
+            let bestScore = peaks[nearestIndex] ?? 0;
+            for (let k = Math.max(0, nearestIndex - 3); k <= Math.min(targetBuckets - 1, nearestIndex + 3); k++) {
+              if ((peaks[k] ?? 0) > bestScore) {
+                bestScore = peaks[k] ?? 0;
+                bestIndex = k;
+              }
+            }
+            const nearestPeakTime = (bestIndex + 0.5) / targetBuckets * assetDuration;
+            const peakSnapTolerance = 0.08; // seconds
+            const peakAmplitudeThreshold = 0.55; // normalized
+            if (Math.abs(nearestPeakTime - newTrimStart) <= peakSnapTolerance && bestScore >= peakAmplitudeThreshold) {
+              const adjustedDelta = nearestPeakTime - baseClip.trimStart;
+              setDraftClip({
+                ...baseClip,
+                startTime: snapTimeToFrame(baseClip.startTime + adjustedDelta, project.fps),
+                duration: Math.max(MIN_CLIP_DURATION, snapTimeToFrame(baseClip.duration - adjustedDelta, project.fps)),
+                trimStart: snapTimeToFrame(nearestPeakTime, project.fps),
+              });
+              return;
+            }
+          }
+        } catch {
+          // ignore any waveform lookup errors — fallback to normal behaviour
+        }
 
         const minimumStart = Math.max(
           previousClip ? getClipEnd(previousClip) : 0,
@@ -914,6 +953,13 @@ export function TimelinePanel() {
       (Boolean(renderedClip.lutProxyPath) || clipLutState?.status === "ready");
     const isLutError = hasLut && clipLutState?.status === "error";
 
+    // Determine whether to show waveform: only when the clip has a sourcePath,
+    // the track's audio is enabled (not muted), and the clip/asset contains audio.
+    const showWaveform = Boolean(renderedClip.sourcePath) &&
+      !track.muted &&
+      (track.type === "audio" ||
+        (track.type === "video" && (sourceAsset?.hasAudio === true || supportsClipVolume(sourceClip) || sourceAsset?.type === "audio")));
+
     return (
       <div
         key={clipKey}
@@ -931,6 +977,13 @@ export function TimelinePanel() {
         }}
         onMouseDown={onClipMouseDown}
       >
+        {showWaveform ? (
+          <AudioWaveform
+            src={getAssetUrl(renderedClip.sourcePath) ?? renderedClip.sourcePath}
+            width={Math.max(renderedClip.duration * zoom, 18)}
+            height={44}
+          />
+        ) : null}
         {hasDerivedVisual ? (
           <div
             className="pointer-events-none absolute inset-0"
